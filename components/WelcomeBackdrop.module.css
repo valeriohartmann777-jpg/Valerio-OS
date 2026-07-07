@@ -1,0 +1,86 @@
+/*
+ * Shared atmospheric backdrop — aurora wash + distant mountains +
+ * drifting mint particles. Originally /welcome's recipe; now reused
+ * anywhere the user is in "onboarding context" and the destination
+ * page's normal chrome should be hidden (e.g. shielded intake quiz
+ * launched from /welcome).
+ *
+ * The three layers are fixed-positioned and pointer-events:none, so
+ * any parent can place arbitrary z-index:5+ content on top without
+ * interference.
+ */
+
+/* Flat wallpaper layer (Gradient / Solid modes). The inline style supplies the
+   actual gradient or color; this just pins it as the lowest fixed layer. */
+.flat {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* The aurora wash tints to --wall-accent (the chosen World accent), so changing
+     the wallpaper color re-themes the whole glow. Falls back to mint. */
+  background-image:
+    radial-gradient(60% 50% at 50% 30%,
+      color-mix(in srgb, var(--wall-accent, #6EE7B7) 16%, transparent) 0%,
+      color-mix(in srgb, var(--wall-accent, #6EE7B7) 6%, transparent) 32%,
+      transparent 65%),
+    radial-gradient(28% 22% at 50% 38%, rgba(255, 226, 181, 0.07) 0%, rgba(255, 226, 181, 0) 70%),
+    radial-gradient(120% 80% at 50% 100%, rgba(14, 38, 30, 0.5) 0%, rgba(4, 6, 10, 0.95) 75%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+.mountainsLayer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  height: 30vh;
+  min-height: 180px;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.mountainsLayer svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.particles {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.particles span {
+  position: absolute;
+  width: 1.5px;
+  height: 1.5px;
+  background: rgba(233, 239, 233, 0.7);
+  border-radius: 50%;
+  animation: welcome-backdrop-drift linear infinite;
+  /* particle glow tints to the chosen accent too */
+  box-shadow: 0 0 6px color-mix(in srgb, var(--wall-accent, #a7f3d0) 55%, transparent);
+}
+
+@keyframes welcome-backdrop-drift {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  10%  { opacity: 0.7; }
+  90%  { opacity: 0.55; }
+  100% { transform: translate3d(var(--dx, 12px), var(--dy, -100vh), 0); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .particles span { animation: none; }
+}

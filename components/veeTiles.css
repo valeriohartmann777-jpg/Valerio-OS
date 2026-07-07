@@ -1,0 +1,395 @@
+/* ── Vee dashboard tiles ──
+   Ported 1:1 from public/vee-dashboard.html (the approved mockup). EVERY rule is
+   scoped under .veeTiles so it cannot touch the rest of the app, and the animation
+   JS (components/VeeTiles.tsx) selects within that root. Fonts map to the app's
+   existing next/font CSS variables; colours/keyframes are vee-prefixed to avoid
+   any global collision. Only the tile grid changed on the dashboard — header,
+   gem, greeting, date, settings and background are untouched. */
+
+.veeTiles{
+  --mint:#6EE7B7; --mint-hi:#A7F3D0; --gold:#e8c878; --iris:#b9a3ff; --amber:#E8964A;
+  --vfg:#fff; --vmuted:rgba(255,255,255,.5); --vborder:rgba(255,255,255,.08);
+  --serif:var(--font-serif),'Times New Roman',Georgia,serif;
+  --mono:var(--font-mono),ui-monospace,monospace;
+  --hanken:var(--font-hanken),system-ui,-apple-system,sans-serif;
+  --vease:cubic-bezier(.16,1,.3,1);
+  width:100%;
+  font-family:var(--hanken);
+}
+
+/* One flexible grid. Tiles size by span (s 1x1, m 2x1, lw full-width, lt 2x2)
+   and flow with `dense` packing; Vee is pinned to the centre 2x2 block. The
+   default order (DEFAULT_HOME_ORDER in lib/tiles/coreTiles) reproduces the
+   approved customize mockup arrangement, but every tile can now be dragged,
+   resized, removed, and re-added — core tiles and the user's own tiles alike. */
+.veeTiles .grid{
+  position:relative;width:100%;
+  --gap:18px;--rowh:clamp(118px,13.5vw,160px);--cols:4;
+  --cellw:calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols));
+  height:calc((var(--rowh) + var(--gap)) * var(--rows,1) - var(--gap));
+  transition:height .34s var(--vease);
+}
+/* size presets resolve to spans. s = 1x1 (default, no rule). The seeded default
+   (Train hero, Fuel/Brand/Peak tall, Vee big, Finance m, Create band) + dense
+   flow reproduces the loved old composition exactly. Vee is NOT pinned anymore. */
+/* Every in-grid tile (and the Add button) is absolutely placed at the cell the
+   pure packer computed for it, from four inline vars (--x/--y/--w/--h). Position +
+   size transition, so any reflow — reorder, resize, add, remove — glides (the iOS
+   "slide aside"). Overlap is impossible because the packer only fills free cells. */
+.veeTiles .grid .tile,.veeTiles .grid .addtile{position:absolute;
+  left:calc((var(--cellw) + var(--gap)) * var(--x,0));
+  top:calc((var(--rowh) + var(--gap)) * var(--y,0));
+  width:calc(var(--cellw) * var(--w,1) + var(--gap) * (var(--w,1) - 1));
+  height:calc(var(--rowh) * var(--h,1) + var(--gap) * (var(--h,1) - 1));
+  transition:left .34s var(--vease),top .34s var(--vease),
+    width .3s var(--vease),height .3s var(--vease),
+    opacity .22s var(--vease),border-color .4s var(--vease),
+    background .4s var(--vease),box-shadow .4s var(--vease)}
+
+/* phone = 2 cols. Columns clamp to the grid width (a 3-wide hero fills the row),
+   but the persisted size is untouched so it restores its true width on desktop. */
+/* phone = 2 cols. The packer clamps each tile's width to 2 (a 3-wide hero fills the
+   row) and re-packs; --cols here keeps the CSS cell math in lockstep with it. */
+@media (max-width:760px){
+  .veeTiles .grid{--cols:2;--rowh:max(124px,30vw)}
+}
+
+/* Tiles read as translucent glass that sits IN the world: a see-through tinted
+   gradient (~50% opacity) so the aurora, mountains and drifting particles read
+   softly through them, with a soft top highlight + drop shadow. Kept dark enough
+   that the orbs/graphs/text stay legible. */
+.veeTiles .tile{position:relative;overflow:hidden;border-radius:20px;border:1px solid rgba(167,243,208,.10);
+  background:linear-gradient(165deg, rgba(16,26,22,.55) 0%, rgba(7,12,10,.40) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 22px 50px -30px rgba(0,0,0,.75);
+  isolation:isolate;transition:border-color .4s var(--vease), background .4s var(--vease), box-shadow .4s var(--vease);
+  text-decoration:none;display:block}
+.veeTiles .tile:hover{border-color:rgba(110,231,183,.30);
+  background:linear-gradient(165deg, rgba(22,34,29,.62) 0%, rgba(9,15,13,.46) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 26px 56px -28px rgba(0,0,0,.8)}
+/* each tile's own soft mint wash, matching the page aurora */
+.veeTiles .aurora{position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse 85% 75% at 58% 38%, rgba(110,231,183,.06), transparent 64%)}
+.veeTiles .art{position:absolute;inset:0;width:100%;height:100%;z-index:2}
+/* Legibility scrim: a soft bottom fade so a tile's art (graphs, orbs, waves)
+   never visually clashes with the serif label / stat / arrow, at ANY tile size.
+   Sits above the art (z2) and below the text chrome (z6). Vee has its own scrim. */
+.veeTiles .tile:not(.vee)::after{content:'';position:absolute;inset:0;z-index:4;pointer-events:none;
+  background:linear-gradient(to top, rgba(4,7,6,.6) 0%, rgba(4,7,6,.16) 22%, transparent 44%)}
+/* A tile showing a chosen DESIGN is a poster whose art IS the point, so the
+   legibility scrim is eased (kept just enough at the very bottom to float the
+   serif label) — otherwise it swallowed the lower half of every chart/wave and
+   the designs read as "barely there". */
+.veeTiles .tile:not(.vee):has(.wmArt)::after{
+  background:linear-gradient(to top, rgba(4,7,6,.5) 0%, rgba(4,7,6,.12) 22%, transparent 44%)}
+.veeTiles .index{position:absolute;top:15px;left:20px;z-index:6;font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:rgba(255,255,255,.38)}
+.veeTiles .glyph{position:absolute;top:13px;right:16px;z-index:6;width:20px;height:20px;color:var(--mint);opacity:.4}
+.veeTiles .glyph svg{width:100%;height:100%;display:block}
+.veeTiles .label{position:absolute;left:20px;bottom:16px;z-index:6;font-family:var(--serif);font-style:italic;font-size:22px;color:var(--vfg)}
+.veeTiles .arrow{position:absolute;right:18px;bottom:17px;z-index:6;color:var(--vfg);opacity:.4;font-size:14px}
+/* live stat — one glanceable metric per tile */
+.veeTiles .stat{position:absolute;left:20px;bottom:46px;z-index:6;font-family:var(--mono);font-size:16px;font-weight:500;letter-spacing:.01em;color:var(--mint)}
+.veeTiles .stat i{font-style:normal;font-size:10px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--vmuted);margin-left:4px}
+.veeTiles .fin .stat{color:var(--gold)}
+/* title + metric stack, bottom-left. Default: metric sits BELOW the title. */
+.veeTiles .cap{position:absolute;left:20px;bottom:16px;z-index:6;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.veeTiles .cap .label,.veeTiles .cap .stat{position:static}
+/* graph tiles: metric sits just to the right of the title, on the same baseline */
+.veeTiles .tile.live .cap{flex-direction:row;align-items:baseline;gap:12px}
+
+/* Core-tile graphic: STRONG + confident, not fading into the tile. The primary
+   line reads at real opacity with a soft mint glow (so it pops off the glass like
+   a signature), the secondary/ghost line is clearly present too. */
+.veeTiles .mot{fill:none;stroke:rgba(110,231,183,.92);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+  filter:drop-shadow(0 0 3px rgba(110,231,183,.55)) drop-shadow(0 0 9px rgba(110,231,183,.32))}
+.veeTiles .motd{fill:none;stroke:rgba(110,231,183,.52);stroke-width:1.4;stroke-linecap:round}
+.veeTiles .node{fill:#eafff5;filter:drop-shadow(0 0 3px rgba(167,243,208,.95)) drop-shadow(0 0 7px rgba(110,231,183,.5))}
+.veeTiles .glow{fill:url(#vEndpt);opacity:.9;animation:veeBreathe 5s var(--vease) infinite;transform-origin:center;transform-box:fill-box}
+.veeTiles .fin .node{fill:#ffeede;filter:drop-shadow(0 0 3px rgba(232,150,74,.95)) drop-shadow(0 0 7px rgba(232,150,74,.5))}
+.veeTiles .fin .glow{fill:url(#vEndptA)}
+@keyframes veeBreathe{0%,100%{opacity:.45;transform:scale(.92)}50%{opacity:.95;transform:scale(1.08)}}
+.veeTiles .fin .mot{stroke:rgba(232,150,74,.92);filter:drop-shadow(0 0 3px rgba(232,150,74,.5)) drop-shadow(0 0 9px rgba(232,150,74,.3))}
+.veeTiles .candle{fill:rgba(232,150,74,.16);stroke:rgba(232,150,74,.85);stroke-width:1.35;filter:drop-shadow(0 0 4px rgba(232,150,74,.28))}
+
+/* ── mini pulse-bursts ── small gem-library bursts a ball fires off, rarely. */
+.veeTiles .burst{pointer-events:none}
+.veeTiles .burst *{vector-effect:non-scaling-stroke}
+.veeTiles .burst.pop   {animation:vbPop    var(--d) cubic-bezier(.2,.7,.3,1) forwards}
+.veeTiles .burst.tw    {animation:vbTw     var(--d) ease-out forwards}
+.veeTiles .burst.orbit {animation:vbOrbit  var(--d) cubic-bezier(.35,0,.4,1) forwards}
+.veeTiles .burst.spiral{animation:vbSpiral var(--d) cubic-bezier(.3,0,.3,1) forwards}
+.veeTiles .burst.conf  {animation:vbConf   var(--d) cubic-bezier(.2,.7,.3,1) forwards}
+.veeTiles .burst.ponder{animation:vbPonder var(--d) ease-out forwards}
+@keyframes vbPop   {from{transform:scale(var(--s0));opacity:var(--o0)}to{transform:scale(var(--s1));opacity:0}}
+@keyframes vbTw    {0%{transform:scale(.6);opacity:0}40%{opacity:1}100%{transform:scale(1.35);opacity:0}}
+@keyframes vbOrbit {0%{transform:rotate(0);opacity:0}20%{opacity:1}100%{transform:rotate(360deg);opacity:0}}
+@keyframes vbSpiral{0%{transform:rotate(0) scale(.4);opacity:0}30%{opacity:1}100%{transform:rotate(220deg) scale(1.3);opacity:0}}
+@keyframes vbConf  {0%{transform:scale(.3) rotate(0);opacity:1}100%{transform:scale(1.45) rotate(50deg);opacity:0}}
+@keyframes vbPonder{0%{transform:translateY(0) scale(.5);opacity:0}40%{opacity:1}100%{transform:translateY(-12px) scale(1);opacity:0}}
+
+/* ── Vee centre ── (grid placement handled by .veeTiles .grid .vee above) */
+.veeTiles .vee{align-items:center;justify-content:center;text-align:center}
+.veeTiles .vee .disc{position:absolute;left:50%;top:45%;width:320px;height:320px;transform:translate(-50%,-50%);z-index:1;pointer-events:none;
+  background:radial-gradient(circle,rgba(110,231,183,.11) 0%,rgba(110,231,183,.05) 42%,transparent 66%);
+  animation:veeDisc 9s var(--vease) infinite}
+@keyframes veeDisc{0%,100%{opacity:.75;transform:translate(-50%,-50%) scale(.97)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.03)}}
+.veeTiles .vee .scrim{position:absolute;inset:0;z-index:4;pointer-events:none;background:linear-gradient(105deg,rgba(4,6,10,.78) 0%,rgba(4,6,10,.18) 36%,transparent 54%)}
+.veeTiles .vee .label{bottom:44px;font-size:32px}
+.veeTiles .vee .kicker{position:absolute;left:22px;bottom:24px;z-index:6;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--mint);opacity:.9}
+.veeTiles .chip{fill:rgba(110,231,183,.035);stroke:rgba(167,243,208,.4);stroke-width:1.6}
+.veeTiles .wire{fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.veeTiles .feed{fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:5 195;opacity:0;will-change:stroke-dashoffset,opacity}
+.veeTiles .ringgrp{opacity:0;will-change:opacity}
+.veeTiles .ring-soft,.veeTiles .ring-line{fill:none;stroke-linejoin:round;stroke:var(--mint-hi)}
+.veeTiles .ring-soft{stroke-width:6;opacity:.38}
+.veeTiles .ring-line{stroke-width:2.2;opacity:1}
+.veeTiles .v-base{fill:none;stroke:var(--mint);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:.5;
+  filter:drop-shadow(0 0 6px rgba(167,243,208,.4))}
+.veeTiles .vm{fill:none;stroke:var(--mint);stroke-width:2.7;stroke-linecap:round;stroke-linejoin:round;will-change:opacity;
+  filter:drop-shadow(0 0 2px rgba(240,255,245,.9))}
+.veeTiles .feedgrp{transition:opacity .5s ease}
+.veeTiles .feedgrp.hide{opacity:0}
+/* The score is set in Instrument Serif italic — the same editorial face as the
+   "Good afternoon, <name>" greeting and the tile labels, so the whole dashboard
+   reads as one typographic voice (the old Hanken sans looked like a HUD digit).
+   Tabular figures keep every digit equal-width so any score sits dead-centre and
+   the count-up reveal doesn't jitter sideways. */
+.veeTiles .vscore .vnum{font-family:var(--serif);font-style:italic;font-weight:400;letter-spacing:0;
+  font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1;
+  fill:var(--mint);font-size:56px;opacity:0;transform-box:fill-box;transform-origin:center;will-change:opacity,transform;
+  filter:drop-shadow(0 0 2px rgba(240,255,245,.9)) drop-shadow(0 0 9px rgba(110,231,183,.55)) drop-shadow(0 0 20px rgba(110,231,183,.28))}
+.veeTiles .vscore .vgh{font-family:var(--serif);font-style:italic;font-weight:400;letter-spacing:0;
+  font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1;font-size:56px;
+  opacity:0;transform-box:fill-box;transform-origin:center;will-change:opacity,transform}
+.veeTiles .vscore .vgi{fill:#b9a3ff;filter:drop-shadow(0 0 6px rgba(185,163,255,.5))}
+.veeTiles .vscore .vgg{fill:#e8c878;filter:drop-shadow(0 0 6px rgba(232,200,120,.5))}
+
+/* Decorative tile chrome never blocks clicks: the navigate/open hit-layer sits on
+   top (core navigates, user + Library open) and must receive the pointer. */
+.veeTiles .index,.veeTiles .glyph,.veeTiles .cap,.veeTiles .arrow,.veeTiles .kicker{pointer-events:none}
+
+/* ── customize / edit mode toolbar ──
+   A real app toolbar: a clean Customize pill, and in edit mode a glass tool-rail
+   that slides in from the RIGHT (the backsplash) with Header / Wallpaper / Reset
+   staggering in. No wordy hint — the controls speak for themselves. */
+.veeTiles .editBar{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.veeTiles .editTools{display:flex;align-items:center;gap:4px;padding:5px;border-radius:999px;
+  background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);backdrop-filter:blur(12px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 14px 32px -20px rgba(0,0,0,.75);
+  animation:editRailIn .5s cubic-bezier(.16,1,.3,1) both;transform-origin:right center}
+@keyframes editRailIn{from{opacity:0;transform:translateX(30px) scaleX(.88)}to{opacity:1;transform:none}}
+.veeTiles .editTool{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;color:rgba(255,255,255,.82);
+  border-radius:999px;padding:8px 13px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;
+  transition:background .18s var(--vease),color .18s var(--vease);
+  animation:editToolIn .44s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(.14s + var(--i,0) * .06s)}
+.veeTiles .editTool svg{width:15px;height:15px;opacity:.82}
+.veeTiles .editTool:hover{background:rgba(255,255,255,.07);color:#fff}
+@keyframes editToolIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.veeTiles .editToggle{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.03);color:rgba(255,255,255,.9);border-radius:999px;padding:9px 17px;
+  font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;
+  transition:border-color .2s var(--vease),background .2s var(--vease),color .2s var(--vease),transform .14s var(--vease)}
+.veeTiles .editToggle svg{width:16px;height:16px;opacity:.9}
+.veeTiles .editToggle:hover{border-color:rgba(110,231,183,.45);color:#fff}
+.veeTiles .editToggle:active{transform:scale(.97)}
+.veeTiles .editToggle.on{background:var(--mint);color:#042a1c;border-color:var(--mint)}
+@media (prefers-reduced-motion:reduce){
+  .veeTiles .editTools,.veeTiles .editTool{animation:none}
+}
+
+/* the navigate click-layer on core tiles (only when not editing) */
+.veeTiles .hit{position:absolute;inset:0;z-index:7;border-radius:inherit}
+
+/* ── widget design motion (ported 1:1 from public/widget-design-library.html) ──
+   A chosen design replaces a tile's art. components/widgetMotion.ts decorates the
+   design SVG inside .wmArt (the live tile, the picker gallery card, AND the live
+   preview all use the same call, so a design animates EXACTLY like the library
+   everywhere). Entrance is one-shot; idle loops are gated on the container NOT
+   being .dots-off, so a tile's Living-dots toggle freezes its art. Keyframes are
+   wm-prefixed to avoid any global clash; --vease here == the library's --ease. */
+.veeTiles{--wspring:cubic-bezier(.34,1.56,.64,1)}
+.veeTiles .wmArt{position:absolute;inset:0;z-index:2;pointer-events:none}
+/* Full opacity + a tight accent glow (currentColor = the tile's chosen accent, so
+   it recolors for free): makes the mint/azure ink read as SOLID crisp lines that
+   pop off the dark glass, instead of faint low-opacity marks that blurred into
+   each other and the background. This is the whole "make designs distinct" fix —
+   the SVGs in lib/tiles/designs.ts stay the gold-standard originals. */
+.veeTiles .wmArt svg{position:absolute;inset:0;width:100%;height:100%;opacity:1;
+  filter:drop-shadow(0 0 2px currentColor)}
+
+.veeTiles .wmArt .dots circle{transform-box:fill-box;transform-origin:center;
+  animation:wmDotIn .55s var(--wspring) var(--dd,0s) both}
+.veeTiles .wmArt:not(.dots-off) .dots circle{
+  animation:wmDotIn .55s var(--wspring) var(--dd,0s) both, wmDotLive 2.6s var(--vease) calc(var(--dd,0s) + .55s) infinite}
+@keyframes wmDotIn{0%{opacity:0;transform:scale(0)}60%{opacity:1}100%{transform:scale(1)}}
+@keyframes wmDotLive{0%,100%{opacity:.55}50%{opacity:1}}
+.veeTiles .wmArt.dots-off .dots{display:none}
+
+.veeTiles .wmArt .m-draw{stroke-dasharray:100;stroke-dashoffset:100;animation:wmDraw 1.5s var(--vease) var(--d,0s) forwards}
+.veeTiles .wmArt:not(.dots-off) .m-draw{animation:wmDraw 1.5s var(--vease) var(--d,0s) forwards,
+  wmLineGlow 5.5s ease-in-out calc(var(--d,0s) + 1.6s) infinite}
+@keyframes wmDraw{to{stroke-dashoffset:0}}
+@keyframes wmLineGlow{0%,100%{opacity:var(--op,.85)}50%{opacity:calc(var(--op,.85) * .7)}}
+
+.veeTiles .wmArt .m-comet{opacity:0;offset-rotate:0deg}
+.veeTiles .wmArt:not(.dots-off) .m-comet{animation:wmCometRun var(--cd,6.5s) linear calc(var(--d,0s) + 1.7s) infinite}
+@keyframes wmCometRun{0%{offset-distance:0%;opacity:0}12%{opacity:.95}55%{offset-distance:62%}88%{opacity:.95}100%{offset-distance:100%;opacity:0}}
+
+.veeTiles .wmArt .m-bar{transform-box:fill-box;transform-origin:center bottom;transform:scaleY(0);
+  animation:wmBarGrow .7s var(--vease) var(--d,0s) forwards}
+.veeTiles .wmArt:not(.dots-off) .m-bar{animation:wmBarGrow .7s var(--vease) var(--d,0s) forwards,
+  wmBarBreathe 4.2s ease-in-out calc(var(--d,0s) + .7s) infinite}
+@keyframes wmBarGrow{to{transform:scaleY(1)}}
+@keyframes wmBarBreathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.96)}}
+
+.veeTiles .wmArt .m-ring{transform-box:fill-box;transform-origin:center;animation:wmRingIn .7s var(--vease) var(--d,0s) both}
+.veeTiles .wmArt:not(.dots-off) .m-ring{animation:wmRingIn .7s var(--vease) var(--d,0s) both,
+  wmRingBreathe 4.6s ease-in-out calc(var(--d,0s) + .7s) infinite}
+@keyframes wmRingIn{from{opacity:0;transform:scale(.72)}to{opacity:var(--op,.6);transform:scale(1)}}
+@keyframes wmRingBreathe{0%,100%{transform:scale(1);opacity:var(--op,.6)}50%{transform:scale(1.04);opacity:calc(var(--op,.6) * 1.14)}}
+
+.veeTiles .wmArt .m-arc{stroke-dasharray:100;stroke-dashoffset:100;animation:wmDraw 1.4s var(--vease) calc(var(--d,0s) + .15s) forwards}
+.veeTiles .wmArt .m-fade{animation:wmFadeIn .9s var(--vease) var(--d,0s) both}
+@keyframes wmFadeIn{from{opacity:0}to{opacity:var(--op,.85)}}
+
+.veeTiles .wmArt .m-drift{transform-box:fill-box;stroke-dasharray:100;stroke-dashoffset:100;
+  animation:wmDraw 1.3s var(--vease) var(--di,0s) both}
+.veeTiles .wmArt:not(.dots-off) .m-drift{animation:wmDraw 1.3s var(--vease) var(--di,0s) forwards,
+  wmDriftX 7.5s ease-in-out calc(var(--di,0s) + 1.3s + var(--d,0s)) infinite}
+@keyframes wmDriftX{0%,100%{transform:translateX(-4px)}50%{transform:translateX(4px)}}
+
+.veeTiles .wmArt[data-motion="orbit"] svg,.veeTiles .wmArt[data-spin] svg{transform-box:fill-box;transform-origin:center}
+.veeTiles .wmArt:not(.dots-off)[data-motion="orbit"] svg{animation:wmSpinSlow 26s linear infinite}
+.veeTiles .wmArt:not(.dots-off)[data-spin] svg{animation:wmSpinSlow 48s linear infinite}
+@keyframes wmSpinSlow{to{transform:rotate(360deg)}}
+
+@media (prefers-reduced-motion:reduce){
+  .veeTiles .wmArt .dots circle{animation:none;opacity:var(--rop,.7);transform:none}
+  .veeTiles .wmArt .m-draw,.veeTiles .wmArt .m-arc,.veeTiles .wmArt .m-drift{animation:none;stroke-dashoffset:0}
+  .veeTiles .wmArt .m-fade{animation:none;opacity:var(--op,.85)}
+  .veeTiles .wmArt .m-comet{animation:none;display:none}
+  .veeTiles .wmArt .m-bar{animation:none;transform:none}
+  .veeTiles .wmArt .m-ring{animation:none;transform:none}
+  .veeTiles .wmArt[data-motion="orbit"] svg,.veeTiles .wmArt[data-spin] svg{animation:none}
+}
+
+/* A user tile renders as a POSTER on the grid (design-art face + serif name + arrow,
+   exactly like a core tile) and runs its live sealed iframe ONLY in the open-full
+   overlay (.openFrame). So there is no per-cell iframe and no frozen placeholder —
+   tapping the poster (.hit) opens it full. */
+
+/* drag affordances — iPhone/iPad home-screen wobble (off-centre origin + a
+   staggered, slightly random phase per tile so they don't wobble in lockstep). */
+.veeTiles.editing .tile.editable{cursor:grab;transform-origin:50% 10%;
+  /* edit-mode only: let dnd-kit's PointerSensor own the gesture so a touch-drag
+     lifts the tile instead of the browser claiming it for scroll (pointercancel,
+     tile never moves). Normal (non-editing) scrolling is unaffected. */
+  touch-action:none;
+  animation:veeJiggle .62s var(--vease) infinite}
+.veeTiles.editing .tile.editable:nth-child(2n){animation-delay:-.18s;animation-duration:.66s}
+.veeTiles.editing .tile.editable:nth-child(3n){animation-delay:-.31s;animation-duration:.58s}
+.veeTiles.editing .tile.editable:nth-child(4n){animation-delay:-.09s;animation-duration:.7s}
+/* the in-grid SOURCE of a lift = a calm placeholder slot; the real tile rides in
+   the DragOverlay above the board. Dashed mint outline, no lift shadow, dimmed
+   (opacity is set inline) — reads clearly as "lifted from here". */
+.veeTiles .tile.dragging{animation:none!important;border:1px dashed rgba(110,231,183,.45);box-shadow:none}
+/* the tile carried in the drag overlay — the true "picked up" object. dnd-kit sizes
+   the overlay to the source rect; the tile fills it and lifts with a scale + mint
+   ring + deep shadow, floating cleanly above the board (no morph, no overlap). */
+.veeTiles .tile.overlay{animation:none!important;cursor:grabbing;width:100%;height:100%;
+  transform:scale(1.035);border-color:var(--mint);
+  box-shadow:0 0 0 1px var(--mint),0 32px 66px -14px rgba(0,0,0,.82)}
+/* ── drag "pickup" ── while a tile is lifted the whole board calmly recedes and
+   stops wobbling, so the held tile clearly floats above and the reorder preview
+   (neighbours gliding to make room) reads. Pure opacity/filter — never touches
+   transform, so it can NEVER fight dnd-kit's translate and glitch. */
+.veeTiles .grid.dragging .tile.editable{animation:none}
+.veeTiles .grid.dragging .tile.editable:not(.dragging){opacity:.5;filter:saturate(.85) brightness(.88);
+  transition:opacity .22s var(--vease),filter .22s var(--vease)}
+@keyframes veeJiggle{0%,100%{transform:rotate(-.7deg)}50%{transform:rotate(.7deg)}}
+@media (prefers-reduced-motion:reduce){.veeTiles.editing .tile.editable{animation:none}}
+
+/* Whop-style corner controls: the size / design / remove actions live in ONE
+   cohesive glass pill (not three separate floating buttons) with quiet icon
+   buttons that light up on hover. No backdrop-filter — these ride inside a
+   jiggling (transformed) tile in edit mode, and blur-under-transform is a known
+   phone-lag trap; a solid near-black fill reads just as clean and stays smooth. */
+.veeTiles .ctrls{position:absolute;top:9px;right:9px;display:flex;align-items:center;gap:1px;z-index:9;
+  padding:3px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(6,9,8,.9);
+  box-shadow:0 8px 22px -12px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.06)}
+.veeTiles .ctrls button{height:25px;min-width:25px;padding:0 6px;border:0;background:transparent;border-radius:8px;
+  color:rgba(255,255,255,.6);font-size:11px;font-weight:600;font-family:var(--mono);letter-spacing:.02em;cursor:pointer;
+  display:grid;place-items:center;transition:background .14s var(--vease),color .14s var(--vease)}
+.veeTiles .ctrls button svg{width:14px;height:14px;display:block}
+.veeTiles .ctrls .size:hover,.veeTiles .ctrls .edit:hover{background:rgba(110,231,183,.14);color:var(--mint)}
+.veeTiles .ctrls .del:hover{background:rgba(245,158,11,.16);color:var(--amber)}
+
+/* Restore-the-default-layout pill (the safety net so users diverge fearlessly) */
+.veeTiles .restoreBtn{border:1px solid rgba(255,255,255,.1);background:transparent;color:var(--vmuted);
+  border-radius:999px;padding:9px 16px;font-size:13px;font-family:inherit;cursor:pointer;transition:all .2s var(--vease)}
+.veeTiles .restoreBtn:hover{border-color:rgba(255,255,255,.22);color:#fff}
+
+/* add-tile dashed card */
+.veeTiles .addtile{border:1px dashed rgba(255,255,255,.18);background:transparent;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;cursor:pointer;color:var(--mint);border-radius:20px;
+  font-family:inherit;transition:all .2s var(--vease)}
+.veeTiles .addtile:hover{border-color:var(--mint);background:rgba(110,231,183,.04)}
+.veeTiles .addtile .plus{width:38px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.18);
+  display:grid;place-items:center;font-size:22px;font-weight:200}
+.veeTiles .addtile .lbl{font-size:12px;letter-spacing:.04em}
+
+/* ── open a user tile full ──
+   A user tile is a small poster on the grid and opens full when tapped (the locked
+   tile model), just like a core tile navigates to its module. The overlay below
+   holds the tile's own sealed iframe — the only place it runs live.
+
+   A FILLED tile takes over the whole viewport like a real module page (openFull):
+   pure black, a slim top bar with a Dashboard back link, the sealed iframe fills
+   the rest. The centred card look remains for the connector (build-this) dialog. */
+.veeTiles .openOverlay{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:24px;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(6px);animation:openFade .22s var(--vease) both}
+.veeTiles .openCard{width:min(640px,100%);height:min(86vh,820px);display:flex;flex-direction:column;
+  background:#000;border:1px solid rgba(167,243,208,.16);border-radius:22px;overflow:hidden;
+  box-shadow:0 36px 90px -28px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.05);
+  animation:openRise .3s var(--vease) both}
+.veeTiles .openTop{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.07);flex:none}
+.veeTiles .openTitle{font-family:var(--serif);font-style:italic;font-size:20px;letter-spacing:.3px;
+  color:rgba(255,255,255,.92);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.veeTiles .openClose{flex:none;width:34px;height:34px;display:grid;place-items:center;
+  border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.03);color:rgba(255,255,255,.7);
+  border-radius:10px;cursor:pointer;transition:all .18s var(--vease)}
+.veeTiles .openClose:hover{border-color:var(--mint);color:var(--mint)}
+.veeTiles .openClose svg{width:17px;height:17px}
+.veeTiles .openStage{flex:1;min-height:0;position:relative;overflow:hidden;background:#000}
+.veeTiles .openFrame{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent}
+@keyframes openFade{from{opacity:0}to{opacity:1}}
+@keyframes openRise{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+
+/* Filled tile = full page. No scrim, no card chrome: the tile IS the page. */
+.veeTiles .openOverlay.openFull{padding:0;place-items:stretch;background:#000;backdrop-filter:none}
+.veeTiles .openOverlay.openFull .openCard{width:100%;height:100%;border:0;border-radius:0;box-shadow:none;
+  animation:openPage .32s var(--vease) both}
+.veeTiles .openOverlay.openFull .openTop{padding:max(14px,env(safe-area-inset-top)) 20px 12px;
+  border-bottom:1px solid rgba(255,255,255,.06)}
+.veeTiles .openBack{display:inline-flex;align-items:center;gap:10px;border:0;background:none;cursor:pointer;
+  font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(167,243,208,.78);padding:4px 2px;transition:color .18s var(--vease)}
+.veeTiles .openBack:hover{color:var(--mint)}
+.veeTiles .openSlotName{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:rgba(255,255,255,.38);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@keyframes openPage{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+/* No-routine state: a gentle prompt replaces the score number on the Vee tile. */
+.veeTiles .tile.vee .vee-setup-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: rgba(167, 243, 208, 0.85);
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
+}

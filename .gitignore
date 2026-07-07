@@ -1,0 +1,91 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# local env files
+.env
+.env.local
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# logs
+*.log
+
+# claude code local state stays local, but the /tile command SHIPS with the
+# base (the README depends on it). Episode drop-ins (train.*, etc.) are paid
+# Patreon deliverables and must never land in this public repo.
+.claude/*
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/tile.md
+
+# personal MCP connection (contains a per-user vitm_ token — never commit)
+.mcp.json
+
+# git worktrees (parallel Claude Code sessions)
+.worktrees/
+
+# raw video source for the hero (8K/60fps original — kept locally as the
+# editing source; the deployed asset is the compressed public/hero.mp4)
+/bbb*.mp4
+
+# playwright mcp scratch (screenshots, console logs from local UI checks)
+/.playwright-mcp/
+# verification screenshots dropped at worktree root during local UI checks
+/maint-*.png
+/howitworks-*.png
+/trend-icon-zoom.png
+/chart-*.png
+/scrub-*.png
+# local-only icon/UI concept pages (sibling to public/*-preview.html)
+public/*-concepts.html
+
+# Visual companion (brainstorming) — mockups stay local
+.superpowers/
+
+# Build-script caches (large external datasets — re-fetched on rebuild)
+scripts/data/
+
+# Supabase CLI local state (auth + project link cached in ~/.supabase/;
+# this dir is per-clone scratch, never source of truth)
+supabase/.temp/
+
+# Per-developer IDE config (live-server port, etc.)
+.vscode/
+
+# Standalone HTML previews dropped into public/ for localhost-only UI
+# review. Per the workflow: drop public/<feature>-preview.html, open
+# localhost, iterate, delete or supersede. Never tracked.
+public/*-preview.html
+/explain-*.png
+/pol-*.png

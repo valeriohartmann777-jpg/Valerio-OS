@@ -1,0 +1,767 @@
+/*
+ * Dashboard page chrome (page canvas + editorial greeting).
+ * The poster grid + all art variants live in components/PosterGrid.module.css —
+ * imported by every dashboard that uses the bento pattern.
+ *
+ * Reused by:
+ *   - app/app/page.tsx              (category dashboard)
+ *   - app/app/fitness/page.tsx      (fitness sub-dashboard via its own header,
+ *                                    sharing .page and .shell)
+ */
+
+.page {
+  position: relative;
+  min-height: 100vh;
+  /* viewportFit:cover + black-translucent status bar means the page paints
+     under the notch / Dynamic Island and the home indicator. Pad the top and
+     bottom by the safe-area insets so the greeting clears the status bar and
+     the last tile clears the home indicator on iPhone. Insets are 0 on
+     desktop, so this is a no-op there. */
+  padding: calc(var(--space-10) + env(safe-area-inset-top)) var(--space-6)
+    calc(var(--space-16) + env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+
+/* Top-right settings gear — opens the shared SettingsSheet (Personal,
+   training setup, units toggle). Same icon language as the logger
+   pages so the entry point reads identically wherever it sits. */
+.settingsBtn {
+  position: absolute;
+  /* Clear the status bar / Dynamic Island on iPhone (0 inset on desktop). */
+  top: calc(var(--space-6) + env(safe-area-inset-top));
+  right: var(--space-6);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--mint);
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    background var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+
+.settingsBtn:hover {
+  color: var(--mint-hover);
+  border-color: var(--mint);
+  background: var(--card-elevated);
+  transform: rotate(15deg);
+}
+
+.settingsBtn:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+/* Top-bar profile avatar — pinned top-right, just left of the gear. */
+.profileAvatar {
+  position: absolute;
+  top: calc(var(--space-6) + env(safe-area-inset-top));
+  right: calc(var(--space-6) + 40px + var(--space-3));
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--mint);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  background: radial-gradient(120% 120% at 35% 25%, rgba(110, 231, 183, 0.22), rgba(110, 231, 183, 0.05));
+  border: 1.5px solid rgba(110, 231, 183, 0.4);
+  box-shadow: 0 0 24px -8px var(--mint-glow), inset 0 0 14px -6px rgba(110, 231, 183, 0.5);
+  transition:
+    transform var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+.profileAvatar:hover {
+  transform: translateY(-1px);
+  border-color: var(--mint);
+  box-shadow: 0 0 30px -6px var(--mint-glow), inset 0 0 14px -4px rgba(110, 231, 183, 0.6);
+}
+.profileAvatar:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+/* An uploaded photo fills the avatar and clips to its circle (the initial span,
+   when there's no photo, is unaffected). */
+.profileAvatar:has(.profileAvatarImg) {
+  overflow: hidden;
+}
+.profileAvatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.page::before {
+  content: '';
+  position: absolute;
+  inset: -10% -5%;
+  background:
+    radial-gradient(ellipse 50% 35% at 70% 20%, rgba(110, 231, 183, 0.06), transparent 65%),
+    radial-gradient(ellipse 40% 30% at 20% 80%, rgba(110, 231, 183, 0.04), transparent 70%);
+  pointer-events: none;
+  animation: canvasDrift 60s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+@keyframes canvasDrift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-2%, 1%, 0); }
+}
+
+.shell {
+  position: relative;
+  /* Lifts content above the fixed WelcomeBackdrop layers (aurora/mountains/
+     particles sit at z 0-2) so tiles and greeting stay in front. */
+  z-index: 5;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+/* ───────── Editorial greeting (parent /app dashboard) ───────── */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  opacity: 0;
+  animation: fadeUp 700ms var(--ease-premium) forwards;
+}
+
+.greeting {
+  font-family: var(--font-serif), 'Times New Roman', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  /* --greet-scale (default 1) lets the user size their greeting; the font stays
+     Instrument Serif italic, the unified voice. */
+  font-size: calc(clamp(2.25rem, 4.5vw, 3.25rem) * var(--greet-scale, 1));
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+
+.greetingName {
+  font-style: italic;
+  /* the accented name follows the chosen wallpaper accent (mint by default) */
+  color: var(--wall-accent, var(--mint));
+}
+
+.date {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ───────── "Today" header band (peak score + ticker + curve) ─────────
+   Sits between the editorial greeting and the bento poster grid. Composes
+   the Peak module's MarketTicker + ScoreRing + CurveChart verbatim; this
+   module only owns the band's own layout (the score | curve split).
+   See app/app/PeakHeaderBand.tsx. */
+
+.todayBand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  opacity: 0;
+  animation: fadeUp 700ms var(--ease-premium) 120ms forwards;
+}
+
+.todayBandRow {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-6);
+}
+
+/* Score ring + "Open Peak" link — fixed-ish left column. */
+.todayScoreCell {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.todayPeakLink {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--mint);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: color var(--duration) var(--ease);
+}
+
+.todayPeakLink:hover {
+  color: var(--mint-hover);
+}
+
+.todayPeakLink:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* Curve fills the rest. min-width:0 lets the chart's ResizeObserver measure
+   a bounded width instead of overflowing the flex row. */
+.todayCurveCell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Stack the score above the curve once the row gets cramped. */
+@media (max-width: 760px) {
+  .todayBandRow {
+    flex-direction: column;
+  }
+  .todayScoreCell {
+    align-self: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .todayBand {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .page {
+    padding: calc(var(--space-8) + env(safe-area-inset-top)) var(--space-4)
+      calc(var(--space-12) + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header, .page::before {
+    animation: none !important;
+  }
+}
+
+/* ───────── Consolidated 6-tile dashboard (Phase 1 of dashboard consolidation) ───────── */
+
+.gridConsolidated {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, minmax(160px, 200px));
+  grid-template-areas:
+    "train train fuel    fuel"
+    "train train peak    mind"
+    "brand vee   peak    finance";
+  gap: var(--space-4);
+}
+
+@media (max-width: 980px) {
+  .gridConsolidated {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas:
+      "train  train"
+      "fuel   fuel"
+      "peak   mind"
+      "brand  vee"
+      "finance finance";
+    grid-auto-rows: minmax(160px, auto);
+  }
+}
+
+/* Phone bento (Option A). Instead of collapsing to a flat single column,
+   keep the varied-size dashboard rhythm down to phone width: Train is a
+   full-width hero, Fuel a wide band, Peak + Mind a square pair, Brand and
+   Finance wide. Reads like the desktop bento, stays one-handed-scrollable,
+   and every tile keeps a ≥44pt-friendly tap area. */
+@media (max-width: 560px) {
+  .gridConsolidated {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: none;
+    grid-template-areas:
+      "train   train"
+      "fuel    fuel"
+      "peak    mind"
+      "brand   vee"
+      "finance finance";
+    grid-auto-rows: minmax(150px, auto);
+    gap: var(--space-3);
+  }
+  /* Hero treatment for the daily driver. */
+  .areaTrain {
+    min-height: 208px;
+  }
+
+  /* Phone tile footer: same name-over-summary layout as desktop, tightened
+     for the smaller cards. Left edges line up at 16px; the caption is kept
+     clear of the arrow. */
+  .tileIndex {
+    left: 16px;
+  }
+  /* All tile names the same size — no hero exception. */
+  .tileLabel {
+    left: 16px;
+    font-size: 22px;
+    bottom: 38px;
+  }
+  /* Vee kicker + name line up at the phone 16px edge; name sits just under
+     the kicker (overrides the generic phone .tileLabel bottom). */
+  .tileKicker {
+    left: 16px;
+    bottom: 66px;
+  }
+  .areaVee .tileLabel {
+    bottom: 30px;
+  }
+  .tileSummary {
+    left: 16px;
+    right: 48px;
+    bottom: 16px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.42);
+  }
+  .tileArrow {
+    bottom: 34px;
+    right: 16px;
+  }
+}
+
+.areaTrain   { grid-area: train; }
+.areaFuel    { grid-area: fuel; }
+.areaPeak    { grid-area: peak; }
+.areaMind    { grid-area: mind; }
+.areaBrand   { grid-area: brand; }
+.areaVee     { grid-area: vee; }
+.areaFinance { grid-area: finance; }
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  /* Every tile paints its art with position:absolute children (TrainTileArt,
+     FuelTileArt, etc. are inset:0), so a tile has zero intrinsic content
+     height. In the stacked phone layout the grid row track is auto-sized, so
+     a tile with no min height collapses to a thin line — that's why Train
+     (·01) vanished on iPhone. A floor height guarantees every tile keeps a
+     real card height at any width. Below the desktop tile heights, so the
+     bento and one-screen-fit layouts are unaffected. */
+  min-height: 160px;
+  /* Solid opaque backing so the fixed WelcomeBackdrop particles can NEVER show
+     through a tile (var(--card) was rgba .02 = near-transparent, letting them
+     bleed through wherever a tile's art faded at the edges). Each tile's own
+     art still paints on top of this. */
+  background: #080b0a;
+  cursor: pointer;
+  isolation: isolate;
+  transition:
+    transform var(--duration-lift) var(--ease-premium),
+    border-color var(--duration) var(--ease);
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+  animation: tileIn 800ms var(--ease-premium) forwards;
+  will-change: transform;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+@keyframes tileIn {
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tile:hover {
+  border-color: rgba(110, 231, 183, 0.35);
+  box-shadow: 0 0 40px rgba(110, 231, 183, 0.08);
+}
+
+.tileArt {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  transition: transform 240ms var(--ease-out-soft);
+  will-change: transform;
+}
+
+/* Flat SVG glyph icon — top-right corner of each tile. Small, mint-tinted,
+   subtle drop-shadow glow to echo the crystal-library glyph language. */
+.tileGlyph {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  color: var(--mint);
+  opacity: 0.78;
+  filter: drop-shadow(0 0 6px rgba(110, 231, 183, 0.28));
+  pointer-events: none;
+  display: inline-flex;
+}
+
+.tileGlyph svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.tile.areaTrain .tileGlyph {
+  top: 20px;
+  right: 22px;
+  width: 36px;
+  height: 36px;
+}
+
+@media (max-width: 980px) {
+  .tileGlyph { width: 22px; height: 22px; }
+  .tile.areaTrain .tileGlyph { width: 30px; height: 30px; }
+}
+
+.tileIndex {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  z-index: 3;
+  font-family: var(--font-serif), 'Times New Roman', Georgia, serif;
+  font-style: italic;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.tileLabel {
+  position: absolute;
+  bottom: 46px;
+  left: 22px;
+  z-index: 3;
+  font-family: var(--font-serif), 'Times New Roman', Georgia, serif;
+  font-style: italic;
+  font-size: clamp(20px, 2vw, 28px);
+  color: var(--fg);
+}
+
+.tileArrow {
+  position: absolute;
+  bottom: 22px;
+  right: 22px;
+  z-index: 3;
+  color: var(--fg);
+  opacity: 0.9;
+  font-size: 18px;
+}
+
+/* Readable caption that sits BELOW the name on every tile. Soft sentence
+   case, muted grey — cleaner and more legible than the old uppercase eyebrow
+   it replaced. The ≤560 block tightens its size + offsets for phone. */
+.tileSummary {
+  position: absolute;
+  left: 22px;
+  right: 60px;
+  bottom: 22px;
+  z-index: 3;
+  font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: 0.005em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Art variants used inline (mirrors PosterGrid art treatments) */
+.artAurora {
+  background:
+    radial-gradient(ellipse 60% 50% at 35% 55%, rgba(110, 231, 183, 0.35), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 70% 40%, rgba(74, 140, 110, 0.28), transparent 70%),
+    linear-gradient(135deg, #0c1612 0%, #060a08 100%);
+}
+
+.artMountain {
+  background: linear-gradient(180deg, #0a0e0c 0%, #050807 100%);
+  position: relative;
+}
+
+.artDots {
+  background: #0a0d0b;
+  background-image:
+    radial-gradient(rgba(110, 231, 183, 0.6) 1.2px, transparent 1.4px),
+    radial-gradient(ellipse 60% 60% at 50% 50%, rgba(40, 80, 60, 0.6), #0a0d0b 75%);
+  background-size: 14px 14px, 100% 100%;
+}
+
+.artLines {
+  background: linear-gradient(135deg, #0c100e 0%, #060807 100%);
+}
+
+.artDuotone {
+  background:
+    radial-gradient(ellipse 80% 80% at 50% 50%, rgba(214, 119, 60, 0.65) 0%, rgba(122, 50, 30, 0.7) 50%, rgba(40, 14, 10, 1) 100%);
+}
+
+.artGrid {
+  background: #07090a;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Vee — black placeholder with a soft mint presence rising from the lower
+   left, so the tile reads as alive (not dead-black) before its real cozy
+   tile-art is built. */
+.artVoid {
+  background:
+    radial-gradient(ellipse 70% 90% at 18% 120%, rgba(110, 231, 183, 0.13), transparent 62%),
+    #07090a;
+}
+
+/* Vee role kicker — uppercase mono mint line sitting just above the name.
+   Tells the user this tile IS Vitality's AI mentor at a glance. Mirrors the
+   .tileLabel left edge (22px) and the phone block tightens it to 16px. */
+.tileKicker {
+  position: absolute;
+  left: 22px;
+  bottom: 76px;
+  z-index: 3;
+  font-family: var(--font-mono), ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mint);
+  opacity: 0.85;
+}
+
+/* Vee's name drops to sit directly under its kicker (the generic .tileLabel
+   bottom of 46px is tuned for the name-over-summary tiles). */
+.areaVee .tileLabel {
+  bottom: 34px;
+}
+
+/* ───────── Crystal slot (placeholder for shared-canvas gem) ─────────
+   Empty div in the top-right of each tile. DashboardCrystals queries
+   these by data-crystal-slot and uses getBoundingClientRect to size
+   each gem's WebGL viewport. The slot itself draws nothing. */
+/* Header row: gem on the left, greeting + date on the right. The gem
+   anchors the "Vitality character" presence on the dashboard without
+   cluttering the tiles. */
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.headerGem {
+  flex: 0 0 auto;
+  width: 180px;
+  height: 180px;
+}
+
+@media (max-width: 980px) {
+  .headerGem {
+    width: 140px;
+    height: 140px;
+  }
+}
+
+@media (max-width: 560px) {
+  .headerRow {
+    gap: var(--space-4);
+  }
+  .headerGem {
+    width: 100px;
+    height: 100px;
+  }
+  /* Let the greeting shrink/wrap instead of running underneath the gear. */
+  .header {
+    min-width: 0;
+  }
+  .greeting {
+    font-size: clamp(1.85rem, 7vw, 2.3rem);
+  }
+  /* Gear joins the header flow on phone: vertically centered with the gem +
+     greeting, pushed to the far right. No more floating, misaligned corner
+     icon overlapping the text. */
+  .settingsBtn {
+    position: static;
+    flex: 0 0 auto;
+    align-self: center;
+    margin-left: auto;
+  }
+  /* Avatar joins the header flow on phone too: it takes the auto margin so the
+     avatar + gear sit together as a right-aligned cluster. */
+  .profileAvatar {
+    position: static;
+    flex: 0 0 auto;
+    align-self: center;
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+  }
+  .profileAvatar + .settingsBtn {
+    margin-left: var(--space-3);
+  }
+}
+
+/* ───────── Corner gems (legacy flat-SVG, kept for fallback) ───────── */
+
+.gemSlot {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 5;
+  width: 56px;
+  height: 56px;
+  pointer-events: none;
+  animation: dashGemFloat 9s ease-in-out infinite alternate;
+}
+
+.gemSlot::before {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  background: radial-gradient(circle, rgba(110, 231, 183, 0.35) 0%, transparent 70%);
+  filter: blur(8px);
+  z-index: -1;
+  animation: dashGemHalo 4.4s ease-in-out infinite;
+}
+
+.gemSlotAmber::before {
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.32) 0%, transparent 70%);
+}
+
+@keyframes dashGemFloat {
+  0%   { transform: translateY(0)    rotate(-2deg); }
+  100% { transform: translateY(-2px) rotate(2deg);  }
+}
+
+@keyframes dashGemHalo {
+  0%, 100% { opacity: 0.55; transform: scale(0.95); }
+  50%      { opacity: 0.9;  transform: scale(1.10); }
+}
+
+.gemBody {
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
+  animation: dashGemBreath 3.6s ease-in-out infinite;
+}
+
+@keyframes dashGemBreath {
+  0%, 100% { transform: scale(1);    }
+  50%      { transform: scale(1.04); }
+}
+
+/* Idle glyph morph: primary glyph swaps with the brand V every 6s.
+   Each tile gets a per-instance animation-delay (set inline from React)
+   so the six gems don't morph in lockstep. */
+.gemGlyphPrimary { animation: dashGlyphPrimary 6s steps(1, end) infinite; }
+.gemGlyphVMark   { animation: dashGlyphV       6s steps(1, end) infinite; }
+
+@keyframes dashGlyphPrimary {
+  0%, 50%   { opacity: 1; }
+  52%, 98%  { opacity: 0; }
+  100%      { opacity: 1; }
+}
+@keyframes dashGlyphV {
+  0%, 50%   { opacity: 0; }
+  52%, 98%  { opacity: 1; }
+  100%      { opacity: 0; }
+}
+
+/* The actual stroke styling on whichever glyph is visible. */
+.gemGlyphInner {
+  stroke: var(--mint);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  filter: drop-shadow(0 0 4px rgba(110, 231, 183, 0.55));
+  animation: dashGlyphFlicker 2.8s ease-in-out infinite;
+}
+
+.gemSlotAmber .gemGlyphInner {
+  stroke: var(--amber, #F59E0B);
+  filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.55));
+}
+
+@keyframes dashGlyphFlicker {
+  0%, 100% { opacity: 1;    }
+  14%      { opacity: 0.6;  }
+  16%      { opacity: 1;    }
+  52%      { opacity: 0.75; }
+  54%      { opacity: 1;    }
+  78%      { opacity: 0.55; }
+  80%      { opacity: 1;    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gemSlot,
+  .gemSlot::before,
+  .gemBody,
+  .gemGlyphPrimary,
+  .gemGlyphVMark,
+  .gemGlyphInner {
+    animation: none !important;
+  }
+}
+
+/* ───────── One-screen fit (desktop) ─────────
+   On desktop widths that run the 4-column bento (≥981px) and are tall
+   enough to hold it (≥761px), lock the dashboard to the viewport height
+   so it fills exactly one screen with no scroll. The shell flexes to fill
+   the viewport, the grid takes whatever height is left under the header,
+   and its three rows split that space evenly — Train still spans two rows,
+   Brand the third, so the proportions are unchanged, just sized to fit.
+   Narrower or shorter screens fall through to the natural scrolling
+   layout above (this block is purely additive, no base rules touched).
+
+   IMPORTANT: gated on .oneScreen, not bare .page. Many other modules
+   (goals, peak, wearables, the workout log, the session menu, fitness
+   setup) borrow dashboardStyles.page for the same chrome but are taller
+   than the viewport. Locking bare .page to 100vh clipped them with no
+   scroll. Only the dashboard home tags its root with .oneScreen. */
+@media (min-width: 981px) and (min-height: 761px) {
+  /* The dashboard is customizable now: it can hold many tiles and grow past one
+     screen, so it scrolls naturally. The OLD one-screen fit locked .page to 100vh
+     and forced the grid into 4 collapsible rows (repeat(4, minmax(0,150px))) —
+     that crushed the new flexible grid's rows and made tiles overlap. It is gone.
+     The grid keeps its natural row heights (grid-auto-rows in veeTiles.css); we
+     only cap its width here so the backdrop still breathes on the sides. */
+  .page.oneScreen {
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-8);
+  }
+  .oneScreen .shell {
+    width: 100%;
+    gap: var(--space-6);
+  }
+  .oneScreen .shell :global(.veeTiles .grid) {
+    width: 100%;
+    max-width: 1000px;
+    margin-inline: auto;
+  }
+}

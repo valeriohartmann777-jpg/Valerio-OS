@@ -1,0 +1,483 @@
+/* ----- Tokens ----- */
+
+:root {
+  /* Colors */
+  --bg: #000000;
+  --bg-elevated: #0a0a0a;
+  --fg: #ffffff;
+  --mint: #6EE7B7;
+  --mint-hover: #5dd6a6;
+  --mint-deep: #1f4d3d;       /* dark teal partner to mint */
+  --mint-glow: rgba(110, 231, 183, 0.4);
+  --mint-ink: #042a1c;        /* dark foreground for text/icons on a mint fill */
+  --amber: #F59E0B;
+  --amber-warm: #d97706;      /* deeper amber for duotone gradients */
+  --wine: #7c2d12;            /* deep red-brown, partners with amber */
+  --red: #EF4444;
+  --muted: rgba(255, 255, 255, 0.5);
+  --muted-strong: rgba(255, 255, 255, 0.7);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --card: rgba(255, 255, 255, 0.02);
+  --card-elevated: rgba(255, 255, 255, 0.04);
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Type */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.5rem;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);   /* the signature easing — used on every meaningful state change */
+  --ease-out-soft: cubic-bezier(0.32, 0.72, 0, 1); /* smooth lift / float */
+  --duration-fast: 120ms;
+  --duration: 180ms;
+  --duration-lift: 480ms;
+}
+
+/* ----- Reset ----- */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  /* Kill the grey/blue tap flash Safari paints over buttons & links on touch. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  /* Rubber-band / overscroll past the top of any page must show the app's
+     near-black, never a pure-black band. Tint the root the editorial
+     atmosphere's darkest stop (#04060a) so the reveal is seamless, and damp the
+     bounce so it barely shows at all. body keeps var(--bg) below. */
+  background: #04060a;
+  overscroll-behavior-y: none;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* Retint every native control accent (form widgets, iOS cursor/selection
+     grab-handles) to the brand mint so nothing renders the OS default blue. */
+  accent-color: var(--mint);
+}
+
+/* The text caret ("classic line") is brand mint, never the iOS blue.
+   On iOS the selection grab-handles follow this tint too. */
+input,
+textarea,
+select,
+[contenteditable] {
+  caret-color: var(--mint);
+}
+
+/* Text selection — never the OS blue (reads as unprofessional). A subtle
+   on-brand mint wash, applied site-wide. Inputs are never auto-select()ed
+   either, so editing shows the caret line, not a highlighted block. */
+::selection {
+  background: rgba(110, 231, 183, 0.25);
+}
+::-moz-selection {
+  background: rgba(110, 231, 183, 0.25);
+}
+
+/* App-like selection: UI text can't be accidentally highlighted by a drag or
+   double-click (e.g. dragging the days-a-week slider was selecting the labels
+   up to the handle). Inputs stay selectable so typing/editing works; add the
+   .selectable class to any content genuinely meant to be copied. */
+body {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable],
+.selectable,
+.selectable * {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
+
+/* Editorial display face — used sparingly. Italic is where the personality lives. */
+.serif {
+  font-family: var(--font-serif), 'Times New Roman', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.serif-italic {
+  font-family: var(--font-serif), 'Times New Roman', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--duration) var(--ease);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  color: inherit;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+/* ----- Typography ----- */
+
+.heading-xl {
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+}
+
+.heading-lg {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.heading-md {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.heading-sm {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.text-muted {
+  color: var(--muted);
+}
+
+.text-muted-strong {
+  color: var(--muted-strong);
+}
+
+.text-sm {
+  font-size: var(--text-sm);
+}
+
+.text-xs {
+  font-size: var(--text-xs);
+}
+
+/* ----- Brand mark ----- */
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--mint);
+  color: #000000;
+  font-weight: 700;
+  font-size: var(--text-xl);
+  letter-spacing: -0.02em;
+}
+
+.brand-wordmark {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+
+/* ----- Layout helpers ----- */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.stack-2 { gap: var(--space-2); }
+.stack-3 { gap: var(--space-3); }
+.stack-4 { gap: var(--space-4); }
+.stack-6 { gap: var(--space-6); }
+.stack-8 { gap: var(--space-8); }
+
+.center-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.container-narrow {
+  width: 100%;
+  max-width: 360px;
+}
+
+/* ----- Card ----- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+/* ----- Buttons ----- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0.6875rem var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1;
+  transition:
+    background var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    color var(--duration) var(--ease),
+    transform var(--duration-fast) var(--ease);
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-primary {
+  background: var(--mint);
+  color: #000000;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--mint-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--card);
+}
+
+.btn-link {
+  background: transparent;
+  color: var(--muted-strong);
+  padding: var(--space-2) var(--space-3);
+  font-weight: 500;
+}
+
+.btn-link:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+/* ----- Inputs ----- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted-strong);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.input {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 0.6875rem var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  outline: none;
+  width: 100%;
+  transition: border-color var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+.input:hover {
+  border-color: var(--border-strong);
+}
+
+.input:focus {
+  border-color: var(--mint);
+  background: rgba(110, 231, 183, 0.04);
+}
+
+/* ----- Links ----- */
+
+.link {
+  color: var(--mint);
+  font-weight: 500;
+}
+
+.link:hover {
+  color: var(--mint-hover);
+}
+
+/* ----- Status text ----- */
+
+.text-error {
+  color: var(--red);
+  font-size: var(--text-sm);
+}
+
+/* ----- Auth-specific composition ----- */
+
+.auth-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.auth-heading {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-align: center;
+}
+
+.auth-footer {
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* ----- Texture overlays ----- */
+
+/* Film grain — extremely subtle SVG noise, fixed-position so it doesn't scroll.
+   Anything that wants the grain just adds .grain-overlay::after via composition,
+   or applies the class directly to a full-screen wrapper. */
+.grain-overlay {
+  position: relative;
+}
+
+.grain-overlay::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 200px 200px;
+}
+
+/* ----- PeakGem surge ----- */
+/* Charge ring + energy sparks injected by components/PeakGem.tsx. These
+   class names are literal in the component (createElement), so they must
+   live in global scope — a CSS-module would rename them and break the match. */
+.pk-surge-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border: 1.5px solid var(--mint);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 3;
+  box-shadow: 0 0 14px rgba(110, 231, 183, 0.45);
+  animation: pkSurgeRing 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes pkSurgeRing {
+  from { transform: scale(0.3); opacity: 0.75; }
+  to { transform: scale(2.5); opacity: 0; }
+}
+.pk-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 7px rgba(110, 231, 183, 0.9);
+  pointer-events: none;
+  z-index: 3;
+  animation: pkSpark 1.05s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+@keyframes pkSpark {
+  from { transform: translate(0, 0) scale(1); opacity: 1; }
+  to { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-surge-ring, .pk-spark { display: none; }
+}

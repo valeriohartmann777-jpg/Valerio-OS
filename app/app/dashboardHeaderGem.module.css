@@ -1,0 +1,205 @@
+/*
+ * Dashboard header gem — pulse-burst CSS lifted verbatim from
+ * app/gem-library/gemLibrary.module.css so the bursts read identically
+ * to the lab + welcome page.
+ */
+
+.gemStage {
+  position: relative;
+  flex-shrink: 0;
+  /* Fill the container by default. When the component is used standalone it
+     sets an inline width/height; when used on the dashboard the .headerGem
+     container owns the size (responsive across breakpoints) and the stage
+     simply fills it. */
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+  z-index: 2;
+  animation: dashgem-halo 3.9s ease-in-out infinite;
+}
+
+@keyframes dashgem-halo {
+  0%, 100% {
+    filter: drop-shadow(0 0 30px rgba(110, 231, 183, 0.12))
+            drop-shadow(0 0 70px rgba(110, 231, 183, 0.05));
+  }
+  50% {
+    filter: drop-shadow(0 0 55px rgba(110, 231, 183, 0.22))
+            drop-shadow(0 0 120px rgba(110, 231, 183, 0.12));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gemStage {
+    animation: none;
+    filter: drop-shadow(0 0 36px rgba(110, 231, 183, 0.14))
+            drop-shadow(0 0 80px rgba(110, 231, 183, 0.06));
+  }
+}
+
+.gemStage > :global(canvas) {
+  position: relative;
+  z-index: 1;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+.gemFallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(110, 231, 183, 0.18) 0%, rgba(110, 231, 183, 0) 70%);
+  animation: dashgem-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes dashgem-breathe {
+  0%, 100% { opacity: 0.5; transform: scale(0.96); }
+  50%      { opacity: 1;   transform: scale(1); }
+}
+
+/* ── Pulse burst layers — verbatim from gem-library. ── */
+.pulseLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.pulseRing {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 55%;
+  height: 55%;
+  margin-left: -27.5%;
+  margin-top: -27.5%;
+  border-radius: 50%;
+  border: 1.5px solid rgba(110, 231, 183, 0.75);
+  background: radial-gradient(circle, rgba(110, 231, 183, 0.08) 0%, rgba(110, 231, 183, 0) 65%);
+  opacity: 0;
+  animation: dashgem-ring 1.6s ease-out forwards;
+}
+
+.pulseRing1 { animation-delay: 0ms; }
+.pulseRing2 { animation-delay: 180ms; }
+.pulseRing3 { animation-delay: 360ms; }
+
+@keyframes dashgem-ring {
+  0%   { transform: scale(0.55); opacity: 0;    border-width: 2px;   }
+  12%  {                          opacity: 0.85;                      }
+  100% { transform: scale(2.4);  opacity: 0;    border-width: 0.4px; }
+}
+
+.particleDot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--mint, #6EE7B7);
+  box-shadow: 0 0 10px rgba(110, 231, 183, 0.7), 0 0 20px rgba(110, 231, 183, 0.45);
+  opacity: 0;
+  animation: dashgem-particle 1.5s cubic-bezier(0.16, 0.84, 0.44, 1) forwards;
+  transform-origin: center;
+  --angle: 0deg;
+}
+
+@keyframes dashgem-particle {
+  0%   { transform: rotate(var(--angle)) translateY(0)     scale(0.4); opacity: 0; }
+  15%  {                                                                opacity: 1; }
+  100% { transform: rotate(var(--angle)) translateY(-90px) scale(0.7); opacity: 0; }
+}
+
+.sparkleDot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(167,243,208,0.6) 45%, rgba(110,231,183,0) 70%);
+  box-shadow: 0 0 12px rgba(110, 231, 183, 0.7);
+  opacity: 0;
+  animation: dashgem-sparkle 1.8s ease-out forwards;
+}
+
+@keyframes dashgem-sparkle {
+  0%   { opacity: 0; transform: scale(0.3); }
+  25%  { opacity: 1; transform: scale(1.4); }
+  55%  { opacity: 0.6; transform: scale(0.9); }
+  100% { opacity: 0; transform: scale(0.5); }
+}
+
+/* Ponder pulse — for the curious mood. */
+.ponderRing {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 64%;
+  height: 64%;
+  margin-left: -32%;
+  margin-top: -32%;
+  border-radius: 50%;
+  border: 2px solid rgba(167, 243, 208, 0.7);
+  background: radial-gradient(circle, rgba(110, 231, 183, 0.10) 0%, rgba(110, 231, 183, 0) 62%);
+  opacity: 0;
+  animation: dashgem-ponderRing 1.7s ease-out forwards;
+}
+
+@keyframes dashgem-ponderRing {
+  0%   { transform: scale(0.7);  opacity: 0;    border-width: 2.5px; }
+  16%  {                         opacity: 0.8;                        }
+  100% { transform: scale(2.7);  opacity: 0;    border-width: 0.3px; }
+}
+
+.ponderGlow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70%;
+  height: 70%;
+  margin-left: -35%;
+  margin-top: -35%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(196, 250, 220, 0.5) 0%, rgba(110, 231, 183, 0.22) 38%, rgba(110, 231, 183, 0) 68%);
+  opacity: 0;
+  animation: dashgem-ponderGlow 1.4s ease-out forwards;
+}
+
+@keyframes dashgem-ponderGlow {
+  0%   { transform: scale(0.5); opacity: 0;   }
+  22%  {                        opacity: 1;   }
+  100% { transform: scale(2.3); opacity: 0;   }
+}
+
+.ponderMote {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6.5px;
+  height: 6.5px;
+  margin-left: -3.25px;
+  margin-top: -3.25px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(224, 255, 240, 1) 0%, rgba(167, 243, 208, 0.95) 55%, rgba(110, 231, 183, 0) 78%);
+  box-shadow: 0 0 14px rgba(110, 231, 183, 0.85), 0 0 26px rgba(110, 231, 183, 0.5);
+  opacity: 0;
+  animation: dashgem-ponderMote 1.8s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  transform-origin: center;
+  --angle: 0deg;
+}
+
+@keyframes dashgem-ponderMote {
+  0%   { transform: rotate(var(--angle)) translateY(-78px) scale(0.4); opacity: 0; }
+  25%  {                                                                opacity: 1; }
+  100% { transform: rotate(var(--angle)) translateY(-130px) scale(0.85); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulseRing, .particleDot, .sparkleDot,
+  .ponderRing, .ponderGlow, .ponderMote { animation: none; opacity: 0; }
+}
