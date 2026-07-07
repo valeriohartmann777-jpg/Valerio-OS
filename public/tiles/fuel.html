@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fuel</title>
+<style>
+  :root {
+    --bg: #000000;
+    --mint: #6EE7B7;
+    --fg: #F5F5F5;
+    --muted: #8A8A8A;
+    --line: rgba(255,255,255,0.08);
+    --card: rgba(255,255,255,0.03);
+    --card-hover: rgba(255,255,255,0.06);
+    --mint-dim: rgba(110,231,183,0.12);
+    --track: rgba(255,255,255,0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    padding: 20px;
+    min-height: 100%;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+  .dot { color: var(--mint); }
+  .today { font-size: 11px; color: var(--muted); }
+
+  /* hero: calorie ring + water */
+  .hero {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 18px;
+    align-items: center;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .ring { position: relative; width: 116px; height: 116px; flex-shrink: 0; }
+  .ring svg { transform: rotate(-90deg); display: block; }
+  .ring .center {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+  }
+  .ring .kcal { font-size: 24px; font-weight: 600; color: var(--fg); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .ring .goal { font-size: 10px; color: var(--muted); margin-top: 3px; letter-spacing: 0.05em; }
+
+  .hero-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .remain { }
+  .remain .big { font-size: 18px; font-weight: 600; color: var(--mint); font-variant-numeric: tabular-nums; }
+  .remain .lbl { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 1px; }
+
+  /* water */
+  .water { }
+  .water-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .water-top .v { font-size: 13px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+  .water-top .l { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .water-bar { height: 6px; border-radius: 6px; background: var(--track); overflow: hidden; }
+  .water-fill { height: 100%; background: var(--mint); border-radius: 6px; width: 0%; transition: width 0.3s ease; }
+  .water-btns { display: flex; gap: 6px; margin-top: 8px; }
+  .wbtn {
+    flex: 1; padding: 7px 0; border-radius: 8px; border: 1px solid var(--line);
+    background: transparent; color: var(--muted); font-size: 11px; font-weight: 600;
+    cursor: pointer; font-family: inherit; transition: all 0.12s ease;
+  }
+  .wbtn:hover { background: var(--card-hover); color: var(--fg); }
+  .wbtn.minus { flex: 0 0 40px; }
+
+  /* form */
+  form {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line);
+    background: transparent; color: var(--muted); font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: all 0.12s ease; font-family: inherit;
+  }
+  .chip:hover { background: var(--card-hover); color: var(--fg); }
+  .chip.sel { background: var(--mint-dim); border-color: rgba(110,231,183,0.5); color: var(--mint); }
+
+  .row { display: flex; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.grow { flex: 1; }
+  .field.kcal { flex: 0 0 110px; }
+  .field label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  input {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 9px;
+    padding: 10px 12px; color: var(--fg); font-family: inherit; font-size: 14px;
+    width: 100%; outline: none; transition: border-color 0.12s ease;
+  }
+  input[type="number"] { font-variant-numeric: tabular-nums; }
+  input:focus { border-color: rgba(110,231,183,0.5); }
+  input::placeholder { color: #5a5a5a; }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; }
+
+  button.add {
+    background: var(--mint); color: #04241A; border: none; border-radius: 9px;
+    padding: 11px; font-family: inherit; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.02em; cursor: pointer; transition: opacity 0.12s ease, transform 0.06s ease;
+  }
+  button.add:hover { opacity: 0.9; }
+  button.add:active { transform: scale(0.99); }
+  button.add:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* goal editor */
+  .goalrow {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; color: var(--muted);
+  }
+  .goalrow input {
+    width: 84px; padding: 6px 9px; font-size: 12px; text-align: right;
+  }
+  .goalrow .gwrap { display: flex; align-items: center; gap: 8px; }
+
+  /* log */
+  .log { display: flex; flex-direction: column; gap: 8px; }
+  .log-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 0 2px;
+  }
+  .entry {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 11px;
+    padding: 11px 13px; transition: background 0.12s ease;
+  }
+  .entry:hover { background: var(--card-hover); }
+  .entry .bar { width: 3px; height: 30px; border-radius: 3px; background: var(--mint); flex-shrink: 0; opacity: 0.85; }
+  .entry .bar.w { background: #5AA9E6; }
+  .entry .main { flex: 1; min-width: 0; }
+  .entry .t { font-size: 13px; font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .entry .sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .entry .meta { text-align: right; flex-shrink: 0; }
+  .entry .amt { font-size: 14px; font-weight: 600; color: var(--mint); font-variant-numeric: tabular-nums; }
+  .entry .when { font-size: 10px; color: var(--muted); margin-top: 1px; }
+  .del {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 16px; line-height: 1; padding: 4px 2px 4px 6px; opacity: 0;
+    transition: opacity 0.12s ease, color 0.12s ease; font-family: inherit; flex-shrink: 0;
+  }
+  .entry:hover .del { opacity: 1; }
+  .del:hover { color: #FF6B6B; }
+  .empty {
+    text-align: center; color: var(--muted); font-size: 12px;
+    padding: 24px 0; border: 1px dashed var(--line); border-radius: 11px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fuel<span class="dot">.</span></h1>
+    <span class="today" id="todayLbl"></span>
+  </header>
+
+  <div class="hero">
+    <div class="ring">
+      <svg width="116" height="116" viewBox="0 0 116 116">
+        <circle cx="58" cy="58" r="50" fill="none" stroke="var(--track)" stroke-width="8"></circle>
+        <circle id="ringFill" cx="58" cy="58" r="50" fill="none" stroke="var(--mint)"
+                stroke-width="8" stroke-linecap="round" stroke-dasharray="314.16" stroke-dashoffset="314.16"></circle>
+      </svg>
+      <div class="center">
+        <div class="kcal" id="kcalNow">0</div>
+        <div class="goal" id="kcalGoalLbl">/ 2000 kcal</div>
+      </div>
+    </div>
+    <div class="hero-side">
+      <div class="remain">
+        <div class="big" id="kcalRemain">2000</div>
+        <div class="lbl" id="remainLbl">kcal remaining</div>
+      </div>
+      <div class="water">
+        <div class="water-top">
+          <span class="v" id="waterVal">0.0 / 2.5 L</span>
+          <span class="l">Water</span>
+        </div>
+        <div class="water-bar"><div class="water-fill" id="waterFill"></div></div>
+        <div class="water-btns">
+          <button type="button" class="wbtn minus" id="wMinus">&minus;</button>
+          <button type="button" class="wbtn" data-ml="250">+250 ml</button>
+          <button type="button" class="wbtn" data-ml="500">+500 ml</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <form id="form">
+    <div class="chips" id="chips"></div>
+    <div class="row">
+      <div class="field grow">
+        <label for="name">Item</label>
+        <input type="text" id="name" placeholder="Chicken &amp; rice" maxlength="40" autocomplete="off">
+      </div>
+      <div class="field kcal">
+        <label for="cal">kcal</label>
+        <input type="number" id="cal" min="1" max="5000" step="1" placeholder="520" inputmode="numeric">
+      </div>
+    </div>
+    <button type="submit" class="add" id="addBtn" disabled>Log meal</button>
+    <div class="goalrow">
+      <span>Daily goal</span>
+      <div class="gwrap">
+        <input type="number" id="goalInput" min="500" max="8000" step="50">
+        <span>kcal</span>
+      </div>
+    </div>
+  </form>
+
+  <div class="log">
+    <div class="log-head"><span>Today</span><span id="logCount"></span></div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var MEALS = ["Breakfast", "Lunch", "Dinner", "Snack"];
+  var WATER_GOAL_ML = 2500;
+  var RING_CIRC = 2 * Math.PI * 50; // 314.16
+
+  var state = { records: [], calGoal: 2000, meal: "Breakfast" };
+
+  // ---- host bridge ----
+  async function persist() {
+    // store a settings record alongside entries so the goal survives reloads
+    var payload = state.records.concat([{ kind: "settings", calGoal: state.calGoal }]);
+    try { await window.Vitality.save(payload); } catch (e) {}
+  }
+  async function restore() {
+    try {
+      var data = await window.Vitality.load();
+      if (!Array.isArray(data)) data = [];
+      var settings = data.filter(function (r) { return r && r.kind === "settings"; }).pop();
+      if (settings && settings.calGoal) state.calGoal = settings.calGoal;
+      state.records = data.filter(function (r) { return r && r.kind !== "settings"; });
+    } catch (e) { state.records = []; }
+  }
+
+  // ---- date helpers ----
+  function startOfDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
+  function isToday(ts) { return ts >= startOfDay(Date.now()).getTime(); }
+  function relTime(ts) {
+    var m = Math.floor((Date.now() - ts) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return m + "m ago";
+    var h = Math.floor(m / 60); return h + "h ago";
+  }
+
+  var el = function (id) { return document.getElementById(id); };
+
+  function todays() { return state.records.filter(function (r) { return isToday(r.ts); }); }
+
+  // ---- rendering ----
+  function renderChips() {
+    var c = el("chips"); c.innerHTML = "";
+    MEALS.forEach(function (m) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "chip" + (state.meal === m ? " sel" : "");
+      b.textContent = m;
+      b.onclick = function () { state.meal = m; renderChips(); };
+      c.appendChild(b);
+    });
+  }
+
+  function syncBtn() {
+    var cal = parseInt(el("cal").value, 10);
+    var name = el("name").value.trim();
+    el("addBtn").disabled = !(name && cal > 0);
+  }
+
+  function renderHero() {
+    var t = todays();
+    var kcal = t.filter(function (r) { return r.kind === "meal"; })
+      .reduce(function (a, r) { return a + (r.calories || 0); }, 0);
+    var ml = t.filter(function (r) { return r.kind === "water"; })
+      .reduce(function (a, r) { return a + (r.ml || 0); }, 0);
+
+    el("kcalNow").textContent = kcal;
+    el("kcalGoalLbl").textContent = "/ " + state.calGoal + " kcal";
+
+    var remain = state.calGoal - kcal;
+    if (remain >= 0) {
+      el("kcalRemain").textContent = remain;
+      el("kcalRemain").style.color = "var(--mint)";
+      el("remainLbl").textContent = "kcal remaining";
+    } else {
+      el("kcalRemain").textContent = Math.abs(remain);
+      el("kcalRemain").style.color = "#FF8A6B";
+      el("remainLbl").textContent = "kcal over";
+    }
+
+    var pct = state.calGoal > 0 ? Math.min(kcal / state.calGoal, 1) : 0;
+    el("ringFill").setAttribute("stroke-dashoffset", (RING_CIRC * (1 - pct)).toFixed(2));
+
+    var liters = (ml / 1000);
+    el("waterVal").textContent = liters.toFixed(1) + " / " + (WATER_GOAL_ML / 1000).toFixed(1) + " L";
+    el("waterFill").style.width = Math.min(ml / WATER_GOAL_ML, 1) * 100 + "%";
+  }
+
+  function renderList() {
+    var list = el("list");
+    var recs = todays().slice().sort(function (a, b) { return b.ts - a.ts; });
+    el("logCount").textContent = recs.length ? recs.length + " entries" : "";
+    if (!recs.length) {
+      list.innerHTML = '<div class="empty">Nothing logged today. Add a meal or water above.</div>';
+      return;
+    }
+    list.innerHTML = "";
+    recs.forEach(function (r) {
+      var e = document.createElement("div"); e.className = "entry";
+      var isW = r.kind === "water";
+      e.innerHTML =
+        '<div class="bar' + (isW ? ' w' : '') + '"></div>' +
+        '<div class="main"><div class="t"></div><div class="sub"></div></div>' +
+        '<div class="meta"><div class="amt"></div><div class="when"></div></div>';
+      e.querySelector(".t").textContent = isW ? "Water" : r.name;
+      e.querySelector(".sub").textContent = isW ? (r.ml + " ml") : r.mealType;
+      e.querySelector(".amt").textContent = isW ? (r.ml + " ml") : (r.calories + " kcal");
+      if (isW) e.querySelector(".amt").style.color = "#5AA9E6";
+      e.querySelector(".when").textContent = relTime(r.ts);
+      var del = document.createElement("button");
+      del.className = "del"; del.type = "button"; del.textContent = "×"; del.title = "Delete";
+      del.onclick = function () { removeRecord(r.id); };
+      e.appendChild(del);
+      list.appendChild(e);
+    });
+  }
+
+  function renderAll() { renderHero(); renderList(); }
+
+  // ---- actions ----
+  function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  async function addMeal() {
+    var cal = parseInt(el("cal").value, 10);
+    var name = el("name").value.trim();
+    if (!name || !(cal > 0)) return;
+    state.records.push({ id: newId(), kind: "meal", name: name, mealType: state.meal, calories: cal, ts: Date.now() });
+    el("name").value = ""; el("cal").value = "";
+    syncBtn(); renderAll();
+    await persist();
+  }
+
+  async function addWater(ml) {
+    state.records.push({ id: newId(), kind: "water", ml: ml, ts: Date.now() });
+    renderAll();
+    await persist();
+  }
+
+  async function removeLastWater() {
+    var waters = todays().filter(function (r) { return r.kind === "water"; }).sort(function (a, b) { return b.ts - a.ts; });
+    if (!waters.length) return;
+    var id = waters[0].id;
+    state.records = state.records.filter(function (r) { return r.id !== id; });
+    renderAll();
+    await persist();
+  }
+
+  async function removeRecord(id) {
+    state.records = state.records.filter(function (r) { return r.id !== id; });
+    renderAll();
+    await persist();
+  }
+
+  async function setGoal(v) {
+    var g = parseInt(v, 10);
+    if (!(g >= 500 && g <= 8000)) return;
+    state.calGoal = g;
+    renderHero();
+    await persist();
+  }
+
+  // ---- init ----
+  el("form").addEventListener("submit", function (ev) { ev.preventDefault(); addMeal(); });
+  el("name").addEventListener("input", syncBtn);
+  el("cal").addEventListener("input", syncBtn);
+  el("wMinus").addEventListener("click", removeLastWater);
+  Array.prototype.forEach.call(document.querySelectorAll(".wbtn[data-ml]"), function (b) {
+    b.addEventListener("click", function () { addWater(parseInt(b.getAttribute("data-ml"), 10)); });
+  });
+  el("goalInput").addEventListener("change", function () { setGoal(el("goalInput").value); });
+  el("todayLbl").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+
+  renderChips();
+
+  (async function () {
+    await restore();
+    el("goalInput").value = state.calGoal;
+    renderAll();
+  })();
+})();
+</script>
+</body>
+</html>
