@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import logging
 
 from jarvis.settings import Settings, resolve_backend
@@ -26,14 +25,15 @@ def create_backend(settings: Settings) -> SystemBackend:
 
         return WindowsSystemBackend()
     if choice == "macos":
-        if importlib.util.find_spec("Quartz") is not None:
-            from jarvis.tools.system.macos import MacOSSystemBackend
+        from jarvis.tools.system.macos import MacOSSystemBackend
 
-            return MacOSSystemBackend()
-        log.error(
-            "macOS control unavailable: pyobjc-framework-Quartz is not installed. "
-            "Run ./scripts/setup.sh — falling back to the SIMULATED desktop."
-        )
+        try:
+            return MacOSSystemBackend()  # imports Quartz on this (main) thread
+        except Exception:
+            log.exception(
+                "macOS control unavailable (pyobjc-framework-Quartz missing or broken). "
+                "Run ./scripts/setup.sh — falling back to the SIMULATED desktop."
+            )
     from jarvis.tools.system.simulated import SimulatedSystemBackend
 
     return SimulatedSystemBackend(

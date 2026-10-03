@@ -16,6 +16,8 @@ class Health(BaseModel):
     status: str = "ok"
     version: str
     uptime_seconds: float
+    pid: int
+    system_backend: str
 
 
 class SystemStatus(BaseModel):

@@ -49,7 +49,7 @@ export function TopBar() {
         {simulated && (
           <span
             className="rounded-md border border-warning/30 px-2 py-0.5 font-mono text-2xs tracking-wider text-warning uppercase"
-            title="The desktop is simulated (non-Windows host). No real applications are launched."
+            title="No real system control on this machine — nothing is actually launched. On macOS or Windows: re-run the setup script and restart JARVIS."
             data-testid="simulated-badge"
           >
             Simulated

@@ -121,12 +121,26 @@ def windows_from_cg(
     return windows
 
 
-def quartz_windows() -> list[dict[str, Any]]:
-    import Quartz  # pyobjc-framework-Quartz, installed on macOS only
+class QuartzWindowSource:
+    """On-screen windows from the window server (front-to-back).
 
-    options = Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements
-    infos = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
-    return [dict(info) for info in infos]
+    pyobjc's ``Quartz`` package loads AppKit, which must happen on the main
+    thread — so it is imported here, at construction, not lazily inside the
+    worker thread that later calls it.
+    """
+
+    def __init__(self) -> None:
+        import Quartz  # pyobjc-framework-Quartz, installed on macOS only
+
+        self._copy = Quartz.CGWindowListCopyWindowInfo
+        self._options = (
+            Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements
+        )
+        self._null_window = Quartz.kCGNullWindowID
+
+    def __call__(self) -> list[dict[str, Any]]:
+        infos = self._copy(self._options, self._null_window) or []
+        return [dict(info) for info in infos]
 
 
 def _processes() -> tuple[tuple[ProcessInfo, ...], dict[int, str]]:
@@ -158,11 +172,11 @@ class MacOSSystemBackend(SystemBackend):
         self,
         *,
         app_index: AppIndex | None = None,
-        window_source: WindowSource = quartz_windows,
+        window_source: WindowSource | None = None,
         opener: str = "/usr/bin/open",
     ) -> None:
         self._index = app_index or AppIndex()
-        self._window_source = window_source
+        self._window_source = window_source or QuartzWindowSource()
         self._opener = opener
 
     async def snapshot(self) -> EnvironmentSnapshot:

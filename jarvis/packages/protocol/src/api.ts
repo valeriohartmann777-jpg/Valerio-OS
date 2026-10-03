@@ -9,6 +9,8 @@ export interface Health {
   status: "ok";
   version: string;
   uptime_seconds: number;
+  pid: number;
+  system_backend: string;
 }
 
 export interface SystemStatus {

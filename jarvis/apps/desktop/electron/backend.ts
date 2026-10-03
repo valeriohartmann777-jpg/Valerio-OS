@@ -20,8 +20,16 @@ export class BackendSupervisor {
   ) {}
 
   async ensureRunning(): Promise<BackendMode> {
-    if (await this.healthy()) {
-      console.log(`[jarvis] using running backend at ${this.url}`);
+    const running = await this.health();
+    if (running) {
+      console.log(`[jarvis] using running backend at ${this.url} (pid ${running.pid}, ${running.system_backend})`);
+      const realPlatform = process.platform === "darwin" || process.platform === "win32";
+      if (realPlatform && running.system_backend === "simulated") {
+        console.warn(
+          `[jarvis] WARNING: that backend is SIMULATED — probably left over from an older run. ` +
+            `Quit JARVIS, stop it (${process.platform === "win32" ? `taskkill /PID ${running.pid} /F` : `kill ${running.pid}`}) and start again.`,
+        );
+      }
       if (this.extraOrigins.length > 0) {
         console.log(
           `[jarvis] if the dashboard stays on CONNECTING, that backend does not allow ${this.extraOrigins.join(", ")}` +
@@ -76,11 +84,15 @@ export class BackendSupervisor {
   }
 
   private async healthy(): Promise<boolean> {
+    return (await this.health()) !== null;
+  }
+
+  private async health(): Promise<{ pid: number; system_backend: string } | null> {
     try {
       const response = await fetch(`${this.url}/health`, { signal: AbortSignal.timeout(800) });
-      return response.ok;
+      return response.ok ? ((await response.json()) as { pid: number; system_backend: string }) : null;
     } catch {
-      return false;
+      return null;
     }
   }
 

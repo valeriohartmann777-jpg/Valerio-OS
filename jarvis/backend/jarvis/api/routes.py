@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 from typing import Annotated
 
 from fastapi import (
@@ -65,7 +66,12 @@ async def build_snapshot(rt: Runtime) -> Snapshot:
 
 @router.get("/health")
 async def health(rt: RuntimeDep) -> Health:
-    return Health(version=rt.version, uptime_seconds=round(rt.uptime_seconds, 1))
+    return Health(
+        version=rt.version,
+        uptime_seconds=round(rt.uptime_seconds, 1),
+        pid=os.getpid(),
+        system_backend=rt.backend.name,
+    )
 
 
 @router.get("/system/status")

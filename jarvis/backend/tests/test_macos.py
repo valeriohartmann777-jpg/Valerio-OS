@@ -235,3 +235,21 @@ async def test_open_failure_becomes_launch_error(mac_env: dict[str, Any]) -> Non
         await mac_env["backend"].launch("/nowhere/Missing.app")
     assert error.value.code == "launch_failed"
     assert error.value.detail and "Unable to find application" in error.value.detail
+
+
+def test_missing_quartz_falls_back_to_simulation_with_a_reason(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from jarvis.tools.system import create_backend
+
+    settings = load_settings(environ={"JARVIS_SYSTEM_BACKEND": "macos"})
+    try:
+        import Quartz  # noqa: F401
+    except ImportError:
+        pass
+    else:
+        pytest.skip("Quartz is installed here; the fallback cannot be observed")
+    with caplog.at_level("ERROR", logger="jarvis.tools"):
+        backend = create_backend(settings)
+    assert backend.simulated
+    assert "macOS control unavailable" in caplog.text
