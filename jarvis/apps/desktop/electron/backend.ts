@@ -16,11 +16,18 @@ export class BackendSupervisor {
   constructor(
     private readonly url: string,
     private readonly projectRoot: string,
+    private readonly extraOrigins: string[] = [],
   ) {}
 
   async ensureRunning(): Promise<BackendMode> {
     if (await this.healthy()) {
       console.log(`[jarvis] using running backend at ${this.url}`);
+      if (this.extraOrigins.length > 0) {
+        console.log(
+          `[jarvis] if the dashboard stays on CONNECTING, that backend does not allow ${this.extraOrigins.join(", ")}` +
+            " — stop it and restart `npm run dev` so JARVIS starts its own.",
+        );
+      }
       return "external";
     }
     const python = this.findPython();
@@ -35,7 +42,13 @@ export class BackendSupervisor {
     console.log(`[jarvis] starting backend: ${python} -m jarvis (port ${port})`);
     this.child = spawn(python, ["-m", "jarvis"], {
       cwd: path.join(this.projectRoot, "backend"),
-      env: { ...process.env, JARVIS_ROOT: this.projectRoot, JARVIS_PORT: port, PYTHONUNBUFFERED: "1" },
+      env: {
+        ...process.env,
+        JARVIS_ROOT: this.projectRoot,
+        JARVIS_PORT: port,
+        JARVIS_EXTRA_ORIGINS: this.extraOrigins.join(","),
+        PYTHONUNBUFFERED: "1",
+      },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -46,7 +59,7 @@ export class BackendSupervisor {
       this.child = null;
     });
 
-    const deadline = Date.now() + 20_000;
+    const deadline = Date.now() + 60_000; // first start compiles bytecode; slow machines need time
     while (Date.now() < deadline && this.child) {
       if (await this.healthy()) return "spawned";
       await new Promise((resolve) => setTimeout(resolve, 250));

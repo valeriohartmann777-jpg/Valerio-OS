@@ -165,6 +165,11 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         server["host"] = value
     if value := env.get("JARVIS_PORT"):
         server["port"] = int(value)
+    if value := env.get("JARVIS_EXTRA_ORIGINS"):
+        origins = server.setdefault("allowed_origins", ["app://jarvis"])
+        for origin in (o.strip() for o in value.split(",")):
+            if origin and origin not in origins:
+                origins.append(origin)
     if value := env.get("JARVIS_SYSTEM_BACKEND"):
         runtime["system_backend"] = value
     if value := env.get("JARVIS_DATA_DIR"):

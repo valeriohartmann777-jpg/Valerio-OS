@@ -21,8 +21,11 @@ def test_environment_overrides(tmp_path: Path) -> None:
             "JARVIS_PORT": "9999",
             "JARVIS_SYSTEM_BACKEND": "simulated",
             "JARVIS_DATA_DIR": str(tmp_path),
+            "JARVIS_EXTRA_ORIGINS": "http://127.0.0.1:5174, http://127.0.0.1:5173",
         }
     )
+    assert settings.server.allowed_origins.count("http://127.0.0.1:5173") == 1
+    assert "http://127.0.0.1:5174" in settings.server.allowed_origins
     assert settings.server.port == 9999
     assert settings.runtime.system_backend == "simulated"
     assert settings.database_path == tmp_path / "jarvis.db"

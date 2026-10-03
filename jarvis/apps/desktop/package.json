@@ -5,7 +5,7 @@
   "description": "JARVIS command center (Electron + React).",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "npm run build:electron && concurrently -k -n vite,electron -c gray,blue \"vite\" \"wait-on tcp:127.0.0.1:5173 && cross-env JARVIS_RENDERER_URL=http://127.0.0.1:5173 electron .\"",
+    "dev": "npm run build:electron && node scripts/dev.mjs",
     "build": "npm run typecheck && vite build && npm run build:electron",
     "build:electron": "tsc -p tsconfig.electron.json",
     "start": "npm run build && electron .",
@@ -27,13 +27,10 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "concurrently": "^10.0.5",
-    "cross-env": "^10.1.0",
     "electron": "^44.5.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
-    "vitest": "^5.0.3",
-    "wait-on": "^9.5.1"
+    "vitest": "^5.0.3"
   }
 }

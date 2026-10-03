@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: { host: "127.0.0.1", port: 5173, strictPort: true },
+  server: { host: "127.0.0.1", port: 5173 },
   build: { outDir: "dist", emptyOutDir: true, target: "chrome130" },
   test: { environment: "node", include: ["src/**/*.test.ts"] },
 });

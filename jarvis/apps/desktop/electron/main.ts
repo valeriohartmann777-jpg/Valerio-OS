@@ -23,7 +23,12 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-const supervisor = new BackendSupervisor(BACKEND_URL, PROJECT_ROOT);
+// The dev server may run on any free port; the backend must accept its origin.
+const supervisor = new BackendSupervisor(
+  BACKEND_URL,
+  PROJECT_ROOT,
+  DEV_RENDERER_URL ? [new URL(DEV_RENDERER_URL).origin] : [],
+);
 let mainWindow: BrowserWindow | null = null;
 
 function contentSecurityPolicy(): string {
