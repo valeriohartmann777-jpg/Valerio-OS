@@ -40,12 +40,19 @@ _Last updated: 2026-10-03_
   explanation → mission detail → settings → idle → backend stopped on quit
 - `mypy --platform win32` passes for the Windows backend
 
+### Verified on real hardware
+- 2026-10-03, MacBook Air, macOS 26 (Darwin 25.6): `scripts/smoke.py textedit`
+  → resolved `/System/Applications/TextEdit.app`, `open -a` launch, outcome
+  `brought_to_front` (TextEdit already had a window), Sentinel `verified`
+  (1 window, 1 process, has focus). First Quartz import took ~7 s (cold
+  bytecode compile); it happens once at backend start.
+
 ## IN PROGRESS
 - —
 
 ## NEXT (Phase 2 — real system control)
-1. Confirm on the MacBook: `scripts/smoke.py textedit`, then the app
-   (`open textedit / safari / finder / terminal`); on Windows: `scripts/smoke.py notepad`
+1. Exercise the dashboard on the MacBook (`open safari / finder / terminal`,
+   active window, running apps); on Windows: `scripts/smoke.py notepad`
 2. Volume (`get_volume` / `set_volume`, Core Audio)
 3. Window management via UI Automation (focus / minimize / maximize / close)
 4. File tools (`list_directory`, `read_file`, `search_files`) with path allowlist
@@ -56,6 +63,6 @@ _Last updated: 2026-10-03_
 - Real-OS runs could not happen in the development container (Linux).
   Windows: type-checked against the Windows API stubs. macOS: type-checked for
   darwin; bundle detection, app index, launch errors and verification are
-  tested with real processes inside fake `.app` bundles — only the Quartz
-  window-server call itself is untested until it runs on the Mac (item 1).
+  tested with real processes inside fake `.app` bundles, and the full smoke
+  test passed on a real Mac (see above). Windows still needs its first real run.
 - Windows-only scripts (`setup.ps1`, `dev.ps1`) were written but not executed.
