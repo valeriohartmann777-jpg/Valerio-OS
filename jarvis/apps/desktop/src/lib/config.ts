@@ -21,4 +21,7 @@ export const EVENTS_URL = `${BACKEND_URL.replace(/^http/, "ws")}/events`;
 /** Native window controls are drawn over the top-right corner on Windows. */
 export const HAS_TITLEBAR_OVERLAY = bridge.platform === "win32";
 
+/** macOS draws the traffic-light buttons over the top-left corner. */
+export const HAS_TRAFFIC_LIGHTS = bridge.platform === "darwin";
+
 export const IS_ELECTRON = bridge.platform !== undefined;

@@ -71,6 +71,7 @@ async function createWindow(): Promise<void> {
     backgroundColor: BACKGROUND,
     titleBarStyle: isWindows ? "hidden" : isMac ? "hiddenInset" : "default",
     titleBarOverlay: isWindows ? { color: BACKGROUND, symbolColor: "#8b949e", height: 44 } : undefined,
+    trafficLightPosition: isMac ? { x: 18, y: 15 } : undefined, // centred in the 44 px top bar
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

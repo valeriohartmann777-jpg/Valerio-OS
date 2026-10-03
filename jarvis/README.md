@@ -72,7 +72,18 @@ Try the real Windows tool without the UI:
 backend\.venv\Scripts\python scripts\windows_smoke.py notepad
 ```
 
-macOS/Linux: `scripts/setup.sh`, then `npm run dev` (simulated desktop).
+## Setup & run (macOS / Linux)
+
+```bash
+git clone -b claude/jarvis-foundation-mxnsz4 https://github.com/valeriohartmann777-jpg/Valerio-OS.git ~/dev/Valerio-OS
+cd ~/dev/Valerio-OS/jarvis
+./scripts/setup.sh
+npm run dev
+```
+
+Off Windows the desktop is **simulated** (SIMULATED badge): the whole chain
+runs, but no real application is launched. A real macOS backend is a separate
+`SystemBackend` implementation (not built yet).
 
 ## Tests
 

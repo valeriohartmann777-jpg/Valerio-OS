@@ -1,4 +1,4 @@
-import { HAS_TITLEBAR_OVERLAY } from "../lib/config";
+import { HAS_TITLEBAR_OVERLAY, HAS_TRAFFIC_LIGHTS } from "../lib/config";
 import { clock } from "../lib/format";
 import type { View } from "../store/reducer";
 import { dispatch, useJarvis, useNow } from "../store/store";
@@ -23,6 +23,7 @@ export function TopBar() {
       className={cx(
         "drag flex h-11 shrink-0 items-center gap-8 border-b border-hairline px-5",
         HAS_TITLEBAR_OVERLAY && "pr-[150px]",
+        HAS_TRAFFIC_LIGHTS && "pl-[88px]",
       )}
     >
       <div className="flex items-baseline gap-2.5">
