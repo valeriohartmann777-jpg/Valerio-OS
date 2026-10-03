@@ -6,6 +6,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from jarvis.agents.base import AgentRegistry
 from jarvis.agents.workers import OperatorAgent, SentinelAgent
@@ -86,6 +87,20 @@ class MissionEngine:
     # Lifecycle -------------------------------------------------------------
 
     async def submit(self, mission: Mission, ctx: TraceContext) -> Mission:
+        """Run a mission whose steps are planned up front (in the background)."""
+        run = await self._register(mission, ctx)
+        run.task = asyncio.create_task(self._execute(run))
+        return mission
+
+    async def open(self, mission: Mission, ctx: TraceContext) -> MissionHandle:
+        """Start an open-ended mission whose steps are added as they are decided
+        (model-driven turns). The caller drives it through the returned handle."""
+        run = await self._register(mission, ctx)
+        mission.status = MissionStatus.ACTIVE
+        await self._publish(run, f"Mission {mission.number:03d} started")
+        return MissionHandle(self, run)
+
+    async def _register(self, mission: Mission, ctx: TraceContext) -> _Run:
         mission.number = await self._repo.next_number()
         mission.trace_id = ctx.trace_id
         run = _Run(mission=mission, ctx=ctx.for_mission(mission.id))
@@ -98,8 +113,7 @@ class MissionEngine:
             ctx=run.ctx,
             payload={"mission": mission.model_dump(mode="json")},
         )
-        run.task = asyncio.create_task(self._execute(run))
-        return mission
+        return run
 
     async def pause(self, mission_id: str) -> Mission:
         run = self._active(mission_id)
@@ -186,16 +200,22 @@ class MissionEngine:
                 step.summary = "Skipped — nothing to verify"
                 await self._publish(run, f"{step.title} skipped")
                 continue
-            step.status = StepStatus.ACTIVE
-            step.started_at = utcnow()
-            mission.current_step = step.index
-            await self._publish(run, f"{step.title} started")
+            await self._start_step(run, step)
             if step.kind is StepKind.ACTION:
                 results[step.index] = await self._run_action(run, step)
             elif source is not None:
                 await self._run_verify(run, step, source)
-            step.finished_at = utcnow()
-            await self._publish(run, f"{step.title}: {step.status}")
+            await self._end_step(run, step)
+
+    async def _start_step(self, run: _Run, step: MissionStep) -> None:
+        step.status = StepStatus.ACTIVE
+        step.started_at = utcnow()
+        run.mission.current_step = step.index
+        await self._publish(run, f"{step.title} started")
+
+    async def _end_step(self, run: _Run, step: MissionStep) -> None:
+        step.finished_at = utcnow()
+        await self._publish(run, f"{step.title}: {step.status}")
 
     async def _run_action(self, run: _Run, step: MissionStep) -> ToolResult:
         mission = run.mission
@@ -243,7 +263,9 @@ class MissionEngine:
             await run.running.wait()
         return not run.stop_requested
 
-    async def _finalize(self, run: _Run) -> None:
+    async def _finalize(self, run: _Run, reply: Reply | None = None) -> None:
+        """Settle status and result. ``reply`` given = the caller answers the
+        user itself (model-driven missions); otherwise the composer does."""
         mission = run.mission
         steps = mission.steps
         if mission.status is not MissionStatus.FAILED:
@@ -263,12 +285,14 @@ class MissionEngine:
         mission.verification = _aggregate([s.verification for s in steps if s.verification])
         mission.current_step = None
         mission.finished_at = utcnow()
-        reply = self._composer.mission(mission, stopped=run.stop_requested)
+        caller_replies = reply is not None
+        if reply is None:
+            reply = self._composer.mission(mission, stopped=run.stop_requested)
         mission.result = reply.text
         # The root cause is already in the stream as an error; the outcome is neutral.
         severity = Severity.IMPORTANT if mission.status is MissionStatus.COMPLETE else Severity.INFO
         await self._publish(run, f"Mission {mission.number:03d} {mission.status}", severity)
-        if self._on_finished is not None:
+        if self._on_finished is not None and not caller_replies:
             await self._on_finished(mission, reply, run.ctx)
 
     async def _publish(self, run: _Run, message: str, severity: Severity = Severity.DEBUG) -> None:
@@ -318,6 +342,89 @@ class MissionEngine:
             if run.running.is_set():
                 mission.status = MissionStatus.ACTIVE
             await self._publish(run, "Approval declined")
+
+
+@dataclass(frozen=True)
+class ActionOutcome:
+    result: ToolResult
+    verification: Verification | None
+
+
+class MissionHandle:
+    """Drives an open-ended mission one action at a time.
+
+    Every action becomes an *act* step (Operator) followed by a *verify* step
+    (Sentinel) — the same guarantees as planned missions, including approvals,
+    pause and stop.
+    """
+
+    def __init__(self, engine: MissionEngine, run: _Run) -> None:
+        self._engine = engine
+        self._run = run
+        self._finished = False
+
+    @property
+    def mission(self) -> Mission:
+        return self._run.mission
+
+    @property
+    def stopped(self) -> bool:
+        return self._run.stop_requested
+
+    async def act(
+        self, *, tool: str, args: dict[str, Any], title: str, verify_title: str
+    ) -> ActionOutcome | None:
+        """Execute and verify one action. ``None`` when the mission was stopped."""
+        engine, run = self._engine, self._run
+        if not await engine._checkpoint(run):
+            return None
+        mission = run.mission
+        act = MissionStep(
+            index=len(mission.steps),
+            title=title,
+            kind=StepKind.ACTION,
+            agent="operator",
+            tool=tool,
+            args=args,
+        )
+        verify = MissionStep(
+            index=act.index + 1,
+            title=verify_title,
+            kind=StepKind.VERIFY,
+            agent="sentinel",
+            tool=tool,
+            args=args,
+            depends_on=act.index,
+        )
+        mission.steps.extend([act, verify])
+        for agent in ("operator", "sentinel"):
+            if agent not in mission.agents:
+                mission.agents.append(agent)
+
+        await engine._start_step(run, act)
+        result = await engine._run_action(run, act)
+        await engine._end_step(run, act)
+
+        verification: Verification | None = None
+        if result.success:
+            await engine._start_step(run, verify)
+            await engine._run_verify(run, verify, result)
+            verification = verify.verification
+            await engine._end_step(run, verify)
+        else:
+            verify.status = StepStatus.SKIPPED
+            verify.summary = "Skipped — nothing to verify"
+            await engine._publish(run, f"{verify.title} skipped")
+        return ActionOutcome(result=result, verification=verification)
+
+    async def finish(self, reply: Reply) -> None:
+        if self._finished:
+            return
+        self._finished = True
+        try:
+            await self._engine._finalize(self._run, reply)
+        finally:
+            self._engine._runs.pop(self._run.mission.id, None)
 
 
 def _aggregate(verifications: list[Verification]) -> Verification | None:

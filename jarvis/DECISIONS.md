@@ -138,6 +138,28 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   JetBrains Mono) are bundled locally — no network needed at runtime.
 - **Date:** 2026-10-03
 
+## D-013 — Claude as the brain: rules first, Sonnet 5.5 for routine, Opus 5.5 for THINK
+
+- **Decision:** Keep the rule router as the instant path; send everything else
+  to Claude Sonnet 5.5 (effort `low`) and `think:` requests to Claude Opus 5.5
+  (effort `high`). Manual tool loop over our own `Tool` registry; side effects
+  run as open-ended missions (act + verify). Server-side refusal fallbacks on.
+- **Reason:** The spec separates a fast brain from a deep brain and forbids
+  deep reasoning for trivial actions. A manual loop (instead of the SDK's beta
+  tool runner) keeps every call inside the existing permission gate, approval
+  flow, mission UI and audit log, and lets Sentinel's verification flow back
+  to the model.
+- **Alternatives:** Opus 5.5 for everything (simpler, one cache namespace,
+  slower and ~2× the cost for chat turns); the SDK tool runner (beta, would
+  bypass mission semantics); model-based intent classification for every
+  command (adds latency and cost to "open safari").
+- **Consequences:** Earlier turns are replayed as plain text only — the
+  history stays append-only (cache-friendly) and never replays reasoning
+  blocks, which newer models bind to the exact conversation. Without
+  `ANTHROPIC_API_KEY` the instant path keeps working and the UI says
+  *Brain: Offline*. Models are swappable in `config/models.yaml`.
+- **Date:** 2026-10-03
+
 ## D-012 — Real macOS backend (`open -a` + CGWindowList + bundle-aware psutil)
 
 - **Decision:** Add `MacOSSystemBackend` and a macOS app catalog; `auto`

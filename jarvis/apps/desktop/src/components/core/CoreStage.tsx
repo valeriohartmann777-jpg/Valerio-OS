@@ -128,6 +128,13 @@ function describe(
         headline: "Your approval is required.",
         sub: detail,
       };
+    case "THINKING":
+      return {
+        label: "Thinking",
+        labelTone: "text-accent",
+        headline: "Thinking it through…",
+        sub: detail || undefined,
+      };
     case "PAUSED":
       return { label: "Paused", labelTone: "text-fg-muted", headline: detail || "Mission paused." };
     default:

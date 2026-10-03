@@ -31,8 +31,16 @@ class SystemStatus(BaseModel):
     active_missions: int
 
 
+class BrainView(BaseModel):
+    available: bool
+    fast_model: str | None
+    reasoning_model: str | None
+    reason: str | None
+
+
 class Snapshot(BaseModel):
     version: str
+    brain: BrainView
     state: StateSnapshot
     system_backend: str
     simulated: bool
@@ -83,6 +91,7 @@ class SettingsView(BaseModel):
     disabled_categories: list[str]
     approval_timeout_seconds: float
     models: dict[str, str]
+    brain: BrainView
     known_apps: list[str]
     config_dir: str
     database_path: str

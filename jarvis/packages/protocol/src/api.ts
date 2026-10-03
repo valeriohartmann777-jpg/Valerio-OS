@@ -1,7 +1,7 @@
 /** HTTP + WebSocket API contract. Mirrors backend/jarvis/api/schemas.py. */
 
 import type { JarvisEvent } from "./events";
-import type { ApprovalPolicy, Snapshot, StateSnapshot } from "./models";
+import type { ApprovalPolicy, BrainStatus, Snapshot, StateSnapshot } from "./models";
 
 export const DEFAULT_BACKEND_URL = "http://127.0.0.1:8765";
 
@@ -58,6 +58,7 @@ export interface SettingsView {
   disabled_categories: string[];
   approval_timeout_seconds: number;
   models: Record<string, string>;
+  brain: BrainStatus;
   known_apps: string[];
   config_dir: string;
   database_path: string;

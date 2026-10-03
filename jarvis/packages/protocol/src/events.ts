@@ -8,6 +8,7 @@ export const EVENT_TYPES = [
   "system.online",
   "jarvis.state.changed",
   "jarvis.message",
+  "jarvis.reasoning",
   "command.received",
   "intent.classified",
   "mission.created",
@@ -24,6 +25,7 @@ export const EVENT_TYPES = [
   "permission.approved",
   "permission.rejected",
   "permission.expired",
+  "model.completed",
   "context.updated",
 ] as const;
 

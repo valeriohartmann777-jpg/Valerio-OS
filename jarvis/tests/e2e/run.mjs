@@ -69,9 +69,11 @@ try {
     await shot("01-online");
   });
 
-  await step("live system information is shown", async () => {
+  await step("live system information is shown; brain status is honest", async () => {
     const context = page.getByTestId("context-panel");
     await context.getByText("JARVIS", { exact: true }).waitFor();
+    // the E2E backend has no API key → the brain must say so, not pretend
+    await page.getByTestId("brain-offline").waitFor();
   });
 
   await step("“Open Notepad.” → mission → Operator → Sentinel → verified reply", async () => {
@@ -126,6 +128,12 @@ try {
     await command("open cmd");
     await page.getByTestId("approval-card").getByTestId("reject").click();
     await headline.filter({ hasText: "Understood. I won't open Command Prompt." }).waitFor();
+  });
+
+  await step("open-ended request without a key explains how to connect the model", async () => {
+    await command("plan my evening");
+    await headline.filter({ hasText: "I can't reason about that yet." }).waitFor();
+    await page.getByRole("definition").filter({ hasText: "ANTHROPIC_API_KEY" }).first().waitFor();
   });
 
   await step("failures are explained, not dumped", async () => {

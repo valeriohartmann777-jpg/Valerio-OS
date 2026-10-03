@@ -20,6 +20,7 @@ from fastapi import (
 from jarvis.agents.base import AgentState
 from jarvis.api.schemas import (
     ApproveRequest,
+    BrainView,
     ChatAccepted,
     ChatRequest,
     Health,
@@ -50,9 +51,20 @@ def get_runtime(request: Request) -> Runtime:
 RuntimeDep = Annotated[Runtime, Depends(get_runtime)]
 
 
+def brain_view(rt: Runtime) -> BrainView:
+    status = rt.brain.status
+    return BrainView(
+        available=status.available,
+        fast_model=status.fast_model,
+        reasoning_model=status.reasoning_model,
+        reason=status.reason,
+    )
+
+
 async def build_snapshot(rt: Runtime) -> Snapshot:
     return Snapshot(
         version=rt.version,
+        brain=brain_view(rt),
         state=rt.state.snapshot(),
         system_backend=rt.backend.name,
         simulated=rt.backend.simulated,
@@ -211,6 +223,7 @@ async def settings_view(rt: RuntimeDep) -> SettingsView:
                 ("embedding", s.models.embedding),
             )
         },
+        brain=brain_view(rt),
         known_apps=sorted(app.name for app in rt.catalog.known_apps()),
         config_dir=str(s.root_dir / "config"),
         database_path=str(s.database_path),

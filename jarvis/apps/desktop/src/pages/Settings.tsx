@@ -72,9 +72,16 @@ export function Settings() {
             </Group>
 
             <Group title="Models">
+              <Item label="Status">
+                {settings.brain.available ? (
+                  <span className="text-success">Online</span>
+                ) : (
+                  <span className="text-warning">{settings.brain.reason ?? "Offline"}</span>
+                )}
+              </Item>
               {Object.entries(settings.models).map(([role, value]) => (
                 <Item key={role} label={role}>
-                  <span className="text-fg-muted">{value === "none" ? "Not configured (Phase 3)" : value}</span>
+                  <span className="text-fg-muted">{value === "none" ? "Not configured" : value}</span>
                 </Item>
               ))}
             </Group>

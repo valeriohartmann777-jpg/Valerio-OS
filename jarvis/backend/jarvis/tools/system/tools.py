@@ -171,6 +171,10 @@ class OpenApplicationTool(Tool[OpenApplicationArgs]):
             level=max(app.level, self.permission_level),
         )
 
+    def step_titles(self, args: OpenApplicationArgs) -> tuple[str, str]:
+        target = self.describe_action(args).target or args.name
+        return f"Launch {target}", f"Verify {target} is running"
+
     async def precheck(self, args: OpenApplicationArgs, ctx: TraceContext) -> ToolError | None:
         if self._catalog.is_denied(args.name):
             return ToolError(

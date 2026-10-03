@@ -19,6 +19,7 @@ class EventType(StrEnum):
     SYSTEM_ONLINE = "system.online"
     JARVIS_STATE_CHANGED = "jarvis.state.changed"
     JARVIS_MESSAGE = "jarvis.message"
+    JARVIS_REASONING = "jarvis.reasoning"
     COMMAND_RECEIVED = "command.received"
     INTENT_CLASSIFIED = "intent.classified"
     MISSION_CREATED = "mission.created"
@@ -35,6 +36,7 @@ class EventType(StrEnum):
     PERMISSION_APPROVED = "permission.approved"
     PERMISSION_REJECTED = "permission.rejected"
     PERMISSION_EXPIRED = "permission.expired"
+    MODEL_COMPLETED = "model.completed"
     CONTEXT_UPDATED = "context.updated"
 
 

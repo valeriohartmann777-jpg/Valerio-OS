@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from jarvis.permissions.models import ApprovalPolicy, PermissionLevel
 
@@ -90,8 +90,10 @@ class AppCatalogSettings(BaseModel):
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
-    timeout_seconds: float = 30.0
-    retries: int = 1
+    effort: str | None = None
+    max_tokens: int = 16000
+    timeout_seconds: float = 60.0
+    retries: int = 2
 
 
 class ModelSettings(BaseModel):
@@ -100,7 +102,11 @@ class ModelSettings(BaseModel):
     vision: ModelRoleSettings = Field(default_factory=ModelRoleSettings)
     embedding: ModelRoleSettings = Field(default_factory=ModelRoleSettings)
     speech: dict[str, str] = Field(default_factory=dict)
-    fallbacks: list[str] = Field(default_factory=list)
+    refusal_fallback: bool = True
+    history_turns: int = 12
+    max_tool_rounds: int = 8
+    # Secrets come from the environment / .env only, never from YAML.
+    anthropic_api_key: SecretStr | None = None
 
 
 class Settings(BaseModel):
@@ -142,8 +148,17 @@ def load_settings(
     environ: dict[str, str] | None = None,
     **overrides: Any,
 ) -> Settings:
-    """Load settings from ``config_dir`` and apply env + keyword overrides."""
-    env = dict(os.environ) if environ is None else environ
+    """Load settings from ``config_dir`` and apply env + keyword overrides.
+
+    With ``environ=None`` the process environment is used, completed by the
+    project's ``.env`` file (real environment variables win). An explicit
+    ``environ`` (tests) is used as-is.
+    """
+    if environ is None:
+        process_root = Path(os.environ.get("JARVIS_ROOT", PROJECT_ROOT))
+        env = {**read_dotenv(process_root / ".env"), **os.environ}
+    else:
+        env = environ
     root = Path(env.get("JARVIS_ROOT", PROJECT_ROOT))
     config_dir = config_dir or Path(env.get("JARVIS_CONFIG_DIR", root / "config"))
 
@@ -194,3 +209,25 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         storage["log_dir"] = str(Path(value) / "logs")
     if value := env.get("JARVIS_LOG_LEVEL"):
         logging_["level"] = value
+    if value := env.get("ANTHROPIC_API_KEY", "").strip():
+        data.setdefault("models", {})["anthropic_api_key"] = value
+
+
+def read_dotenv(path: Path) -> dict[str, str]:
+    """Minimal ``KEY=VALUE`` parser (comments, blank lines, ``export``, quotes)."""
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        elif " #" in value:
+            value = value.split(" #", 1)[0].rstrip()
+        if key.strip():
+            values[key.strip()] = value
+    return values

@@ -106,6 +106,12 @@ class Tool[Args: BaseModel](ABC):
             level=self.permission_level,
         )
 
+    def step_titles(self, args: Args) -> tuple[str, str]:
+        """Titles for the act and verify steps when this runs inside a mission."""
+        action = self.describe_action(args)
+        title = action.summary.rstrip(".") or action.title
+        return title, f"Verify: {title}"
+
     async def precheck(self, args: Args, ctx: TraceContext) -> ToolError | None:
         """Fail fast — before any approval is requested — if the action is impossible
         or forbidden (unknown target, denylisted, invalid input)."""

@@ -47,10 +47,26 @@ _Last updated: 2026-10-03_
   (1 window, 1 process, has focus). First Quartz import took ~7 s (cold
   bytecode compile); it happens once at backend start.
 
+### Phase 3 — Model intelligence
+- `llm/`: provider-neutral `ChatModel`, `AnthropicChatModel` (SDK 1.11, async),
+  `build_models` from `config/models.yaml` + `ANTHROPIC_API_KEY` (env / `.env`)
+- `Brain`: tool loop, `purpose` narration, open-ended verified missions,
+  untrusted-data handling, step limit, refusal / truncation handling
+- Routing: instant rules vs. reasoning; `think:` → Opus 5.5
+- Working memory (recent exchanges), persona system prompt
+- Dashboard: Brain status in context panel and settings; THINKING state copy
+- Tests: 15 brain tests (scripted model), 14 provider tests (real SDK against a
+  mock HTTP transport: request shape, verbatim replay, 9 error classes),
+  settings/secret tests; E2E covers the no-key path
+- Not yet exercised against the live API (needs the user's key)
+
 ## IN PROGRESS
 - —
 
-## NEXT (Phase 2 — real system control)
+## NEXT
+0. First live run with Claude on the MacBook (add `ANTHROPIC_API_KEY` to `.env`)
+
+### Phase 2 — real system control
 1. Exercise the dashboard on the MacBook (`open safari / finder / terminal`,
    active window, running apps); on Windows: `scripts/smoke.py notepad`
 2. Volume (`get_volume` / `set_volume`, Core Audio)

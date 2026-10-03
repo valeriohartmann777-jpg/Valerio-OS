@@ -4,7 +4,8 @@ A personal intelligence operating system: one coherent intelligence between you
 and your computer that understands, plans, delegates, acts, **verifies** and
 reports — with every step visible in a calm command center.
 
-**Status:** Phase 1 (Foundation) complete — see [ROADMAP.md](ROADMAP.md) and
+**Status:** Phase 1 (foundation) and Phase 3 (model intelligence) complete,
+real system control on Windows and macOS — see [ROADMAP.md](ROADMAP.md) and
 [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 ```
@@ -37,12 +38,28 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   - macOS: `open -a` (LaunchServices), CGWindowList + bundle-aware process
     detection. No privacy permission needed; with Screen Recording allowed,
     window titles of other apps become visible too.
-- **Commands**: `open <app>` / `open <app> and <app>` (also German *öffne*,
-  *starte*), `what's the active window`, `list running apps`, `system status`,
-  `hello`, `help`. Anything else gets an honest "needs model integration" reply.
+- **Reasoning (Claude)**: anything beyond the built-in commands goes to Claude
+  Sonnet 5.5, which plans and calls the same tools through the same
+  Operator → approval → Sentinel chain (side effects become verified missions).
+  Prefix `think:` / `denk nach:` for Claude Opus 5.5. Needs `ANTHROPIC_API_KEY`
+  in `jarvis/.env`; without it the dashboard shows *Brain: Offline*.
+- **Instant commands (no model call)**: `open <app>` / `open <app> and <app>`
+  (also German *öffne*, *starte*), `what's the active window`,
+  `list running apps`, `system status`, `hello`, `help`.
 
 On other hosts (Linux) the desktop is **simulated** (clearly badged in the UI);
 CPU/RAM/host metrics are always real.
+
+## Connect Claude
+
+1. Create an API key at <https://console.anthropic.com> (Settings → API keys).
+2. Put it into `jarvis/.env` (created by the setup script; git-ignored):
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+3. Restart JARVIS. The context panel shows *Brain: Claude Sonnet 5.5*.
+
+Models, effort and limits are in `config/models.yaml`.
 
 ## Requirements
 

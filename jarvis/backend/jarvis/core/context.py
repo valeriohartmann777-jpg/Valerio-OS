@@ -80,7 +80,7 @@ class EnvironmentContextService:
         window = await self._backend.active_window()
         context = EnvironmentContext(
             hostname=metrics.hostname,
-            platform=_platform_label(),
+            platform=platform_label(),
             system_backend=self._backend.name,
             simulated=self._backend.simulated,
             active_app=self._catalog.window_label(window) if window else None,
@@ -112,7 +112,7 @@ class EnvironmentContextService:
                 log.exception("context refresh failed")
 
 
-def _platform_label() -> str:
+def platform_label() -> str:
     if mac_version := platform.mac_ver()[0]:
         return f"macOS {mac_version}"
     if platform.system() == "Windows":

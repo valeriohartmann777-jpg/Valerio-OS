@@ -6,8 +6,8 @@ docs that match reality.
 | Phase | Name                    | Outcome                                                                 | Status        |
 |-------|-------------------------|-------------------------------------------------------------------------|---------------|
 | 1     | Foundation              | Dashboard ↔ backend event system; command → route → tool → verify → UI   | **done**      |
-| 2     | Real system control     | Volume, window management, file reading, richer Windows context         | next          |
-| 3     | Model intelligence      | Provider abstraction live, intent classification, tool calling, persona | planned       |
+| 2     | Real system control     | Volume, window management, file reading, richer context (Win + macOS)   | next          |
+| 3     | Model intelligence      | Provider abstraction live, intent classification, tool calling, persona | **done**      |
 | 4     | Missions                | Model planning, multi-step delegation, redirect, per-mission state      | planned       |
 | 5     | Screen vision           | Screenshot capture, vision provider, observe-act-verify with pixels     | planned       |
 | 6     | Browser                 | Playwright service, persistent session, DOM-aware actions               | planned       |
@@ -29,6 +29,16 @@ docs that match reality.
       mission panel, agents, context, activity stream, command bar,
       approval card, mission detail, settings
 - [x] End-to-end: "Open Notepad" → mission → Operator → Sentinel → UI
+
+## Phase 3 — Model intelligence (done, pulled ahead of Phase 2)
+
+- [x] Provider-neutral model interface (`llm/`), Anthropic implementation
+- [x] Fast brain (Claude Sonnet 5.5, effort low) and THINK mode (Claude Opus 5.5)
+- [x] Instant rule path stays model-free; open-ended requests go to the brain
+- [x] Tool calling through Operator → permission gate → Sentinel; side effects
+      become verified open-ended missions
+- [x] Personality-driven system prompt, working memory (recent exchanges)
+- [x] Prompt caching, refusal fallbacks, typed error handling, untrusted-data rules
 
 ## Phase 2 — Real system control (next)
 

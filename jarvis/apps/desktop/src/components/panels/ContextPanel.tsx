@@ -1,4 +1,4 @@
-import { percent, uptime } from "../../lib/format";
+import { modelLabel, percent, uptime } from "../../lib/format";
 import { busyAgent, featuredMission } from "../../store/reducer";
 import { useJarvis, useNow } from "../../store/store";
 import { Meter, Row, Section } from "../ui/primitives";
@@ -7,6 +7,7 @@ export function ContextPanel() {
   const context = useJarvis((s) => s.context);
   const mission = useJarvis((s) => featuredMission(s, Date.now()));
   const agent = useJarvis(busyAgent);
+  const brain = useJarvis((s) => s.brain);
   useNow(2000);
 
   return (
@@ -18,6 +19,17 @@ export function ContextPanel() {
         </Row>
         <Row label="Mission">{mission ? mission.title : <Faint>None</Faint>}</Row>
         <Row label="Agent">{agent ? agent.name : <Faint>Idle</Faint>}</Row>
+        <Row label="Brain">
+          {brain?.available && brain.fast_model ? (
+            <span title={brain.reasoning_model ? `think: ${modelLabel(brain.reasoning_model)}` : undefined}>
+              {modelLabel(brain.fast_model)}
+            </span>
+          ) : (
+            <span className="text-warning" title={brain?.reason ?? undefined} data-testid="brain-offline">
+              Offline — no API key
+            </span>
+          )}
+        </Row>
         <Row label="Voice">
           <Faint>Not configured</Faint>
         </Row>

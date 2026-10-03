@@ -64,4 +64,15 @@ export function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+/** claude-sonnet-5-5 → Claude Sonnet 5.5 */
+export function modelLabel(id: string): string {
+  const parts = id.split("-");
+  if (parts.length >= 3 && parts[0] === "claude") {
+    const name = parts[1] ?? "";
+    const version = parts.slice(2).filter((p) => /^\d{1,3}$/.test(p)).join(".");
+    return `Claude ${name.charAt(0).toUpperCase()}${name.slice(1)} ${version}`.trim();
+  }
+  return id;
+}
+
 export const LEVEL_LABELS = ["Read", "Safe action", "Modification", "External effect", "High risk"];

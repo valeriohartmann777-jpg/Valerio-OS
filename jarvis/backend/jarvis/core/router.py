@@ -82,10 +82,24 @@ _QUERIES: list[tuple[re.Pattern[str], str, str]] = [
     ),
 ]
 
+_THINK = re.compile(
+    r"^(?:/think\b|think(?:\s+(?:about|through|hard))?\s*:|denk(?:e)?\s+(?:nach|darüber\s+nach)\s*:"
+    r"|überleg(?:e)?(?:\s+dir)?\s*:)\s*",
+    re.I,
+)
 _GREETING = re.compile(
     r"^(hi|hello|hey|good (morning|afternoon|evening)|hallo|servus|moin)\b", re.I
 )
 _HELP = re.compile(r"^(help|what can you do|capabilities|was kannst du)", re.I)
+
+
+def split_think(text: str) -> tuple[bool, str]:
+    """``think: …`` / ``denk nach: …`` selects THINK mode (the reasoning model)."""
+    stripped = _PREFIX.sub("", " ".join(text.strip().split()))
+    match = _THINK.match(stripped)
+    if match and stripped[match.end() :].strip():
+        return True, stripped[match.end() :].strip()
+    return False, text
 
 
 def clean(text: str) -> str:
@@ -151,7 +165,7 @@ class RuleBasedRouter:
         return Intent(
             kind=IntentKind.UNSUPPORTED,
             text=text,
-            summary="Needs reasoning (model integration pending)",
+            summary="Open-ended request",
             complexity="complex",
             confidence=0.0,
         )

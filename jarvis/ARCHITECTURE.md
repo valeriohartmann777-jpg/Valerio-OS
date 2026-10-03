@@ -56,7 +56,7 @@ independently.
 │ permissions/  Levels 0–4, policy (config/permissions.yaml), approval requests     │
 │ events/       Event model, EventBus (pub/sub + history), SQLite event store       │
 │ storage/      SQLite database + migrations, audit log                             │
-│ llm/          Model-provider protocols (FastModel, ReasoningModel, …) (Phase 3)   │
+│ llm/          ChatModel protocol, Anthropic provider, model registry              │
 │ observability/ Structured JSON logging with trace_id / mission_id                 │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -123,19 +123,54 @@ with `{previous, state, detail}`. `COMPLETE` / `FAILED` settle back to
 
 ---
 
-## 5. Routing
+## 5. Routing and the brain
 
-`RuleBasedRouter` (Phase 1) classifies text into:
+Two paths, chosen per command by `JarvisCore`:
+
+- **Instant** — the rule router recognises the command with certainty
+  (`open safari`, `system status`, `hello`) and every target resolves. No model
+  call: minimum latency, zero cost.
+- **Reasoning** — everything else, plus `open …` with a target that doesn't
+  resolve, goes to the `Brain` (`core/brain.py`) on the *fast* model.
+  `think: …` / `denk nach: …` selects the *reasoning* model (THINK mode).
+
+The brain loop: frozen system prompt (persona + rules, `core/persona.py`) and
+tool list → user turn = `<context>` block (time, device, front window —
+marked untrusted) + text → model → tool calls → results back → … → reply.
+
+- Read-only tools run through the Operator directly.
+- Side-effecting tools open an **open-ended mission** (`MissionEngine.open` →
+  `MissionHandle.act`): each call becomes an act step (Operator, permission
+  gate, approvals) and a verify step (Sentinel). Pause / stop / approvals work
+  exactly as for planned missions; the model receives what Sentinel verified.
+- Every tool schema gets a `purpose` field; the model's one-line purpose is
+  shown in the activity stream (`jarvis.reasoning`) instead of exposing raw
+  reasoning. It is stripped before execution.
+- Tool results go back as JSON data; the system prompt states that text from
+  the computer (window titles, app names, files) is untrusted and never
+  instructions. The permission gate applies regardless of what the model asks.
+- Working memory (`core/conversation.py`): recent exchanges replayed as plain
+  text, append-only. Within a turn, model responses are replayed verbatim
+  (thinking blocks stay valid); earlier turns never replay reasoning blocks.
+
+Models (`llm/`): `ChatModel` protocol with provider-native messages;
+`AnthropicChatModel` uses the official SDK (async, `httpx2`), automatic prompt
+caching, server-side refusal fallbacks (`fallbacks: "default"`), effort per
+role, and maps every SDK error to a `ModelError` with a user-facing reason.
+Defaults: fast = Claude Sonnet 5.5 (effort low), reasoning = Claude Opus 5.5
+(effort high) — `config/models.yaml`. The key comes from the environment or
+`jarvis/.env` only (`SecretStr`, never logged or returned by the API).
+
+`RuleBasedRouter` classifies text into:
 
 | Kind          | Complexity       | Path                                          |
 |---------------|------------------|-----------------------------------------------|
 | `query`       | instant          | read-only tool, direct, no mission            |
 | `action`      | instant / mission| mission (Operator act → Sentinel verify)      |
 | `conversation`| instant          | composed reply, no tools                      |
-| `unsupported` | —                | honest reply about current capabilities       |
+| `unsupported` | complex          | brain (reasoning path)                        |
 
-Model-based classification replaces the rules in Phase 3 behind the same
-`Router` protocol. Trivial requests must never require deep reasoning.
+Trivial requests never require a model.
 
 **Why actions become missions even when single-step:** every side-effecting
 action has at least three observable steps (act, observe, verify), needs an
@@ -324,7 +359,6 @@ Home hierarchy: 1 JARVIS Core → 2 active mission → 3 command bar →
 
 | Concern          | Boundary                                                         |
 |------------------|------------------------------------------------------------------|
-| Model providers  | `llm/base.py` protocols; config in `config/models.yaml`          |
 | Voice            | emits `voice.*` events + drives `LISTENING/SPEAKING` states      |
 | Vision           | `Vision` agent + capture tool; permission-aware, event-driven    |
 | Memory           | `Archive` agent + `MemoryStore`/`VectorStore` protocols          |

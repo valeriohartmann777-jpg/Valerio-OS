@@ -161,8 +161,17 @@ export interface StateSnapshot {
   detail: string;
 }
 
+export interface BrainStatus {
+  available: boolean;
+  fast_model: string | null;
+  reasoning_model: string | null;
+  /** Why the reasoning model is offline (e.g. no API key). */
+  reason: string | null;
+}
+
 export interface Snapshot {
   version: string;
+  brain: BrainStatus;
   state: StateSnapshot;
   system_backend: string;
   simulated: boolean;

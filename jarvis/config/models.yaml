@@ -1,34 +1,43 @@
-# Model providers (Phase 3).
+# Model providers.
 #
-# Nothing in Phase 1 calls a model: routing is rule-based and replies are
-# templated. This file defines the shape the provider layer will read so the
-# rest of the system never hard-codes a vendor. Secrets come from environment
-# variables only (see .env.example) — never put keys here.
+# fast       routine turns: conversation, tool use, simple planning
+# reasoning  explicit THINK mode ("think: …" / "denk nach: …")
+#
+# Commands the rule router understands ("open safari", "system status")
+# never call a model at all.
+#
+# The API key comes from the environment or jarvis/.env only:
+#   ANTHROPIC_API_KEY=sk-ant-…
+# Never put keys in this file.
 
 fast:
-  provider: none        # anthropic | openai | google | local | none
-  model: ""
-  timeout_seconds: 10
-  retries: 1
+  provider: anthropic
+  model: claude-sonnet-5-5
+  effort: low            # chat-style turns with light tool use
+  max_tokens: 16000
+  timeout_seconds: 60
 
 reasoning:
-  provider: none
-  model: ""
-  timeout_seconds: 120
-  retries: 1
+  provider: anthropic
+  model: claude-opus-5-5
+  effort: high
+  max_tokens: 16000
+  timeout_seconds: 300
+
+# On a safety-classifier refusal the API re-runs the request on a suitable
+# fallback model inside the same call (server-side, "default" routing).
+refusal_fallback: true
+
+# Earlier exchanges sent along as plain text (working memory, not long-term memory).
+history_turns: 12
+
+# Upper bound of model ↔ tool round-trips in one turn.
+max_tool_rounds: 8
 
 vision:
   provider: none
-  model: ""
-  timeout_seconds: 30
-  retries: 1
-
 embedding:
   provider: none
-  model: ""
-
 speech:
   stt: none
   tts: none
-
-fallbacks: []

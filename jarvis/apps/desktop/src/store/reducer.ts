@@ -5,6 +5,7 @@
 
 import type {
   AgentState,
+  BrainStatus,
   EnvironmentContext,
   JarvisEvent,
   JarvisMessagePayload,
@@ -28,6 +29,7 @@ export interface UIState {
   version: string | null;
   systemBackend: string | null;
   simulated: boolean;
+  brain: BrainStatus | null;
   jarvis: { state: JarvisState; detail: string; since: number };
   context: EnvironmentContext | null;
   agents: AgentState[];
@@ -57,6 +59,7 @@ export const initialState: UIState = {
   version: null,
   systemBackend: null,
   simulated: false,
+  brain: null,
   jarvis: { state: "DORMANT", detail: "", since: 0 },
   context: null,
   agents: [],
@@ -92,6 +95,7 @@ function applySnapshot(state: UIState, snapshot: Snapshot, now: number): UIState
     version: snapshot.version,
     systemBackend: snapshot.system_backend,
     simulated: snapshot.simulated,
+    brain: snapshot.brain,
     jarvis: { state: snapshot.state.state, detail: snapshot.state.detail, since: now },
     context: snapshot.context,
     agents: snapshot.agents,

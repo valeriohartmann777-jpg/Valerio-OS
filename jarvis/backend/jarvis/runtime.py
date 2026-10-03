@@ -9,14 +9,17 @@ from jarvis import __version__
 from jarvis.agents.base import AgentRegistry
 from jarvis.agents.catalog import AGENT_SPECS
 from jarvis.agents.workers import OperatorAgent, SentinelAgent
-from jarvis.core.context import EnvironmentContextService
+from jarvis.core.brain import Brain
+from jarvis.core.context import EnvironmentContextService, platform_label
 from jarvis.core.jarvis import JarvisCore
+from jarvis.core.persona import build_system_prompt
 from jarvis.core.responses import ResponseComposer
 from jarvis.core.router import RuleBasedRouter
 from jarvis.core.state import StateService
 from jarvis.events.bus import EventBus
 from jarvis.events.store import EventStore
 from jarvis.events.types import EventType, Severity
+from jarvis.llm.registry import ModelSet, build_models
 from jarvis.missions.engine import MissionEngine
 from jarvis.missions.planner import DeterministicPlanner
 from jarvis.missions.repository import MissionRepository
@@ -34,7 +37,13 @@ log = logging.getLogger("jarvis.runtime")
 
 
 class Runtime:
-    def __init__(self, settings: Settings, *, backend: SystemBackend | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        backend: SystemBackend | None = None,
+        models: ModelSet | None = None,
+    ) -> None:
         self.settings = settings
         self.started_at = time.time()
         self.version = __version__
@@ -74,6 +83,27 @@ class Runtime:
             permissions=self.permissions,
             composer=self.composer,
         )
+        self.context = EnvironmentContextService(
+            self.bus,
+            self.backend,
+            self.catalog,
+            interval=settings.runtime.context_poll_seconds,
+        )
+        self.models = models or build_models(settings.models)
+        self.brain = Brain(
+            models=self.models,
+            tools=self.tools,
+            operator=self.operator,
+            missions=self.missions,
+            bus=self.bus,
+            state=self.state,
+            context=self.context,
+            system_prompt=build_system_prompt(
+                settings.personality, platform=platform_label(), simulated=self.backend.simulated
+            ),
+            history_turns=settings.models.history_turns,
+            max_tool_rounds=settings.models.max_tool_rounds,
+        )
         self.core = JarvisCore(
             bus=self.bus,
             state=self.state,
@@ -82,12 +112,8 @@ class Runtime:
             missions=self.missions,
             operator=self.operator,
             composer=self.composer,
-        )
-        self.context = EnvironmentContextService(
-            self.bus,
-            self.backend,
-            self.catalog,
-            interval=settings.runtime.context_poll_seconds,
+            brain=self.brain,
+            tools=self.tools,
         )
 
     @property
@@ -114,8 +140,12 @@ class Runtime:
             extra={
                 "system_backend": self.backend.name,
                 "database": str(self.settings.database_path),
+                "fast_model": self.brain.status.fast_model,
+                "reasoning_model": self.brain.status.reasoning_model,
             },
         )
+        if not self.brain.available:
+            log.warning("reasoning offline: %s", self.brain.status.reason)
 
     async def stop(self) -> None:
         await self.context.stop()

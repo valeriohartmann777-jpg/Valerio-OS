@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { duration, missionNumber, missionStatusLabel, stateLabel, uptime } from "./format";
+import { duration, missionNumber, missionStatusLabel, modelLabel, stateLabel, uptime } from "./format";
 
 describe("format", () => {
   it("formats durations", () => {
@@ -23,5 +23,8 @@ describe("format", () => {
     expect(stateLabel("WAITING_FOR_APPROVAL")).toBe("Awaiting approval");
     expect(missionStatusLabel("waiting_for_approval", true)).toBe("Approval");
     expect(missionStatusLabel("complete")).toBe("Complete");
+    expect(modelLabel("claude-sonnet-5-5")).toBe("Claude Sonnet 5.5");
+    expect(modelLabel("claude-opus-5-5")).toBe("Claude Opus 5.5");
+    expect(modelLabel("claude-haiku-4-5")).toBe("Claude Haiku 4.5");
   });
 });
