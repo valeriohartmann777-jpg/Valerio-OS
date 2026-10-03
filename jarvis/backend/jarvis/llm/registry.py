@@ -16,6 +16,8 @@ class ModelSet:
     fast: ChatModel | None
     reasoning: ChatModel | None
     unavailable_reason: str | None = None
+    # Last four characters of the API key, so the user can tell which key is in use.
+    key_hint: str | None = None
 
     @property
     def available(self) -> bool:
@@ -27,7 +29,13 @@ class ModelSet:
         return self.fast or self.reasoning
 
 
-NO_KEY = "No API key is configured. Add ANTHROPIC_API_KEY=… to jarvis/.env and restart JARVIS."
+NO_KEY = "No API key yet. Paste your Anthropic API key under Settings → Brain."
+
+
+def anthropic_models(settings: ModelSettings) -> list[str]:
+    """The Claude model ids the configured roles use (deduplicated, in order)."""
+    roles = (settings.fast, settings.reasoning)
+    return list(dict.fromkeys(r.model for r in roles if r.provider == "anthropic" and r.model))
 
 
 def build_models(settings: ModelSettings) -> ModelSet:
@@ -47,7 +55,8 @@ def build_models(settings: ModelSettings) -> ModelSet:
 
     from jarvis.llm.anthropic_provider import AnthropicChatModel
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
+    key = settings.anthropic_api_key.get_secret_value()
+    client = anthropic.AsyncAnthropic(api_key=key)
 
     def build(role: ModelRoleSettings) -> ChatModel | None:
         if role.provider != "anthropic" or not role.model:
@@ -62,4 +71,6 @@ def build_models(settings: ModelSettings) -> ModelSet:
             refusal_fallback=settings.refusal_fallback,
         )
 
-    return ModelSet(fast=build(settings.fast), reasoning=build(settings.reasoning))
+    return ModelSet(
+        fast=build(settings.fast), reasoning=build(settings.reasoning), key_hint=key[-4:]
+    )

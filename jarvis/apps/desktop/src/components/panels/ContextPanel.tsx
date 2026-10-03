@@ -1,6 +1,6 @@
 import { modelLabel, percent, uptime } from "../../lib/format";
 import { busyAgent, featuredMission } from "../../store/reducer";
-import { useJarvis, useNow } from "../../store/store";
+import { dispatch, useJarvis, useNow } from "../../store/store";
 import { Meter, Row, Section } from "../ui/primitives";
 
 export function ContextPanel() {
@@ -25,9 +25,15 @@ export function ContextPanel() {
               {modelLabel(brain.fast_model)}
             </span>
           ) : (
-            <span className="text-warning" title={brain?.reason ?? undefined} data-testid="brain-offline">
-              Offline — no API key
-            </span>
+            <button
+              type="button"
+              className="no-drag text-warning hover:underline"
+              title={brain?.reason ?? undefined}
+              data-testid="brain-offline"
+              onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
+            >
+              Offline — connect
+            </button>
           )}
         </Row>
         <Row label="Voice">

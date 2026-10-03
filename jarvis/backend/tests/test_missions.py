@@ -183,4 +183,4 @@ async def test_queries_and_conversation_do_not_create_missions(
     assert replies[2] == "Online. Everything is nominal."
     assert replies[3] == "I can't reason about that yet."
     offline = recorder.of(EventType.JARVIS_MESSAGE)[3].payload["error"]
-    assert "ANTHROPIC_API_KEY" in offline["message"]
+    assert "Settings" in offline["message"]

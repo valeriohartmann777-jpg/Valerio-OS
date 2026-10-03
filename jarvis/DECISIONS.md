@@ -160,6 +160,29 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-014 — The API key is connected from the dashboard, verified, then stored in `.env`
+
+- **Decision:** `POST /brain/key` (Origin-guarded) takes a pasted key, checks
+  it with `GET /v1/models/{id}` for each configured model, writes it to
+  `jarvis/.env` (atomic, mode 0600) and swaps the brain's models in place.
+  Keys from the environment / `.env` are verified once at startup; a key the
+  provider rejects takes the brain offline with the reason, network errors
+  don't.
+- **Reason:** Editing a dotfile from a terminal and restarting proved to be
+  the main obstacle on the first real Mac run — with no feedback on whether
+  the key was read, mistyped or rejected. The models endpoint authenticates
+  the key and resolves the model without spending tokens.
+- **Alternatives:** OS keychain (better at rest, but a second source of truth
+  and a native dependency per OS; possible later behind the same endpoint);
+  verifying with a 1-token message (would also catch an empty balance, but
+  costs money and depends on per-model parameters); keep "edit `.env` and
+  restart".
+- **Consequences:** The key is never logged, emitted or returned — only its
+  last four characters (`key_hint`). An empty credit balance is only seen on
+  the first real request and is reported as a billing problem there. A key in
+  the shell environment still wins over `.env` after a restart.
+- **Date:** 2026-10-03
+
 ## D-012 — Real macOS backend (`open -a` + CGWindowList + bundle-aware psutil)
 
 - **Decision:** Add `MacOSSystemBackend` and a macOS app catalog; `auto`

@@ -159,7 +159,12 @@ caching, server-side refusal fallbacks (`fallbacks: "default"`), effort per
 role, and maps every SDK error to a `ModelError` with a user-facing reason.
 Defaults: fast = Claude Sonnet 5.5 (effort low), reasoning = Claude Opus 5.5
 (effort high) — `config/models.yaml`. The key comes from the environment or
-`jarvis/.env` only (`SecretStr`, never logged or returned by the API).
+`jarvis/.env` (`SecretStr`, never logged or returned by the API).
+`BrainConnector` (`core/connector.py`) connects a key at runtime
+(`POST /brain/key` from Settings → Brain): format check → `GET /v1/models/{id}`
+→ atomic owner-only write to `.env` → `Brain.set_models` → `brain.changed`.
+At startup it verifies an existing key in the background and takes the brain
+offline if the provider rejects it.
 
 `RuleBasedRouter` classifies text into:
 

@@ -28,8 +28,8 @@ responses:
     Every action is checked by policy and verified. Start with "think:" for
     harder questions.
   unsupported: >-
-    That needs my reasoning model, which isn't connected. Add ANTHROPIC_API_KEY
-    to jarvis/.env and restart me.
+    That needs my reasoning model, which isn't connected yet. Open Settings and
+    paste your Anthropic API key — no restart needed.
   app_opened: "{app} is open."
   apps_opened: "{apps} are open."
   app_already_open: "{app} was already open."

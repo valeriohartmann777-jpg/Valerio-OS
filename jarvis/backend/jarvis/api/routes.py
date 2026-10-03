@@ -19,6 +19,7 @@ from fastapi import (
 
 from jarvis.agents.base import AgentState
 from jarvis.api.schemas import (
+    ApiKeyRequest,
     ApproveRequest,
     BrainView,
     ChatAccepted,
@@ -32,6 +33,7 @@ from jarvis.api.schemas import (
     SystemStatus,
 )
 from jarvis.events.types import Event, Severity
+from jarvis.llm.base import ModelError
 from jarvis.missions.engine import MissionError
 from jarvis.missions.models import Mission
 from jarvis.permissions.models import LEVEL_LABELS, PermissionRequest
@@ -58,6 +60,7 @@ def brain_view(rt: Runtime) -> BrainView:
         fast_model=status.fast_model,
         reasoning_model=status.reasoning_model,
         reason=status.reason,
+        key_hint=status.key_hint,
     )
 
 
@@ -112,6 +115,18 @@ async def snapshot(rt: RuntimeDep) -> Snapshot:
 async def chat(body: ChatRequest, rt: RuntimeDep) -> ChatAccepted:
     ctx = rt.core.submit(body.text.strip())
     return ChatAccepted(trace_id=ctx.trace_id)
+
+
+@router.post("/brain/key")
+async def connect_brain(body: ApiKeyRequest, rt: RuntimeDep) -> BrainView:
+    """Verify an Anthropic API key, store it in jarvis/.env and switch the brain on."""
+    try:
+        await rt.connector.connect(body.api_key)
+    except ModelError as exc:
+        raise HTTPException(
+            422, {"code": exc.code, "message": exc.message, "suggestion": exc.suggestion}
+        ) from exc
+    return brain_view(rt)
 
 
 @router.get("/missions")

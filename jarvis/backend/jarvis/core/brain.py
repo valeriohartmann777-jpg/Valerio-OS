@@ -58,6 +58,7 @@ class BrainStatus:
     fast_model: str | None
     reasoning_model: str | None
     reason: str | None
+    key_hint: str | None = None
 
 
 class Brain:
@@ -98,7 +99,13 @@ class Brain:
             fast_model=self._models.fast.model_id if self._models.fast else None,
             reasoning_model=self._models.reasoning.model_id if self._models.reasoning else None,
             reason=self._models.unavailable_reason,
+            key_hint=self._models.key_hint,
         )
+
+    def set_models(self, models: ModelSet) -> None:
+        """Swap the models at runtime (key connected or rejected). Memory is kept:
+        earlier turns are replayed as plain text, valid for any model."""
+        self._models = models
 
     def remember(self, user_text: str, reply: str) -> None:
         """Record an exchange handled without the model (rule path) as context."""
@@ -113,7 +120,7 @@ class Brain:
                 error=ToolError(
                     code="model_unavailable",
                     message=self._models.unavailable_reason or "No model is configured.",
-                    suggestion="Add ANTHROPIC_API_KEY to jarvis/.env and restart JARVIS.",
+                    suggestion="Open Settings → Brain and paste your Anthropic API key.",
                 ),
             )
         user_blocks = [self._context_block(), text]

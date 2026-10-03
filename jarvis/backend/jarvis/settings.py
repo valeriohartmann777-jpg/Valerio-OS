@@ -121,6 +121,11 @@ class Settings(BaseModel):
     models: ModelSettings = Field(default_factory=ModelSettings)
 
     @property
+    def env_file(self) -> Path:
+        """Local secrets and overrides (git-ignored)."""
+        return self.root_dir / ".env"
+
+    @property
     def database_path(self) -> Path:
         return self._resolve(self.storage.database_path)
 
@@ -213,21 +218,60 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         data.setdefault("models", {})["anthropic_api_key"] = value
 
 
+_QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019"}
+
+
 def read_dotenv(path: Path) -> dict[str, str]:
-    """Minimal ``KEY=VALUE`` parser (comments, blank lines, ``export``, quotes)."""
+    """Minimal ``KEY=VALUE`` parser (comments, blank lines, ``export``, quotes).
+
+    Tolerates what editors add: a byte-order mark, CRLF line endings, spaces
+    around ``=`` and typographic quotes (TextEdit's smart quotes).
+    """
     if not path.exists():
         return {}
     values: dict[str, str] = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.removeprefix("export ").split("=", 1)
         value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        if len(value) >= 2 and _QUOTES.get(value[0]) == value[-1]:
             value = value[1:-1]
         elif " #" in value:
             value = value.split(" #", 1)[0].rstrip()
         if key.strip():
             values[key.strip()] = value
     return values
+
+
+def write_dotenv_value(path: Path, key: str, value: str) -> None:
+    """Set ``key`` in a ``.env`` file, keeping every other line.
+
+    Earlier definitions of ``key`` are replaced in place (the first one) or
+    dropped (the rest). The file is written atomically and readable only by
+    the owner, because it holds secrets.
+    """
+    if not value or any(c.isspace() or c in "#\"'" for c in value):
+        raise ValueError(f"{key} must be a single token without spaces, quotes or '#'")
+    lines = path.read_text(encoding="utf-8-sig").splitlines() if path.exists() else []
+    entry = f"{key}={value}"
+    out: list[str] = []
+    placed = False
+    for line in lines:
+        name = line.strip().removeprefix("export ").split("=", 1)[0].strip()
+        if "=" in line and name == key and not line.lstrip().startswith("#"):
+            if not placed:
+                out.append(entry)
+                placed = True
+            continue
+        out.append(line)
+    if not placed:
+        out.append(entry)
+    tmp = path.with_name(f"{path.name}.tmp")
+    # Created owner-only from the start: the key is never world-readable.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(out) + "\n")
+    os.chmod(tmp, 0o600)  # in case the file already existed with wider permissions
+    os.replace(tmp, path)

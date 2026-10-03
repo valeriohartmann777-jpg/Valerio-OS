@@ -27,8 +27,14 @@ def make_settings(tmp_path: Path, **runtime_overrides: object) -> Settings:
     storage = settings.storage.model_copy(
         update={"database_path": tmp_path / "jarvis.db", "log_dir": tmp_path / "logs"}
     )
+    # root_dir = tmp_path: nothing a test does can touch the real jarvis/.env.
     return settings.model_copy(
-        update={"runtime": runtime, "permissions": permissions, "storage": storage}
+        update={
+            "root_dir": tmp_path,
+            "runtime": runtime,
+            "permissions": permissions,
+            "storage": storage,
+        }
     )
 
 

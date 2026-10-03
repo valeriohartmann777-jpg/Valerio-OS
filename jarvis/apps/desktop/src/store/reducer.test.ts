@@ -78,7 +78,13 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
     version: "0.1.0",
     build: "070a0b5c0ffee",
-    brain: { available: true, fast_model: "claude-sonnet-5-5", reasoning_model: "claude-opus-5-5", reason: null },
+    brain: {
+      available: true,
+      fast_model: "claude-sonnet-5-5",
+      reasoning_model: "claude-opus-5-5",
+      reason: null,
+      key_hint: "AbCd",
+    },
     state: { state: "DORMANT", detail: "" },
     system_backend: "simulated",
     simulated: true,
@@ -156,6 +162,16 @@ describe("reducer", () => {
     expect(visibleActivity(state).every((e) => e.severity !== "debug")).toBe(true);
     state = reduce(state, { type: "toggleDebug" });
     expect(visibleActivity(state)).toHaveLength(MAX_ACTIVITY);
+  });
+
+  it("switches the brain on when a key is connected", () => {
+    const offline = { available: false, fast_model: null, reasoning_model: null, reason: "No API key yet.", key_hint: null };
+    let state = reduce(initialState, { type: "snapshot", snapshot: snapshot({ brain: offline }), now: 0 });
+    expect(state.brain?.available).toBe(false);
+    const online = { ...snapshot().brain };
+    state = apply(state, event("brain.changed", { brain: online }, { severity: "important" }));
+    expect(state.brain).toEqual(online);
+    expect(visibleActivity(state).at(-1)?.type).toBe("brain.changed");
   });
 
   it("navigates and tracks connection", () => {

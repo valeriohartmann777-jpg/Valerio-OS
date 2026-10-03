@@ -163,7 +163,7 @@ try {
   await step("open-ended request without a key explains how to connect the model", async () => {
     await command("plan my evening");
     await headline.filter({ hasText: "I can't reason about that yet." }).waitFor();
-    await page.getByRole("definition").filter({ hasText: "ANTHROPIC_API_KEY" }).first().waitFor();
+    await page.getByRole("definition").filter({ hasText: "Settings" }).first().waitFor();
   });
 
   await step("failures are explained, not dumped", async () => {
@@ -183,6 +183,18 @@ try {
     await page.getByText("Strong confirmation").waitFor();
     await page.waitForTimeout(300);
     await shot("08-settings");
+    await page.getByRole("button", { name: "Home" }).click();
+  });
+
+  await step("brain can be connected from the dashboard; a bad key is refused, nothing saved", async () => {
+    await page.getByTestId("brain-offline").click();
+    await page.getByTestId("key-form").waitFor();
+    await page.getByTestId("key-input").fill("hello");
+    await page.getByTestId("key-connect").click();
+    await page.getByTestId("key-error").filter({ hasText: "doesn't look like an Anthropic API key" }).waitFor();
+    await page.getByTestId("brain-status").filter({ hasText: "Offline" }).waitFor();
+    await page.waitForTimeout(300);
+    await shot("10-connect-brain");
     await page.getByRole("button", { name: "Home" }).click();
   });
 

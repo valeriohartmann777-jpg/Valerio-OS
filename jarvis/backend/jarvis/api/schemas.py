@@ -37,6 +37,11 @@ class BrainView(BaseModel):
     fast_model: str | None
     reasoning_model: str | None
     reason: str | None
+    key_hint: str | None = None
+
+
+class ApiKeyRequest(BaseModel):
+    api_key: str = Field(max_length=500)
 
 
 class Snapshot(BaseModel):

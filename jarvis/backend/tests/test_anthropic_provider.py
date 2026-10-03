@@ -15,7 +15,7 @@ import httpx2
 import pytest
 from pydantic import SecretStr
 
-from jarvis.llm.anthropic_provider import FALLBACK_BETA, AnthropicChatModel
+from jarvis.llm.anthropic_provider import FALLBACK_BETA, AnthropicChatModel, check_models
 from jarvis.llm.base import ModelError, ToolDefinition, ToolOutcome
 from jarvis.llm.registry import NO_KEY, build_models
 from jarvis.settings import ModelSettings, load_settings
@@ -215,3 +215,67 @@ def test_build_models_needs_a_key() -> None:
         {"fast": {"provider": "acme", "model": "x"}, "anthropic_api_key": "k"}
     )
     assert "Unsupported" in (build_models(other).unavailable_reason or "")
+
+
+def client_for(server: Server) -> anthropic.AsyncAnthropic:
+    return anthropic.AsyncAnthropic(
+        api_key="sk-ant-test",
+        max_retries=0,
+        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(server)),
+    )
+
+
+def model_info(model: str) -> httpx2.Response:
+    return httpx2.Response(
+        200,
+        json={
+            "type": "model",
+            "id": model,
+            "display_name": model,
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+
+async def test_key_check_uses_the_free_models_endpoint() -> None:
+    server = Server(model_info("claude-sonnet-5-5"), model_info("claude-opus-5-5"))
+    await check_models(
+        client_for(server), ["claude-sonnet-5-5", "claude-opus-5-5", "claude-sonnet-5-5"]
+    )
+    assert [r.url.path for r in server.requests] == [
+        "/v1/models/claude-sonnet-5-5",
+        "/v1/models/claude-opus-5-5",
+    ]
+    assert all(r.method == "GET" for r in server.requests)
+
+
+async def test_key_check_reports_rejected_keys_and_missing_models() -> None:
+    with pytest.raises(ModelError) as info:
+        await check_models(client_for(Server(error(401, "authentication_error"))), ["m"])
+    assert info.value.code == "authentication"
+    assert "Settings" in (info.value.suggestion or "")
+
+    server = Server(model_info("claude-sonnet-5-5"), error(404, "not_found_error"))
+    with pytest.raises(ModelError) as info:
+        await check_models(client_for(server), ["claude-sonnet-5-5", "claude-opus-9"])
+    assert info.value.code == "model_not_found"
+    assert "claude-opus-9" in info.value.message
+
+
+async def test_empty_credit_balance_is_reported_as_billing() -> None:
+    server = Server(
+        httpx2.Response(
+            400,
+            json={
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Your credit balance is too low to access the Anthropic API.",
+                },
+            },
+        )
+    )
+    with pytest.raises(ModelError) as info:
+        await model_with(server).complete(system="s", messages=[], tools=TOOLS)
+    assert info.value.code == "billing"
+    assert "credit" in info.value.message

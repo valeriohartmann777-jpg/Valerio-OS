@@ -58,13 +58,20 @@ _Last updated: 2026-10-03_
 - Tests: 15 brain tests (scripted model), 14 provider tests (real SDK against a
   mock HTTP transport: request shape, verbatim replay, 9 error classes),
   settings/secret tests; E2E covers the no-key path
+- Connect from the dashboard: Settings → Brain takes a pasted key, verifies it
+  against the models endpoint, stores it in `.env` (owner-only, atomic) and
+  swaps the models at runtime (`brain.changed` event); keys from env/`.env`
+  are verified at startup, a rejected key turns the brain *Offline* with the
+  reason. Empty credit balance is reported as a billing problem.
+  Tests: 17 connector/API tests, 3 provider key-check tests, E2E covers the
+  refused-key path
 - Not yet exercised against the live API (needs the user's key)
 
 ## IN PROGRESS
 - —
 
 ## NEXT
-0. First live run with Claude on the MacBook (add `ANTHROPIC_API_KEY` to `.env`)
+0. First live run with Claude on the MacBook (Settings → Brain → paste key)
 
 ### Phase 2 — real system control
 1. Exercise the dashboard on the MacBook (`open safari / finder / terminal`,

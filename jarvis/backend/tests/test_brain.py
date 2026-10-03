@@ -271,7 +271,7 @@ async def test_unavailable_model_explains_how_to_fix_it(tmp_path: Path) -> None:
         await rt.core.handle("tell me a joke")
         reply = events.of(EventType.JARVIS_MESSAGE)[-1].payload
         assert reply["error"]["code"] == "model_unavailable"
-        assert "ANTHROPIC_API_KEY" in reply["error"]["suggestion"]
+        assert "Settings" in reply["error"]["suggestion"]
     finally:
         await rt.stop()
 

@@ -150,6 +150,9 @@ function applyEvent(state: UIState, event: JarvisEvent, now: number): UIState {
     case "context.updated":
       next.context = payload.context as EnvironmentContext;
       break;
+    case "brain.changed":
+      next.brain = payload.brain as BrainStatus;
+      break;
     case "system.online":
       next.version = (payload.version as string | undefined) ?? state.version;
       next.systemBackend = (payload.system_backend as string | undefined) ?? state.systemBackend;

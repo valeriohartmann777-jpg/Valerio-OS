@@ -167,6 +167,8 @@ export interface BrainStatus {
   reasoning_model: string | null;
   /** Why the reasoning model is offline (e.g. no API key). */
   reason: string | null;
+  /** Last four characters of the API key in use. */
+  key_hint: string | null;
 }
 
 export interface Snapshot {

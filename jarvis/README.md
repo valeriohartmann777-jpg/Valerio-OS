@@ -41,8 +41,8 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
 - **Reasoning (Claude)**: anything beyond the built-in commands goes to Claude
   Sonnet 5.5, which plans and calls the same tools through the same
   Operator → approval → Sentinel chain (side effects become verified missions).
-  Prefix `think:` / `denk nach:` for Claude Opus 5.5. Needs `ANTHROPIC_API_KEY`
-  in `jarvis/.env`; without it the dashboard shows *Brain: Offline*.
+  Prefix `think:` / `denk nach:` for Claude Opus 5.5. Needs an Anthropic API
+  key (Settings → Brain); without it the dashboard shows *Brain: Offline*.
 - **Instant commands (no model call)**: `open <app>` / `open <app> and <app>`
   (also German *öffne*, *starte*), `what's the active window`,
   `list running apps`, `system status`, `hello`, `help`.
@@ -53,13 +53,16 @@ CPU/RAM/host metrics are always real.
 ## Connect Claude
 
 1. Create an API key at <https://console.anthropic.com> (Settings → API keys).
-2. Put it into `jarvis/.env` (created by the setup script; git-ignored):
-   ```
-   ANTHROPIC_API_KEY=sk-ant-...
-   ```
-3. Restart JARVIS. The context panel shows *Brain: Claude Sonnet 5.5*.
+2. In JARVIS click *Brain: Offline — connect* (or open **Settings → Brain**),
+   paste the key, press **Connect**.
+3. JARVIS checks the key with Anthropic (free models endpoint, no tokens),
+   stores it in `jarvis/.env` (git-ignored, owner-only) and switches the brain
+   on immediately — no restart. The context panel shows *Brain: Claude Sonnet 5.5*.
 
-Models, effort and limits are in `config/models.yaml`.
+Alternatively put `ANTHROPIC_API_KEY=sk-ant-...` into `jarvis/.env` (or the
+environment) and restart; the key is verified at startup and a rejected key
+shows up as *Offline* with the reason. Models, effort and limits are in
+`config/models.yaml`.
 
 ## Requirements
 
@@ -139,4 +142,4 @@ Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · Decisions: [DECISIONS.md](DE
   (aliases incl. German, launch targets, process names, risk level)
 - `config/personality.yaml` — tone and reply templates
 - `config/models.yaml` — provider slots for Phase 3
-- `.env` — overrides and (later) API keys; see `.env.example`
+- `.env` — overrides and the Anthropic API key (written by Settings → Brain); see `.env.example`

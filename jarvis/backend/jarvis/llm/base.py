@@ -63,6 +63,8 @@ class ModelReply:
 
 ModelErrorCode = Literal[
     "not_configured",
+    "invalid_format",
+    "save_failed",
     "authentication",
     "permission",
     "billing",

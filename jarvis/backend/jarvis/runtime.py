@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import time
 
@@ -11,6 +13,7 @@ from jarvis.agents.catalog import AGENT_SPECS
 from jarvis.agents.workers import OperatorAgent, SentinelAgent
 from jarvis.build import build_id
 from jarvis.core.brain import Brain
+from jarvis.core.connector import BrainConnector, Verifier
 from jarvis.core.context import EnvironmentContextService, platform_label
 from jarvis.core.jarvis import JarvisCore
 from jarvis.core.persona import build_system_prompt
@@ -44,6 +47,7 @@ class Runtime:
         *,
         backend: SystemBackend | None = None,
         models: ModelSet | None = None,
+        key_verifier: Verifier | None = None,
     ) -> None:
         self.settings = settings
         self.started_at = time.time()
@@ -91,9 +95,11 @@ class Runtime:
             self.catalog,
             interval=settings.runtime.context_poll_seconds,
         )
-        self.models = models or build_models(settings.models)
+        # Injected models (tests) are used as-is; models built from a key get
+        # that key verified in the background at startup.
+        self._verify_key_on_start = models is None
         self.brain = Brain(
-            models=self.models,
+            models=models or build_models(settings.models),
             tools=self.tools,
             operator=self.operator,
             missions=self.missions,
@@ -106,6 +112,14 @@ class Runtime:
             history_turns=settings.models.history_turns,
             max_tool_rounds=settings.models.max_tool_rounds,
         )
+        self.connector = BrainConnector(
+            settings=settings.models,
+            brain=self.brain,
+            bus=self.bus,
+            env_file=settings.env_file,
+            verifier=key_verifier,
+        )
+        self._key_check: asyncio.Task[None] | None = None
         self.core = JarvisCore(
             bus=self.bus,
             state=self.state,
@@ -147,9 +161,19 @@ class Runtime:
             },
         )
         if not self.brain.available:
-            log.warning("reasoning offline: %s", self.brain.status.reason)
+            log.warning(
+                "reasoning offline: %s (looked for ANTHROPIC_API_KEY in the environment and %s)",
+                self.brain.status.reason,
+                self.settings.env_file,
+            )
+        elif self._verify_key_on_start:
+            self._key_check = asyncio.create_task(self.connector.check(), name="key-check")
 
     async def stop(self) -> None:
+        if self._key_check is not None:
+            self._key_check.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._key_check
         await self.context.stop()
         await self.missions.shutdown()
         await self.state.close()
