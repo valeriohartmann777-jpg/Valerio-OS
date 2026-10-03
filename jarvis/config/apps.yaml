@@ -1,0 +1,150 @@
+# Application catalog for open_application.
+#
+#   name          display name used in replies and the UI
+#   aliases       what the user may say (lowercase)
+#   launch        launch candidates, first resolvable wins. Executables are
+#                 resolved via App Paths / PATH; %VARS% are expanded;
+#                 URIs (spotify:, ms-settings:) are opened via the shell.
+#   processes     process names (lowercase) that prove the app is running.
+#                 UWP apps are resolved through their ApplicationFrameHost.
+#   level         permission level (0-4). Shells and system tools are higher.
+#   effects       extra effects shown on approval cards.
+#   window_title  title used by the SIMULATED backend only.
+#
+# Applications not listed here can still be opened if Windows can resolve
+# them, but they require confirmation (level 2) and the denylist below
+# applies.
+
+applications:
+  notepad:
+    name: Notepad
+    aliases: [notepad, editor, text editor, notepad.exe]
+    launch: [notepad.exe]
+    processes: [notepad.exe]
+    level: 1
+    window_title: Untitled - Notepad
+
+  calculator:
+    name: Calculator
+    aliases: [calculator, calc, rechner, taschenrechner]
+    launch: [calc.exe]
+    processes: [calculatorapp.exe, calculator.exe, win32calc.exe]
+    level: 1
+    window_title: Calculator
+
+  paint:
+    name: Paint
+    aliases: [paint, mspaint, ms paint]
+    launch: [mspaint.exe]
+    processes: [mspaint.exe]
+    level: 1
+    window_title: Untitled - Paint
+
+  explorer:
+    name: File Explorer
+    aliases: [explorer, file explorer, files, datei-explorer]
+    launch: [explorer.exe]
+    processes: [explorer.exe]
+    level: 1
+    window_title: File Explorer
+
+  settings:
+    name: Settings
+    aliases: [settings, windows settings, einstellungen]
+    launch: ["ms-settings:"]
+    processes: [systemsettings.exe]
+    level: 1
+    window_title: Settings
+
+  edge:
+    name: Microsoft Edge
+    aliases: [edge, microsoft edge, browser]
+    launch: [msedge.exe]
+    processes: [msedge.exe]
+    level: 1
+    window_title: New tab - Microsoft Edge
+
+  chrome:
+    name: Google Chrome
+    aliases: [chrome, google chrome]
+    launch: [chrome.exe]
+    processes: [chrome.exe]
+    level: 1
+    window_title: New Tab - Google Chrome
+
+  vscode:
+    name: Visual Studio Code
+    aliases: [vscode, vs code, visual studio code, code]
+    launch:
+      - "%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\Code.exe"
+      - "%ProgramFiles%\\Microsoft VS Code\\Code.exe"
+    processes: [code.exe]
+    level: 1
+    window_title: Welcome - Visual Studio Code
+
+  spotify:
+    name: Spotify
+    aliases: [spotify]
+    launch: ["%APPDATA%\\Spotify\\Spotify.exe", "spotify:"]
+    processes: [spotify.exe]
+    level: 1
+    window_title: Spotify Premium
+
+  terminal:
+    name: Windows Terminal
+    aliases: [terminal, windows terminal]
+    launch: [wt.exe]
+    processes: [windowsterminal.exe]
+    level: 2
+    effects: [Opens a shell that can run arbitrary commands]
+    window_title: Windows Terminal
+
+  powershell:
+    name: PowerShell
+    aliases: [powershell, windows powershell, pwsh]
+    launch: [powershell.exe]
+    processes: [powershell.exe, windowsterminal.exe]
+    level: 2
+    effects: [Opens a shell that can run arbitrary commands]
+    window_title: Windows PowerShell
+
+  cmd:
+    name: Command Prompt
+    aliases: [cmd, command prompt, eingabeaufforderung]
+    launch: [cmd.exe]
+    processes: [cmd.exe, windowsterminal.exe]
+    level: 2
+    effects: [Opens a shell that can run arbitrary commands]
+    window_title: Command Prompt
+
+  regedit:
+    name: Registry Editor
+    aliases: [regedit, registry, registry editor]
+    launch: [regedit.exe]
+    processes: [regedit.exe]
+    level: 4
+    effects:
+      - Opens direct access to Windows system configuration
+      - Changes made there can make Windows unbootable
+      - Windows will ask for administrator rights
+    window_title: Registry Editor
+
+# Never launched, whatever the user says.
+denylist:
+  - bcdedit
+  - cipher
+  - diskpart
+  - format
+  - icacls
+  - net
+  - reg
+  - rd
+  - rmdir
+  - del
+  - sc
+  - schtasks
+  - shutdown
+  - takeown
+  - vssadmin
+  - wmic
+  - wsl

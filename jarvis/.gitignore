@@ -1,0 +1,26 @@
+# dependencies & builds
+node_modules/
+apps/desktop/dist/
+apps/desktop/dist-electron/
+*.tsbuildinfo
+
+# python
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# runtime data (database, logs) — never commit
+data/*
+!data/.gitkeep
+
+# local env / secrets
+.env
+.env.*
+!.env.example
+
+# test output
+tests/e2e/output/

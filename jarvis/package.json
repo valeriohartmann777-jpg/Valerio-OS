@@ -1,0 +1,24 @@
+{
+  "name": "jarvis",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JARVIS — personal intelligence operating system.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @jarvis/desktop",
+    "start": "npm run start -w @jarvis/desktop",
+    "build": "npm run build -w @jarvis/desktop",
+    "typecheck": "npm run typecheck -w @jarvis/desktop",
+    "test": "npm run test -w @jarvis/desktop",
+    "test:e2e": "node tests/e2e/run.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.56.1"
+  }
+}

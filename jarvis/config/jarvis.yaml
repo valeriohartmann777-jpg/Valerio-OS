@@ -1,0 +1,36 @@
+# JARVIS runtime configuration.
+# Environment variables override selected keys (see .env.example).
+
+server:
+  host: 127.0.0.1
+  port: 8765
+  # Browser origins allowed to call state-changing endpoints and open the
+  # event stream. Requests without an Origin header (CLI, tests) are allowed;
+  # the server only binds to localhost.
+  allowed_origins:
+    - app://jarvis
+    - http://localhost:5173
+    - http://127.0.0.1:5173
+
+runtime:
+  # auto      -> windows on Windows, simulated elsewhere
+  # windows   -> real Windows control (Windows only)
+  # simulated -> in-memory MOCK environment (development / tests)
+  system_backend: auto
+  # How often the environment context (CPU, RAM, active window) is sampled.
+  context_poll_seconds: 2.0
+  # How long COMPLETE / FAILED stay visible before JARVIS returns to DORMANT.
+  settle_seconds: 3.0
+  # Hard timeout for a single tool execution.
+  tool_timeout_seconds: 20.0
+  # How long open_application waits for a window / process to appear.
+  launch_verify_timeout_seconds: 10.0
+  # Simulated backend only: modelled application start-up latency.
+  simulated_launch_latency_ms: 700
+
+storage:
+  database_path: data/jarvis.db
+  log_dir: data/logs
+
+logging:
+  level: INFO

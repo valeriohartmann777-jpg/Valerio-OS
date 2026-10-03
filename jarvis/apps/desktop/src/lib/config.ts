@@ -1,0 +1,24 @@
+import { DEFAULT_BACKEND_URL } from "@jarvis/protocol";
+
+interface Bridge {
+  backendUrl?: string;
+  platform?: string;
+}
+
+declare global {
+  interface Window {
+    jarvis?: Bridge;
+  }
+}
+
+const bridge: Bridge = typeof window !== "undefined" ? (window.jarvis ?? {}) : {};
+
+export const BACKEND_URL: string =
+  bridge.backendUrl ?? import.meta.env.VITE_JARVIS_BACKEND_URL ?? DEFAULT_BACKEND_URL;
+
+export const EVENTS_URL = `${BACKEND_URL.replace(/^http/, "ws")}/events`;
+
+/** Native window controls are drawn over the top-right corner on Windows. */
+export const HAS_TITLEBAR_OVERLAY = bridge.platform === "win32";
+
+export const IS_ELECTRON = bridge.platform !== undefined;

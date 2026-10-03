@@ -1,0 +1,28 @@
+# Permission policy.
+#
+# Levels
+#   0 READ             read-only operations
+#   1 SAFE_ACTION      open applications, volume, window management
+#   2 MODIFICATION     edit files, browser form input, repository changes, shells
+#   3 EXTERNAL_EFFECT  send email/messages, publish, purchase
+#   4 HIGH_RISK        delete data, system configuration, security, privileged shells
+#
+# Policies: auto | confirm | strong_confirm | deny
+
+levels:
+  0: auto
+  1: auto
+  2: confirm
+  3: confirm
+  4: strong_confirm
+
+# Per-tool overrides, e.g.:
+#   open_application: confirm
+tool_overrides: {}
+
+# Action categories that are refused regardless of level.
+disabled_categories:
+  - financial
+
+# Pending approvals expire (and count as rejected) after this many seconds.
+approval_timeout_seconds: 300

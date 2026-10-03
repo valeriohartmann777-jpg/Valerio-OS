@@ -1,0 +1,34 @@
+# Model providers (Phase 3).
+#
+# Nothing in Phase 1 calls a model: routing is rule-based and replies are
+# templated. This file defines the shape the provider layer will read so the
+# rest of the system never hard-codes a vendor. Secrets come from environment
+# variables only (see .env.example) — never put keys here.
+
+fast:
+  provider: none        # anthropic | openai | google | local | none
+  model: ""
+  timeout_seconds: 10
+  retries: 1
+
+reasoning:
+  provider: none
+  model: ""
+  timeout_seconds: 120
+  retries: 1
+
+vision:
+  provider: none
+  model: ""
+  timeout_seconds: 30
+  retries: 1
+
+embedding:
+  provider: none
+  model: ""
+
+speech:
+  stt: none
+  tts: none
+
+fallbacks: []
