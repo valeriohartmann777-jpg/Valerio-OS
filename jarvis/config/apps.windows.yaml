@@ -1,4 +1,5 @@
-# Application catalog for open_application.
+# Application catalog for open_application — Windows.
+# (macOS: apps.macos.yaml. The simulated backend also uses this file.)
 #
 #   name          display name used in replies and the UI
 #   aliases       what the user may say (lowercase)

@@ -11,7 +11,9 @@ from jarvis.permissions.models import PermissionLevel
 from jarvis.settings import AppCatalogSettings
 from jarvis.tools.system.backend import EnvironmentSnapshot, ProcessInfo, WindowInfo
 
-_UNKNOWN_NAME = re.compile(r"^[a-z0-9][a-z0-9 ._+-]{0,63}$")
+_UNKNOWN_EXE = re.compile(r"^[a-z0-9][a-z0-9 ._+-]{0,63}$")
+# macOS bundle names may contain spaces and non-ASCII letters ("Visual Studio Code").
+_UNKNOWN_BUNDLE = re.compile(r"^[\w][\w .+&'-]{0,63}$")
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,11 @@ class AppCatalog:
             for process in target.processes:
                 self._by_process.setdefault(process, entry.name)
         self._denied = {normalize(name) for name in settings.denylist}
+        self.platform = settings.platform
+
+    @property
+    def config_file(self) -> str:
+        return f"config/apps.{self.platform}.yaml"
 
     def known_apps(self) -> list[AppTarget]:
         seen: dict[str, AppTarget] = {}
@@ -69,14 +76,16 @@ class AppCatalog:
         return self._by_alias.get(normalize(query))
 
     def resolve(self, query: str) -> AppTarget | None:
-        """Catalog entry, or an *unknown* target that needs confirmation.
+        """Catalog entry, or an *unknown* target.
 
-        Returns ``None`` when the name is not a plausible executable name.
+        Returns ``None`` when the name is not a plausible application name.
         """
         if found := self.lookup(query):
             return found
+        if self.platform == "macos":
+            return self._unknown_bundle(query)
         name = normalize(query).removesuffix(".exe")
-        if not _UNKNOWN_NAME.match(name) or " " in name:
+        if not _UNKNOWN_EXE.match(name) or " " in name:
             return None
         return AppTarget(
             key=None,
@@ -87,13 +96,33 @@ class AppCatalog:
             effects=("JARVIS doesn't know this application; Windows decides what runs",),
         )
 
-    def display_name(self, process_name: str) -> str:
-        """Human name for a process: catalog name or the executable's stem."""
+    @staticmethod
+    def _unknown_bundle(query: str) -> AppTarget | None:
+        """Any installed .app bundle. Level 1: only bundles from the standard
+        application folders are launched, never arbitrary executables."""
+        name = normalize(query).removesuffix(".app")
+        if not _UNKNOWN_BUNDLE.match(name):
+            return None
+        return AppTarget(
+            key=None,
+            name=" ".join(word[:1].upper() + word[1:] for word in name.split()),
+            launch=(name,),
+            processes=frozenset({f"{name}.app"}),
+            level=PermissionLevel.SAFE_ACTION,
+        )
+
+    def display_name(self, process_name: str, app_name: str = "") -> str:
+        """Human name for a process: catalog name, the OS's app name, or the stem."""
         process_name = process_name.lower()
         if process_name in self._by_process:
             return self._by_process[process_name]
+        if app_name:
+            return app_name
         stem = PureWindowsPath(process_name).stem
         return stem[:1].upper() + stem[1:] if stem else "Unknown"
+
+    def window_label(self, window: WindowInfo) -> str:
+        return self.display_name(window.process_name, window.app_name)
 
 
 class LaunchOutcome(StrEnum):

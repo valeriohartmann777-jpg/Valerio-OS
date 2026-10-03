@@ -30,19 +30,23 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   missions with pause/resume/stop, Operator + Sentinel agents, tool framework,
   permission levels 0–4 with approvals, SQLite persistence, audit log,
   structured JSON logs with trace/mission ids.
-- **Real Windows control**: `open_application` (ShellExecute launch,
-  window/process observation incl. UWP apps, independent verification),
+- **Real system control on Windows and macOS**: `open_application` (launch,
+  window/process observation before and after, independent verification),
   `get_active_window`, `list_running_apps`, `get_system_info`.
+  - Windows: ShellExecute, EnumWindows/DWM, UWP-aware.
+  - macOS: `open -a` (LaunchServices), CGWindowList + bundle-aware process
+    detection. No privacy permission needed; with Screen Recording allowed,
+    window titles of other apps become visible too.
 - **Commands**: `open <app>` / `open <app> and <app>` (also German *öffne*,
   *starte*), `what's the active window`, `list running apps`, `system status`,
   `hello`, `help`. Anything else gets an honest "needs model integration" reply.
 
-On non-Windows hosts the desktop is **simulated** (clearly badged in the UI);
+On other hosts (Linux) the desktop is **simulated** (clearly badged in the UI);
 CPU/RAM/host metrics are always real.
 
 ## Requirements
 
-- Windows 10/11 (primary), Python **3.12+**, Node.js **20+**
+- Windows 10/11 or macOS, Python **3.12+**, Node.js **20+**
 
 ## Setup & run (Windows)
 
@@ -66,10 +70,11 @@ npm start
 Backend only (e.g. for API work): `backend\.venv\Scripts\python -m jarvis`
 → http://127.0.0.1:8765/docs
 
-Try the real Windows tool without the UI:
+Try the real system tool without the UI:
 
-```powershell
-backend\.venv\Scripts\python scripts\windows_smoke.py notepad
+```bash
+backend/.venv/bin/python scripts/smoke.py textedit          # macOS
+backend\.venv\Scripts\python scripts\smoke.py notepad        # Windows
 ```
 
 ## Setup & run (macOS / Linux)
@@ -83,9 +88,9 @@ cd ~/dev/Valerio-OS/jarvis
 ./scripts/setup.sh && npm run dev
 ```
 
-Off Windows the desktop is **simulated** (SIMULATED badge): the whole chain
-runs, but no real application is launched. A real macOS backend is a separate
-`SystemBackend` implementation (not built yet).
+On macOS JARVIS controls the real desktop: `open textedit`, `open safari`,
+`öffne den rechner`, `open spotify`, `open terminal` (asks for approval), or any
+installed app by name. Commands: `what's the active window`, `list running apps`.
 
 ## Tests
 
@@ -102,7 +107,7 @@ backend/jarvis/      api · core · missions · agents · tools · permissions �
 packages/protocol/   typed event/API contract shared with the UI
 config/              jarvis · permissions · personality · apps · models (.yaml)
 docs/                implementation status
-scripts/             setup, dev, checks, Windows smoke test
+scripts/             setup, dev, checks, real-system smoke test
 tests/e2e/           Electron end-to-end test
 data/                SQLite + logs at runtime (git-ignored)
 ```
@@ -113,7 +118,8 @@ Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · Decisions: [DECISIONS.md](DE
 
 - `config/jarvis.yaml` — server, runtime timings, storage
 - `config/permissions.yaml` — policy per level, overrides, disabled categories
-- `config/apps.yaml` — application catalog (aliases, launch targets, process names, risk level)
+- `config/apps.windows.yaml`, `config/apps.macos.yaml` — application catalogs
+  (aliases incl. German, launch targets, process names, risk level)
 - `config/personality.yaml` — tone and reply templates
 - `config/models.yaml` — provider slots for Phase 3
 - `.env` — overrides and (later) API keys; see `.env.example`

@@ -8,6 +8,7 @@ Nothing else in the codebase reads environment variables or YAML directly.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any, Literal
 
@@ -18,7 +19,8 @@ from jarvis.permissions.models import ApprovalPolicy, PermissionLevel
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-SystemBackendName = Literal["auto", "windows", "simulated"]
+SystemBackendName = Literal["auto", "windows", "macos", "simulated"]
+CatalogPlatform = Literal["windows", "macos"]
 
 
 class ServerSettings(BaseModel):
@@ -79,6 +81,8 @@ class AppEntry(BaseModel):
 
 
 class AppCatalogSettings(BaseModel):
+    # Which catalog this is: decides how unknown application names are handled.
+    platform: CatalogPlatform = "windows"
     applications: dict[str, AppEntry] = Field(default_factory=dict)
     denylist: list[str] = Field(default_factory=list)
 
@@ -147,13 +151,26 @@ def load_settings(
     data["root_dir"] = root
     data["permissions"] = _read_yaml(config_dir / "permissions.yaml")
     data["personality"] = _read_yaml(config_dir / "personality.yaml")
-    data["apps"] = _read_yaml(config_dir / "apps.yaml")
     data["models"] = _read_yaml(config_dir / "models.yaml")
 
     _apply_env(data, env)
+    platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))
+    data["apps"] = {**_read_yaml(config_dir / f"apps.{platform}.yaml"), "platform": platform}
     for key, value in overrides.items():
         data[key] = value
     return Settings.model_validate(data)
+
+
+def resolve_backend(choice: str, host_platform: str = sys.platform) -> str:
+    """``auto`` → the real backend for this OS, or the simulation elsewhere."""
+    if choice != "auto":
+        return choice
+    return {"win32": "windows", "darwin": "macos"}.get(host_platform, "simulated")
+
+
+def catalog_platform(choice: str, host_platform: str = sys.platform) -> CatalogPlatform:
+    """The simulation models a Windows desktop, so it uses the Windows catalog."""
+    return "macos" if resolve_backend(choice, host_platform) == "macos" else "windows"
 
 
 def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:

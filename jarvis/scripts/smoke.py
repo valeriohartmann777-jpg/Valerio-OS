@@ -1,10 +1,10 @@
-"""Exercise the REAL Windows backend without the UI.
+"""Exercise the REAL system backend (Windows or macOS) without the UI.
 
-    backend\\.venv\\Scripts\\python scripts\\windows_smoke.py notepad
+    macOS:    backend/.venv/bin/python scripts/smoke.py textedit
+    Windows:  backend\\.venv\\Scripts\\python scripts\\smoke.py notepad
 
 Prints the environment snapshot, then runs observe → launch → observe →
 verify for one application exactly as the Operator/Sentinel chain does.
-Windows only.
 """
 
 from __future__ import annotations
@@ -15,18 +15,18 @@ import sys
 from jarvis.core.trace import TraceContext
 from jarvis.permissions.models import PermissionLevel
 from jarvis.settings import load_settings
+from jarvis.tools.system import create_backend
 from jarvis.tools.system.apps import AppCatalog
 from jarvis.tools.system.tools import OpenApplicationArgs, OpenApplicationTool
 
 
 async def main(name: str) -> int:
-    if sys.platform != "win32":
-        print("This smoke test drives the real Windows backend and only runs on Windows.")
-        return 2
-    from jarvis.tools.system.windows import WindowsSystemBackend
-
     settings = load_settings()
-    backend = WindowsSystemBackend()
+    backend = create_backend(settings)
+    if backend.simulated:
+        print("No real system backend on this machine (only Windows and macOS are supported).")
+        return 2
+    print(f"backend: {backend.name}")
     catalog = AppCatalog(settings.apps)
     ctx = TraceContext.new()
 
@@ -34,7 +34,7 @@ async def main(name: str) -> int:
     foreground = snapshot.foreground
     print(f"windows: {len(snapshot.windows)}   processes: {len(snapshot.processes)}")
     if foreground:
-        print(f"foreground: {foreground.title!r} ({foreground.process_name}, pid {foreground.pid})")
+        print(f"front: {foreground.title!r} ({foreground.process_name}, pid {foreground.pid})")
 
     tool = OpenApplicationTool(
         backend, catalog, verify_timeout=settings.runtime.launch_verify_timeout_seconds
@@ -67,4 +67,5 @@ async def main(name: str) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main(sys.argv[1] if len(sys.argv) > 1 else "notepad")))
+    default = "textedit" if sys.platform == "darwin" else "notepad"
+    raise SystemExit(asyncio.run(main(" ".join(sys.argv[1:]) or default)))

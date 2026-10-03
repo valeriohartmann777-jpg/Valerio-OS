@@ -208,6 +208,8 @@ the JSON log.
 
 Phase 1 tools: `get_system_info` (L0), `get_active_window` (L0),
 `list_running_apps` (L0), `open_application` (L1, target-dependent — see §9).
+Unknown applications: Windows L2 (Windows decides what an executable name
+runs); macOS L1 (only installed `.app` bundles can be launched).
 
 ### System backends
 
@@ -217,10 +219,21 @@ Phase 1 tools: `get_system_info` (L0), `get_active_window` (L0),
   initialised on the worker thread) to launch, `EnumWindows` / `GetForegroundWindow` / `GetWindowThreadProcessId` /
   DWM cloaking checks via `ctypes`, UWP frame-host resolution, `psutil` for
   processes, App Paths registry + `PATH` to resolve unknown apps.
+- **`MacOSSystemBackend`** — real. `open -a` (LaunchServices) to launch;
+  `CGWindowListCopyWindowInfo` (pyobjc Quartz) for on-screen windows in
+  front-to-back order; `psutil` for processes, attributed to an app when the
+  executable lives inside its `.app` bundle (outermost bundle wins, so helper
+  processes count). Only bundles from the standard application folders are
+  launched. No privacy permission required; window titles of other apps need
+  Screen Recording, otherwise the app name is used.
 - **`SimulatedSystemBackend`** — **MOCK**, clearly labelled in code, API and UI
-  (`simulated: true`, "SIMULATED" badge). In-memory windows/processes with
-  realistic launch latency. Used automatically on non-Windows hosts and in
-  tests. It exercises the identical tool/verification code path.
+  (`simulated: true`, "SIMULATED" badge). In-memory Windows-style desktop with
+  realistic launch latency. Used automatically on other hosts and in tests.
+  It exercises the identical tool/verification code path.
+
+`runtime.system_backend: auto` picks windows / macos / simulated by host OS
+and loads the matching catalog (`config/apps.windows.yaml` or
+`config/apps.macos.yaml`; the simulation uses the Windows catalog).
 
 Preference order for Windows control (Phase 2+): Windows APIs → UI Automation →
 pywinauto → keyboard/mouse fallback. Raw coordinate clicking is never primary.

@@ -131,7 +131,7 @@ try {
   await step("failures are explained, not dumped", async () => {
     await command("open blender");
     await headline.filter({ hasText: "I couldn't open Blender." }).waitFor();
-    await page.getByRole("definition").filter({ hasText: "isn't installed, or Windows can't locate it." }).waitFor();
+    await page.getByRole("definition").filter({ hasText: "isn't installed, or it can't be found on this computer." }).waitFor();
     await page.waitForTimeout(400);
     await shot("06-failure");
   });

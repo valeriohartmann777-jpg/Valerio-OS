@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import sys
+import importlib.util
+import logging
 
-from jarvis.settings import Settings
+from jarvis.settings import Settings, resolve_backend
 from jarvis.tools.registry import ToolRegistry
 from jarvis.tools.system.apps import AppCatalog
 from jarvis.tools.system.backend import SystemBackend
@@ -15,15 +16,24 @@ from jarvis.tools.system.tools import (
     OpenApplicationTool,
 )
 
+log = logging.getLogger("jarvis.tools")
+
 
 def create_backend(settings: Settings) -> SystemBackend:
-    choice = settings.runtime.system_backend
-    if choice == "auto":
-        choice = "windows" if sys.platform == "win32" else "simulated"
+    choice = resolve_backend(settings.runtime.system_backend)
     if choice == "windows":
         from jarvis.tools.system.windows import WindowsSystemBackend
 
         return WindowsSystemBackend()
+    if choice == "macos":
+        if importlib.util.find_spec("Quartz") is not None:
+            from jarvis.tools.system.macos import MacOSSystemBackend
+
+            return MacOSSystemBackend()
+        log.error(
+            "macOS control unavailable: pyobjc-framework-Quartz is not installed. "
+            "Run ./scripts/setup.sh — falling back to the SIMULATED desktop."
+        )
     from jarvis.tools.system.simulated import SimulatedSystemBackend
 
     return SimulatedSystemBackend(

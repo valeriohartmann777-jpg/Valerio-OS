@@ -80,10 +80,10 @@ class EnvironmentContextService:
         window = await self._backend.active_window()
         context = EnvironmentContext(
             hostname=metrics.hostname,
-            platform=f"{platform.system()} {platform.release()}",
+            platform=_platform_label(),
             system_backend=self._backend.name,
             simulated=self._backend.simulated,
-            active_app=self._catalog.display_name(window.process_name) if window else None,
+            active_app=self._catalog.window_label(window) if window else None,
             active_window=window.title if window else None,
             cpu_percent=metrics.cpu_percent,
             memory_percent=metrics.memory_percent,
@@ -110,3 +110,11 @@ class EnvironmentContextService:
                 await self.refresh()
             except Exception:
                 log.exception("context refresh failed")
+
+
+def _platform_label() -> str:
+    if mac_version := platform.mac_ver()[0]:
+        return f"macOS {mac_version}"
+    if platform.system() == "Windows":
+        return f"Windows {platform.release()}"
+    return f"{platform.system()} {platform.release()}"

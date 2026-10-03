@@ -16,7 +16,8 @@ _Last updated: 2026-10-03_
   structured errors, events, audit log)
 - System tools: `open_application`, `get_active_window`, `list_running_apps`,
   `get_system_info`
-- `WindowsSystemBackend` (real) and `SimulatedSystemBackend` (MOCK, labelled)
+- `WindowsSystemBackend` (real), `MacOSSystemBackend` (real) and
+  `SimulatedSystemBackend` (MOCK, labelled); per-platform app catalogs
 - Agents: registry + Operator (acts) + Sentinel (verifies); Atlas, Forge,
   Vision, Archive declared as standby
 - Rule-based router (query / action / conversation / unsupported; EN + DE verbs)
@@ -43,8 +44,8 @@ _Last updated: 2026-10-03_
 - —
 
 ## NEXT (Phase 2 — real system control)
-1. Run `scripts/windows_smoke.py notepad|calculator|settings` and the app on a
-   real Windows 11 machine; fix anything the simulation could not reveal
+1. Confirm on the MacBook: `scripts/smoke.py textedit`, then the app
+   (`open textedit / safari / finder / terminal`); on Windows: `scripts/smoke.py notepad`
 2. Volume (`get_volume` / `set_volume`, Core Audio)
 3. Window management via UI Automation (focus / minimize / maximize / close)
 4. File tools (`list_directory`, `read_file`, `search_files`) with path allowlist
@@ -52,8 +53,9 @@ _Last updated: 2026-10-03_
 6. Settings page: edit permission policy
 
 ## BLOCKED
-- Real-Windows verification of `WindowsSystemBackend` could not run in the
-  development container (Linux). The code is type-checked against the Windows
-  API stubs and exercised through the identical tool path in simulation; it
-  still needs one run on Windows (item 1 above).
+- Real-OS runs could not happen in the development container (Linux).
+  Windows: type-checked against the Windows API stubs. macOS: type-checked for
+  darwin; bundle detection, app index, launch errors and verification are
+  tested with real processes inside fake `.app` bundles — only the Quartz
+  window-server call itself is untested until it runs on the Mac (item 1).
 - Windows-only scripts (`setup.ps1`, `dev.ps1`) were written but not executed.

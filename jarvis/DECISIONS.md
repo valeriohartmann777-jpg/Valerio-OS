@@ -99,7 +99,7 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
 - **Consequences:** Tool, executor, agents, missions and UI run the identical
   code path in simulation; only `tools/system/windows.py` is Windows-specific
   (type-checked with `mypy --platform win32`, smoke-tested with
-  `scripts/windows_smoke.py`).
+  `scripts/smoke.py`).
 - **Date:** 2026-10-03
 
 ## D-008 — Target-dependent permission levels + precheck before approval
@@ -136,6 +136,26 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   design-token system native CSS.
 - **Consequences:** Vite config is `vite.config.mts` (ESM). Fonts (Inter,
   JetBrains Mono) are bundled locally — no network needed at runtime.
+- **Date:** 2026-10-03
+
+## D-012 — Real macOS backend (`open -a` + CGWindowList + bundle-aware psutil)
+
+- **Decision:** Add `MacOSSystemBackend` and a macOS app catalog; `auto`
+  selects it on macOS. Launch with `open -a <bundle>`, observe windows with
+  `CGWindowListCopyWindowInfo` (pyobjc-framework-Quartz, macOS-only
+  dependency) and attribute processes to apps via their `.app` bundle path.
+- **Reason:** The primary machine turned out to be a MacBook; on it everything
+  was simulated. These APIs need no privacy permission (unlike AppleScript /
+  System Events or Accessibility), and `NSWorkspace.runningApplications` is
+  stale without a Cocoa run loop, whereas CGWindowList and psutil are queried
+  fresh every time.
+- **Alternatives:** AppleScript via `osascript` (permission prompts),
+  NSWorkspace (stale state in a non-Cocoa process), raw ctypes to CoreGraphics
+  (untestable, error-prone).
+- **Consequences:** Window titles of other apps appear only with the Screen
+  Recording permission; without it the app name is shown. If pyobjc is
+  missing the backend falls back to the simulation and logs why. Everything
+  except the single Quartz call is covered by tests on any OS.
 - **Date:** 2026-10-03
 
 ## D-011 — The core shrinks when a mission or approval needs the stage

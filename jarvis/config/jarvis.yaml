@@ -13,9 +13,10 @@ server:
     - http://127.0.0.1:5173
 
 runtime:
-  # auto      -> windows on Windows, simulated elsewhere
+  # auto      -> windows on Windows, macos on macOS, simulated elsewhere
   # windows   -> real Windows control (Windows only)
-  # simulated -> in-memory MOCK environment (development / tests)
+  # macos     -> real macOS control (macOS only)
+  # simulated -> in-memory MOCK Windows desktop (development / tests)
   system_backend: auto
   # How often the environment context (CPU, RAM, active window) is sampled.
   context_poll_seconds: 2.0

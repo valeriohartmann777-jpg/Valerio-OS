@@ -81,7 +81,7 @@ class GetActiveWindowTool(Tool[NoArgs]):
                 data={"window": None},
                 simulated=self._backend.simulated,
             )
-        app = self._catalog.display_name(window.process_name)
+        app = self._catalog.window_label(window)
         return ToolResult(
             success=True,
             tool=self.name,
@@ -111,7 +111,7 @@ class ListRunningAppsTool(Tool[NoArgs]):
         apps = sorted(
             (
                 {
-                    "app": self._catalog.display_name(process),
+                    "app": self._catalog.window_label(windows[0]),
                     "process": process,
                     "windows": [w.title for w in windows],
                     "focused": any(w.is_foreground for w in windows),
@@ -159,7 +159,10 @@ class OpenApplicationTool(Tool[OpenApplicationArgs]):
             return ActionDescriptor(
                 title="Open application", target=args.name, summary="", level=self.permission_level
             )
-        summary = f"Launch {app.name}." if app.known else f"Ask Windows to run “{app.launch[0]}”."
+        if app.known or self._catalog.platform == "macos":
+            summary = f"Launch {app.name}."
+        else:
+            summary = f"Ask Windows to run “{app.launch[0]}”."
         return ActionDescriptor(
             title="Open application",
             target=app.name,
@@ -182,8 +185,8 @@ class OpenApplicationTool(Tool[OpenApplicationArgs]):
         if await self._launch_target(app) is None:
             return ToolError(
                 code="app_not_found",
-                message=f"{app.name} isn't installed, or Windows can't locate it.",
-                suggestion="If it is installed, add it to config/apps.yaml with its executable.",
+                message=f"{app.name} isn't installed, or it can't be found on this computer.",
+                suggestion=f"If it is installed, add it to {self._catalog.config_file}.",
             )
         return None
 
@@ -192,7 +195,8 @@ class OpenApplicationTool(Tool[OpenApplicationArgs]):
         target = await self._launch_target(app) if app else None
         if app is None or target is None:
             return self._failure(
-                args.name, ToolError(code="app_not_found", message="Windows can't locate it.")
+                args.name,
+                ToolError(code="app_not_found", message="It can't be found on this computer."),
             )
 
         before = await self._backend.snapshot()
@@ -217,7 +221,7 @@ class OpenApplicationTool(Tool[OpenApplicationArgs]):
                 app.name,
                 ToolError(
                     code="not_observed",
-                    message="Windows accepted the request, but no window or process appeared.",
+                    message="The system accepted the request, but no window or process appeared.",
                     suggestion="It may need longer to start, or something blocked it.",
                 ),
                 observations,

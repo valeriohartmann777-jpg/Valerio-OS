@@ -1,0 +1,150 @@
+# Application catalog for open_application — macOS.
+#
+#   name       display name used in replies and the UI
+#   aliases    what the user may say (lowercase, English and German)
+#   launch     app bundle names (as on disk, e.g. "TextEdit") or absolute
+#              .app paths; first one found wins. Bundles are looked up in
+#              /Applications, /System/Applications (+ Utilities),
+#              ~/Applications and /System/Library/CoreServices/Applications.
+#   processes  bundle file names, lowercase ("textedit.app"). A process
+#              belongs to a bundle when its executable lives inside it.
+#   level      permission level (0-4). Shells and tools that can change the
+#              system or expose secrets ask for approval.
+#   effects    extra effects shown on approval cards.
+#
+# Any other installed app can be opened by its bundle name ("open spotify",
+# "open visual studio code") at level 1: only .app bundles from the folders
+# above are ever launched, never arbitrary executables.
+
+applications:
+  textedit:
+    name: TextEdit
+    aliases: [textedit, text edit, texteditor, text editor, editor, notepad, notizblock]
+    launch: [TextEdit]
+    processes: [textedit.app]
+
+  notes:
+    name: Notes
+    aliases: [notes, notizen, apple notes]
+    launch: [Notes]
+    processes: [notes.app]
+
+  calculator:
+    name: Calculator
+    aliases: [calculator, calc, rechner, taschenrechner]
+    launch: [Calculator]
+    processes: [calculator.app]
+
+  finder:
+    name: Finder
+    aliases: [finder, files, file explorer, explorer, dateien]
+    launch: [/System/Library/CoreServices/Finder.app]
+    processes: [finder.app]
+
+  safari:
+    name: Safari
+    aliases: [safari, browser, web browser]
+    launch: [Safari]
+    processes: [safari.app]
+
+  chrome:
+    name: Google Chrome
+    aliases: [chrome, google chrome]
+    launch: [Google Chrome]
+    processes: [google chrome.app]
+
+  settings:
+    name: System Settings
+    aliases: [settings, system settings, system preferences, einstellungen, systemeinstellungen]
+    launch: [System Settings, System Preferences]
+    processes: [system settings.app, system preferences.app]
+
+  mail:
+    name: Mail
+    aliases: [mail, email, e-mail]
+    launch: [Mail]
+    processes: [mail.app]
+
+  calendar:
+    name: Calendar
+    aliases: [calendar, kalender]
+    launch: [Calendar]
+    processes: [calendar.app]
+
+  messages:
+    name: Messages
+    aliases: [messages, nachrichten, imessage]
+    launch: [Messages]
+    processes: [messages.app]
+
+  music:
+    name: Music
+    aliases: [music, musik, apple music]
+    launch: [Music]
+    processes: [music.app]
+
+  photos:
+    name: Photos
+    aliases: [photos, fotos]
+    launch: [Photos]
+    processes: [photos.app]
+
+  spotify:
+    name: Spotify
+    aliases: [spotify]
+    launch: [Spotify]
+    processes: [spotify.app]
+
+  vscode:
+    name: Visual Studio Code
+    aliases: [vscode, vs code, code, visual studio code]
+    launch: [Visual Studio Code]
+    processes: [visual studio code.app]
+
+  activity_monitor:
+    name: Activity Monitor
+    aliases: [activity monitor, aktivitätsanzeige, task manager]
+    launch: [Activity Monitor]
+    processes: [activity monitor.app]
+
+  terminal:
+    name: Terminal
+    aliases: [terminal, shell, console, konsole]
+    launch: [Terminal]
+    processes: [terminal.app]
+    level: 2
+    effects: [Opens a shell that can run arbitrary commands]
+
+  iterm:
+    name: iTerm
+    aliases: [iterm, iterm2]
+    launch: [iTerm]
+    processes: [iterm.app]
+    level: 2
+    effects: [Opens a shell that can run arbitrary commands]
+
+  script_editor:
+    name: Script Editor
+    aliases: [script editor, skripteditor, applescript]
+    launch: [Script Editor]
+    processes: [script editor.app]
+    level: 2
+    effects: [Can run scripts that control other applications]
+
+  disk_utility:
+    name: Disk Utility
+    aliases: [disk utility, festplattendienstprogramm]
+    launch: [Disk Utility]
+    processes: [disk utility.app]
+    level: 2
+    effects: [Can erase and partition disks]
+
+  keychain:
+    name: Keychain Access
+    aliases: [keychain, keychain access, schlüsselbund, schlüsselbundverwaltung, passwords]
+    launch: [Keychain Access]
+    processes: [keychain access.app]
+    level: 2
+    effects: [Gives access to stored passwords and certificates]
+
+denylist: []

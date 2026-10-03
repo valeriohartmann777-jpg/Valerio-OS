@@ -15,8 +15,9 @@ class WindowInfo:
     handle: int
     title: str
     pid: int
-    process_name: str  # lowercase, e.g. "notepad.exe"
+    process_name: str  # lowercase key: "notepad.exe" (Windows), "textedit.app" (macOS)
     is_foreground: bool = False
+    app_name: str = ""  # the OS's own (possibly localized) application name, if known
 
 
 @dataclass(frozen=True, slots=True)
