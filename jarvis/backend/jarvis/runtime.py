@@ -9,6 +9,7 @@ from jarvis import __version__
 from jarvis.agents.base import AgentRegistry
 from jarvis.agents.catalog import AGENT_SPECS
 from jarvis.agents.workers import OperatorAgent, SentinelAgent
+from jarvis.build import build_id
 from jarvis.core.brain import Brain
 from jarvis.core.context import EnvironmentContextService, platform_label
 from jarvis.core.jarvis import JarvisCore
@@ -47,6 +48,7 @@ class Runtime:
         self.settings = settings
         self.started_at = time.time()
         self.version = __version__
+        self.build = build_id()
 
         self.bus = EventBus()
         self.db = Database(settings.database_path)

@@ -8,6 +8,8 @@ export const DEFAULT_BACKEND_URL = "http://127.0.0.1:8765";
 export interface Health {
   status: "ok";
   version: string;
+  /** git commit the backend was started from ("unknown" outside a checkout) */
+  build: string;
   uptime_seconds: number;
   pid: number;
   system_backend: string;

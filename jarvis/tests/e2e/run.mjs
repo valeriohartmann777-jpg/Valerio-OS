@@ -16,6 +16,7 @@
 
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -40,6 +41,27 @@ const step = async (name, fn) => {
   console.log(steps.at(-1));
 };
 
+// A backend from an "older version" already occupies the port — the app must replace it.
+const python = path.join(
+  root, "backend", ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
+);
+const stale = spawn(python, ["-m", "jarvis"], {
+  cwd: path.join(root, "backend"),
+  env: {
+    ...process.env,
+    JARVIS_PORT: "8799",
+    JARVIS_BUILD: "0000000-outdated",
+    JARVIS_SYSTEM_BACKEND: "simulated",
+    JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-stale-")),
+  },
+  stdio: "ignore",
+});
+const health = () => fetch(`${backendUrl}/health`).then((r) => r.json(), () => null);
+for (let i = 0; i < 120 && (await health())?.build !== "0000000-outdated"; i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 250));
+}
+assert.equal((await health())?.build, "0000000-outdated", "stale backend did not start");
+
 const app = await electron.launch({
   executablePath: electronBinary,
   args: [appDir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])],
@@ -61,8 +83,16 @@ try {
     await page.getByTestId("command-input").press("Enter");
   };
 
-  await step("app launches, backend starts, dashboard shows ONLINE", async () => {
+  await step("an outdated backend from an earlier run is replaced", async () => {
     await page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 30_000 });
+    const current = await health();
+    assert.notEqual(current?.build, "0000000-outdated");
+    assert.equal(stale.exitCode !== null || stale.signalCode !== null, true, "stale backend still running");
+    const shown = await page.getByTestId("build").innerText();
+    assert.ok(current.build === "unknown" || shown.includes(current.build.slice(0, 7)), shown);
+  });
+
+  await step("app launches, backend starts, dashboard shows ONLINE", async () => {
     await headline.filter({ hasText: "Everything is nominal." }).waitFor();
     assert.equal(await page.getByTestId("simulated-badge").isVisible(), true);
     await page.waitForTimeout(600);

@@ -64,6 +64,7 @@ def brain_view(rt: Runtime) -> BrainView:
 async def build_snapshot(rt: Runtime) -> Snapshot:
     return Snapshot(
         version=rt.version,
+        build=rt.build,
         brain=brain_view(rt),
         state=rt.state.snapshot(),
         system_backend=rt.backend.name,
@@ -80,6 +81,7 @@ async def build_snapshot(rt: Runtime) -> Snapshot:
 async def health(rt: RuntimeDep) -> Health:
     return Health(
         version=rt.version,
+        build=rt.build,
         uptime_seconds=round(rt.uptime_seconds, 1),
         pid=os.getpid(),
         system_backend=rt.backend.name,

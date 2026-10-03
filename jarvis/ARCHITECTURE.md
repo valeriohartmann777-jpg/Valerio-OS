@@ -341,9 +341,11 @@ touches `storage/` and the repositories. Semantic memory will sit behind a
 ## 13. Desktop app
 
 - **Main process** (`apps/desktop/electron/`): creates the window, serves the
-  renderer over `app://jarvis`, and supervises the backend — if
-  `/health` is not reachable it starts `python -m jarvis` from
-  `backend/.venv` and stops it on quit.
+  renderer over `app://jarvis`, and supervises the backend — if `/health` is
+  not reachable it starts `python -m jarvis` from `backend/.venv` and stops it
+  on quit. `/health` reports the backend's git commit (`build`); a JARVIS
+  backend running older code (e.g. left over from a previous run) is stopped
+  and replaced instead of being reused. The top bar shows the build.
 - **Renderer** (`apps/desktop/src/`): React 19 + Tailwind 4 + Motion.
   A pure reducer (`store/reducer.ts`) folds snapshot + events into UI state
   (unit-tested); Zustand exposes it to components.

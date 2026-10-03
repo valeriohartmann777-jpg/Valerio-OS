@@ -14,6 +14,7 @@ export function TopBar() {
   const connection = useJarvis((s) => s.connection);
   const simulated = useJarvis((s) => s.simulated);
   const version = useJarvis((s) => s.version);
+  const build = useJarvis((s) => s.build);
   const view = useJarvis((s) => s.view);
   const now = useNow(1000);
   const status = CONNECTION[connection];
@@ -28,7 +29,12 @@ export function TopBar() {
     >
       <div className="flex items-baseline gap-2.5">
         <span className="text-[13px] font-semibold tracking-[0.34em] text-fg">JARVIS</span>
-        {version && <span className="font-mono text-2xs text-fg-faint">v{version}</span>}
+        {version && (
+          <span className="font-mono text-2xs text-fg-faint" data-testid="build" title={build ?? undefined}>
+            v{version}
+            {build && build !== "unknown" && ` · ${build.slice(0, 7)}`}
+          </span>
+        )}
       </div>
 
       <nav className="no-drag flex items-center gap-1" aria-label="Main">

@@ -171,6 +171,7 @@ export interface BrainStatus {
 
 export interface Snapshot {
   version: string;
+  build: string;
   brain: BrainStatus;
   state: StateSnapshot;
   system_backend: string;

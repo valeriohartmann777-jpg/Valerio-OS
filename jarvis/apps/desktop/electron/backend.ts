@@ -1,35 +1,54 @@
 /**
- * Supervises the Python backend. If a backend is already answering /health
- * (e.g. started manually during development) it is used as-is; otherwise the
- * backend is started from backend/.venv and stopped again when JARVIS quits.
+ * Supervises the Python backend.
+ *
+ * - A backend already answering /health that runs the same code (git commit)
+ *   is reused — e.g. one started manually during development.
+ * - A JARVIS backend left over from an older version is stopped and replaced,
+ *   instead of the new app silently talking to old code.
+ * - Otherwise the backend is started from backend/.venv and stopped again
+ *   when JARVIS quits.
  */
 
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
 export type BackendMode = "external" | "spawned" | "unavailable";
 
+interface Health {
+  status: string;
+  build?: string;
+  pid?: number;
+  system_backend?: string;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const short = (build: string | undefined) => (build ? build.slice(0, 7) : "pre-build-id");
+
 export class BackendSupervisor {
   private child: ChildProcess | null = null;
+  private readonly build: string;
 
   constructor(
     private readonly url: string,
     private readonly projectRoot: string,
     private readonly extraOrigins: string[] = [],
-  ) {}
+  ) {
+    this.build = gitCommit(projectRoot);
+  }
 
   async ensureRunning(): Promise<BackendMode> {
     const running = await this.health();
-    if (running) {
-      console.log(`[jarvis] using running backend at ${this.url} (pid ${running.pid}, ${running.system_backend})`);
-      const realPlatform = process.platform === "darwin" || process.platform === "win32";
-      if (realPlatform && running.system_backend === "simulated") {
-        console.warn(
-          `[jarvis] WARNING: that backend is SIMULATED — probably left over from an older run. ` +
-            `Quit JARVIS, stop it (${process.platform === "win32" ? `taskkill /PID ${running.pid} /F` : `kill ${running.pid}`}) and start again.`,
-        );
+    if (running && this.isOutdated(running)) {
+      console.log(
+        `[jarvis] the backend on ${this.url} runs older code (${short(running.build)}, this app is ${short(this.build)}) — replacing it`,
+      );
+      if (!(await this.terminate(running))) {
+        console.warn("[jarvis] WARNING: could not stop the old backend. Stop it manually and start JARVIS again.");
+        return "external";
       }
+    } else if (running) {
+      console.log(`[jarvis] using running backend at ${this.url} (pid ${running.pid}, ${running.system_backend})`);
       if (this.extraOrigins.length > 0) {
         console.log(
           `[jarvis] if the dashboard stays on CONNECTING, that backend does not allow ${this.extraOrigins.join(", ")}` +
@@ -83,14 +102,40 @@ export class BackendSupervisor {
     }
   }
 
+  private isOutdated(running: Health): boolean {
+    if (this.build === "unknown") return false; // not a git checkout: can't tell
+    if (running.build === undefined) return true; // predates build ids
+    return running.build !== "unknown" && running.build !== this.build;
+  }
+
+  /** Stop an old JARVIS backend (identified by its /health answer). */
+  private async terminate(running: Health): Promise<boolean> {
+    const pid = running.pid ?? listeningPid(new URL(this.url).port || "8765");
+    if (!pid) return false;
+    for (const signal of ["SIGTERM", "SIGKILL"] as const) {
+      try {
+        process.kill(pid, signal);
+      } catch {
+        // already gone, or not ours to kill
+      }
+      for (let i = 0; i < 32; i += 1) {
+        if (!(await this.healthy())) return true;
+        await sleep(250);
+      }
+    }
+    return false;
+  }
+
   private async healthy(): Promise<boolean> {
     return (await this.health()) !== null;
   }
 
-  private async health(): Promise<{ pid: number; system_backend: string } | null> {
+  private async health(): Promise<Health | null> {
     try {
       const response = await fetch(`${this.url}/health`, { signal: AbortSignal.timeout(800) });
-      return response.ok ? ((await response.json()) as { pid: number; system_backend: string }) : null;
+      if (!response.ok) return null;
+      const body = (await response.json()) as Health;
+      return body.status === "ok" ? body : null;
     } catch {
       return null;
     }
@@ -103,5 +148,35 @@ export class BackendSupervisor {
       path.join(this.projectRoot, "backend", ".venv", "bin", "python"),
     ];
     return candidates.find((candidate): candidate is string => !!candidate && existsSync(candidate)) ?? null;
+  }
+}
+
+function gitCommit(cwd: string): string {
+  try {
+    const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd,
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    return commit || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** PID listening on a local TCP port (macOS/Linux; old backends didn't report theirs). */
+function listeningPid(port: string): number | null {
+  if (process.platform === "win32") return null;
+  try {
+    const output = execFileSync("lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], {
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString();
+    const pid = Number.parseInt(output.trim().split("\n")[0] ?? "", 10);
+    return Number.isFinite(pid) ? pid : null;
+  } catch {
+    return null;
   }
 }

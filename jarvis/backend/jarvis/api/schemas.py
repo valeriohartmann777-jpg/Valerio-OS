@@ -15,6 +15,7 @@ from jarvis.permissions.models import ApprovalPolicy, PermissionRequest
 class Health(BaseModel):
     status: str = "ok"
     version: str
+    build: str
     uptime_seconds: float
     pid: int
     system_backend: str
@@ -40,6 +41,7 @@ class BrainView(BaseModel):
 
 class Snapshot(BaseModel):
     version: str
+    build: str
     brain: BrainView
     state: StateSnapshot
     system_backend: str

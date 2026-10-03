@@ -77,6 +77,7 @@ function agent(overrides: Partial<AgentState> = {}): AgentState {
 function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
     version: "0.1.0",
+    build: "070a0b5c0ffee",
     brain: { available: true, fast_model: "claude-sonnet-5-5", reasoning_model: "claude-opus-5-5", reason: null },
     state: { state: "DORMANT", detail: "" },
     system_backend: "simulated",

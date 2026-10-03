@@ -27,6 +27,7 @@ export interface LastMessage extends JarvisMessagePayload {
 export interface UIState {
   connection: Connection;
   version: string | null;
+  build: string | null;
   systemBackend: string | null;
   simulated: boolean;
   brain: BrainStatus | null;
@@ -57,6 +58,7 @@ export const RECENT_MISSION_MS = 15_000;
 export const initialState: UIState = {
   connection: "connecting",
   version: null,
+  build: null,
   systemBackend: null,
   simulated: false,
   brain: null,
@@ -93,6 +95,7 @@ function applySnapshot(state: UIState, snapshot: Snapshot, now: number): UIState
     ...state,
     connection: "online",
     version: snapshot.version,
+    build: snapshot.build,
     systemBackend: snapshot.system_backend,
     simulated: snapshot.simulated,
     brain: snapshot.brain,

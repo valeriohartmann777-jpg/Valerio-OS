@@ -105,6 +105,10 @@ async function createWindow(): Promise<void> {
 }
 
 if (!app.requestSingleInstanceLock()) {
+  console.log(
+    "[jarvis] JARVIS is already running — switching to the open window. " +
+      "To start a newer version, quit the running one first (⌘Q / Alt+F4).",
+  );
   app.quit();
 } else {
   app.on("second-instance", () => {
