@@ -11,8 +11,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "npm run dev -w @jarvis/desktop",
-    "start": "npm run start -w @jarvis/desktop",
+    "dev": "node scripts/preflight.mjs && npm run dev -w @jarvis/desktop",
+    "start": "node scripts/preflight.mjs && npm run start -w @jarvis/desktop",
     "build": "npm run build -w @jarvis/desktop",
     "typecheck": "npm run typecheck -w @jarvis/desktop",
     "test": "npm run test -w @jarvis/desktop",

@@ -74,11 +74,13 @@ backend\.venv\Scripts\python scripts\windows_smoke.py notepad
 
 ## Setup & run (macOS / Linux)
 
+macOS ships Python 3.9; install a current one first (`brew install python@3.13`
+or the installer from python.org).
+
 ```bash
 git clone -b claude/jarvis-foundation-mxnsz4 https://github.com/valeriohartmann777-jpg/Valerio-OS.git ~/dev/Valerio-OS
 cd ~/dev/Valerio-OS/jarvis
-./scripts/setup.sh
-npm run dev
+./scripts/setup.sh && npm run dev
 ```
 
 Off Windows the desktop is **simulated** (SIMULATED badge): the whole chain
