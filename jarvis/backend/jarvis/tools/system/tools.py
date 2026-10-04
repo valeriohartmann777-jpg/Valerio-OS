@@ -82,13 +82,14 @@ class GetActiveWindowTool(Tool[NoArgs]):
                 simulated=self._backend.simulated,
             )
         app = self._catalog.window_label(window)
+        title = self._catalog.window_title(window)
         return ToolResult(
             success=True,
             tool=self.name,
             action=self.name,
             target=app,
-            summary=f"{app} — {window.title}",
-            data={"app": app, "window": _window_data(window)},
+            summary=f"{app} — {title}",
+            data={"app": app, "window": {**(_window_data(window) or {}), "title": title}},
             simulated=self._backend.simulated,
         )
 
@@ -113,7 +114,7 @@ class ListRunningAppsTool(Tool[NoArgs]):
                 {
                     "app": self._catalog.window_label(windows[0]),
                     "process": process,
-                    "windows": [w.title for w in windows],
+                    "windows": [self._catalog.window_title(w) for w in windows],
                     "focused": any(w.is_foreground for w in windows),
                 }
                 for process, windows in grouped.items()

@@ -75,6 +75,7 @@ export class BackendSupervisor {
         JARVIS_ROOT: this.projectRoot,
         JARVIS_PORT: port,
         JARVIS_EXTRA_ORIGINS: this.extraOrigins.join(","),
+        JARVIS_UI_PID: String(process.pid), // lets JARVIS recognise its own window
         PYTHONUNBUFFERED: "1",
       },
       stdio: ["ignore", "pipe", "pipe"],

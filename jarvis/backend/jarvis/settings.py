@@ -36,6 +36,9 @@ class RuntimeSettings(BaseModel):
     tool_timeout_seconds: float = 20.0
     launch_verify_timeout_seconds: float = 10.0
     simulated_launch_latency_ms: int = 700
+    # PID of the JARVIS window's process (set by the Electron supervisor), so
+    # JARVIS can recognise its own window instead of calling it "Electron".
+    ui_pid: int | None = None
 
 
 class StorageSettings(BaseModel):
@@ -207,6 +210,9 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         for origin in (o.strip() for o in value.split(",")):
             if origin and origin not in origins:
                 origins.append(origin)
+    if value := env.get("JARVIS_UI_PID", "").strip():
+        if value.isdigit():
+            runtime["ui_pid"] = int(value)
     if value := env.get("JARVIS_SYSTEM_BACKEND"):
         runtime["system_backend"] = value
     if value := env.get("JARVIS_DATA_DIR"):

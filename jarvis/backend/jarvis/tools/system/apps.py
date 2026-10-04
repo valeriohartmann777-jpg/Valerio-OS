@@ -35,9 +35,13 @@ def normalize(query: str) -> str:
     return " ".join(query.lower().strip().strip("\"'“”").split())
 
 
+SELF_NAME = "JARVIS"
+
+
 class AppCatalog:
-    def __init__(self, settings: AppCatalogSettings) -> None:
+    def __init__(self, settings: AppCatalogSettings, *, ui_pid: int | None = None) -> None:
         self._settings = settings
+        self._ui_pid = ui_pid
         self._by_alias: dict[str, AppTarget] = {}
         self._by_process: dict[str, str] = {}
         for key, entry in settings.applications.items():
@@ -121,8 +125,20 @@ class AppCatalog:
         stem = PureWindowsPath(process_name).stem
         return stem[:1].upper() + stem[1:] if stem else "Unknown"
 
+    def is_self(self, window: WindowInfo) -> bool:
+        """The JARVIS dashboard itself (in development an app called "Electron")."""
+        return self._ui_pid is not None and window.pid == self._ui_pid
+
     def window_label(self, window: WindowInfo) -> str:
+        if self.is_self(window):
+            return SELF_NAME
         return self.display_name(window.process_name, window.app_name)
+
+    def window_title(self, window: WindowInfo) -> str:
+        # Without a readable title, macOS reports the owner name ("Electron").
+        if self.is_self(window) and window.title in ("", window.app_name):
+            return SELF_NAME
+        return window.title
 
 
 class LaunchOutcome(StrEnum):

@@ -1,6 +1,6 @@
 # Implementation status
 
-_Last updated: 2026-10-03_
+_Last updated: 2026-10-04_
 
 ## DONE
 
@@ -47,6 +47,12 @@ _Last updated: 2026-10-03_
   `brought_to_front` (TextEdit already had a window), Sentinel `verified`
   (1 window, 1 process, has focus). First Quartz import took ~7 s (cold
   bytecode compile); it happens once at backend start.
+- 2026-10-04, same MacBook, first live run with Claude: key connected from
+  Settings → Brain ("Brain connected — Claude Sonnet 5.5"). "Was läuft gerade
+  auf meinem Mac?" → `list_running_apps` → answer in German (9 apps with
+  windows, 562 processes). "Ich muss mir schnell was notieren" → Claude chose
+  TextEdit → mission → Sentinel verified. Found: the dashboard itself showed as
+  "Electron" (fixed: recognised via `JARVIS_UI_PID`, labelled JARVIS).
 
 ### Phase 3 — Model intelligence
 - `llm/`: provider-neutral `ChatModel`, `AnthropicChatModel` (SDK 1.11, async),
@@ -66,13 +72,13 @@ _Last updated: 2026-10-03_
   reason. Empty credit balance is reported as a billing problem.
   Tests: 17 connector/API tests, 3 provider key-check tests, E2E covers the
   refused-key path
-- Not yet exercised against the live API (needs the user's key)
+- Live API verified on the MacBook (see above); `think:` (Opus 5.5) still to try
 
 ## IN PROGRESS
 - —
 
 ## NEXT
-0. First live run with Claude on the MacBook (Settings → Brain → paste key)
+0. Live: try `think:` (Opus 5.5), multi-app requests and an approval via Claude
 
 ### Phase 2 — real system control
 1. Exercise the dashboard on the MacBook (`open safari / finder / terminal`,

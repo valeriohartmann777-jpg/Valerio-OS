@@ -75,6 +75,17 @@ def test_windows_from_cg_filters_and_orders() -> None:
     assert windows[1].process_name == "rechner"
 
 
+def test_jarvis_recognises_its_own_window() -> None:
+    settings = load_settings(environ={"JARVIS_SYSTEM_BACKEND": "macos", "JARVIS_UI_PID": "7"})
+    assert settings.runtime.ui_pid == 7
+    catalog = AppCatalog(settings.apps, ui_pid=settings.runtime.ui_pid)
+    own, other = windows_from_cg([cg(7, "Electron"), cg(8, "Electron")], {})
+    assert (catalog.window_label(own), catalog.window_title(own)) == ("JARVIS", "JARVIS")
+    # Another Electron app (e.g. an editor) keeps its own name.
+    assert (catalog.window_label(other), catalog.window_title(other)) == ("Electron", "Electron")
+    assert AppCatalog(settings.apps).window_label(own) == "Electron"  # pid unknown
+
+
 def test_app_index_scans_standard_and_grouping_folders(tmp_path: Path) -> None:
     (tmp_path / "Apps" / "Safari.app").mkdir(parents=True)
     (tmp_path / "Apps" / "Utilities" / "Terminal.app").mkdir(parents=True)

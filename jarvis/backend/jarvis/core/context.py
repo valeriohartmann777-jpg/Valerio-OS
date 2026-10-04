@@ -84,7 +84,7 @@ class EnvironmentContextService:
             system_backend=self._backend.name,
             simulated=self._backend.simulated,
             active_app=self._catalog.window_label(window) if window else None,
-            active_window=window.title if window else None,
+            active_window=self._catalog.window_title(window) if window else None,
             cpu_percent=metrics.cpu_percent,
             memory_percent=metrics.memory_percent,
             memory_used_gb=metrics.memory_used_gb,

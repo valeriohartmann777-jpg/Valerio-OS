@@ -61,7 +61,7 @@ class Runtime:
         self.state = StateService(self.bus, settle_seconds=settings.runtime.settle_seconds)
         self.permissions = PermissionService(settings.permissions, self.bus)
 
-        self.catalog = AppCatalog(settings.apps)
+        self.catalog = AppCatalog(settings.apps, ui_pid=settings.runtime.ui_pid)
         self.backend = backend or create_backend(settings)
         self.tools = ToolRegistry()
         register_system_tools(self.tools, self.backend, self.catalog, settings)
