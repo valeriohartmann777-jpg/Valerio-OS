@@ -210,6 +210,9 @@ class LearningJournal:
         rounds = await self._db.fetch_one(
             "SELECT COUNT(*) AS n FROM learning_rounds WHERE status = 'completed'"
         )
+        studies = await self._db.fetch_one(
+            "SELECT COUNT(*) AS n FROM learning_studies WHERE ok = 1"
+        )
         return {
             "tests": sum(by_status.values()),
             "invalid": by_status.get("invalid", 0),
@@ -219,7 +222,88 @@ class LearningJournal:
             "confirmed": int(confirmed["n"]) if confirmed else 0,
             "notes": int(notes["n"]) if notes else 0,
             "rounds": int(rounds["n"]) if rounds else 0,
+            "studies": int(studies["n"]) if studies else 0,
         }
+
+    # Level studies ---------------------------------------------------------------------
+
+    async def add_study(
+        self,
+        round_id: str | None,
+        name: str,
+        spec: dict[str, Any],
+        result: dict[str, Any],
+        *,
+        ok: bool = True,
+    ) -> int:
+        row = await self._db.fetch_one("SELECT MAX(number) AS n FROM learning_studies")
+        number = (int(row["n"]) if row and row["n"] is not None else 0) + 1
+        await self._db.execute(
+            "INSERT INTO learning_studies (id, number, round_id, created_at, name, instrument, "
+            "ok, spec, result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                new_id(),
+                number,
+                round_id,
+                _now(),
+                name[:80],
+                spec.get("instrument"),
+                int(ok),
+                json.dumps(spec),
+                json.dumps(result),
+            ),
+        )
+        return number
+
+    async def studies(self, limit: int = 50) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            "SELECT number, created_at, name, instrument, ok, spec, result FROM learning_studies "
+            "ORDER BY number DESC LIMIT ?",
+            (limit,),
+        )
+        return [
+            {
+                **dict(row),
+                "ok": bool(row["ok"]),
+                "spec": _load(row["spec"]),
+                "result": _load(row["result"]),
+            }
+            for row in rows
+        ]
+
+    async def prompt_studies(self, limit: int) -> list[dict[str, Any]]:
+        """Recent studies, compact, oldest first (they are in-sample only)."""
+        out = []
+        for study in reversed(await self.studies(limit)):
+            spec, result = study["spec"] or {}, study["result"] or {}
+            entry: dict[str, Any] = {
+                "study": f"S{study['number']}",
+                "name": study["name"],
+                "setup": {
+                    k: spec.get(k)
+                    for k in ("instrument", "timeframe", "side", "level", "when", "session")
+                    if spec.get(k)
+                },
+            }
+            if study["ok"]:
+                entry["result"] = {
+                    k: result.get(k)
+                    for k in (
+                        "touches",
+                        "broken_on_touch",
+                        "held_rate",
+                        "expected_rate",
+                        "edge_z",
+                        "by_touch",
+                        "by_year",
+                        "avg_favourable_points",
+                        "avg_adverse_points",
+                    )
+                }
+            else:
+                entry["error"] = result.get("error")
+            out.append(entry)
+        return out
 
     # Notes -----------------------------------------------------------------------------
 

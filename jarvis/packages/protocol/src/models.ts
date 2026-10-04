@@ -215,9 +215,19 @@ export interface LearningStatus {
   next_round_at: string | null;
   round: number | null;
   web_search: boolean;
+  /** What to research (the user's text, or the default from config/learning.yaml). */
+  focus: string;
   counts: Partial<
     Record<
-      "tests" | "invalid" | "rejected" | "in_sample_passed" | "validated" | "confirmed" | "notes" | "rounds",
+      | "tests"
+      | "invalid"
+      | "rejected"
+      | "in_sample_passed"
+      | "validated"
+      | "confirmed"
+      | "notes"
+      | "rounds"
+      | "studies",
       number
     >
   >;
@@ -259,6 +269,39 @@ export interface LearningTest {
   holdout: LearningStats | null;
   holdout_confirmed: boolean | null;
   t_required: number | null;
+}
+
+export interface LevelStudyResult {
+  touches: number;
+  held: number;
+  broken: number;
+  /** Broken already within the touching bar. */
+  broken_on_touch: number;
+  undecided: number;
+  /** Share of decided touches that held. */
+  held_rate: number | null;
+  /** How often arbitrary prices touched the same way "held" (the control group). */
+  expected_rate: number | null;
+  controls: number;
+  edge_z: number | null;
+  by_touch: Record<"first" | "second" | "third_or_later", { decided: number; held_rate: number | null }>;
+  by_year: Record<string, { touches: number; held_rate: number | null; expected_rate: number | null }>;
+  avg_favourable_points: number | null;
+  avg_adverse_points: number | null;
+  error?: string;
+}
+
+export interface LearningStudy {
+  number: number;
+  created_at: string;
+  name: string;
+  instrument: string | null;
+  ok: boolean;
+  spec: { question?: string; level?: string; side?: "support" | "resistance"; timeframe?: string } & Record<
+    string,
+    unknown
+  >;
+  result: LevelStudyResult;
 }
 
 export interface LearningNote {

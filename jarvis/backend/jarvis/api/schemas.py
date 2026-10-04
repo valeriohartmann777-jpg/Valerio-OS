@@ -66,8 +66,13 @@ class LearningView(BaseModel):
     next_round_at: str | None
     round: int | None
     web_search: bool
+    focus: str
     counts: dict[str, int]
     data: dict[str, dict[str, Any]]
+
+
+class LearningFocus(BaseModel):
+    text: str = Field(max_length=4000)
 
 
 class VoicePreferences(BaseModel):

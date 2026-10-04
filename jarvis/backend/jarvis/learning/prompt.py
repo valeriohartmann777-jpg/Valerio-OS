@@ -14,7 +14,7 @@ from typing import Any
 from jarvis.learning.strategy import FEATURES, SCALP_MAX_MINUTES
 from jarvis.llm.base import ToolDefinition
 
-_ARG_NAMES = {"period": "n", "minutes": "m", "time": "HH:MM"}
+_ARG_NAMES = {"period": "n", "minutes": "m", "time": "HH:MM", "step": "s"}
 
 
 def _signature(name: str) -> str:
@@ -53,8 +53,17 @@ Styles: scalping uses 1m, 2m, 3m or 5m bars and needs max_minutes <= {SCALP_MAX_
 Example:
 {{"name": "NQ opening-range breakout", "hypothesis": "…why…", "instrument": "NQ", "style": "daytrading", "timeframe": "5m", "session": {{"start": "09:30", "end": "15:55", "tz": "America/New_York"}}, "entries": [{{"side": "long", "when": ["close crosses_above or_high(30)", "close > vwap"]}}, {{"side": "short", "when": ["close crosses_below or_low(30)", "close < vwap"]}}], "exit": {{"stop": "1.0 * atr(14)", "target_r": 2, "max_minutes": 180}}, "max_trades_per_day": 1}}
 
+# Support and resistance
+A level matters only if price reacts to it more than to an arbitrary price. Measure that with study_levels before building strategies on it:
+- A touch is price reaching the level's zone (tolerance) from the right side: from above for support, from below for resistance. The level is the one known before the touching bar. From the touching bar's close, the study records whether price first moved "hold" points beyond the level (held) or "breach" points through it (broken) within the horizon, plus the reaction size. Touches that break within the touching bar are counted as broken_on_touch.
+- Chance is measured, not assumed: a control group of random moments where price touches an arbitrary price the same way (same side, same distance, same horizon) gives expected_rate. edge_z compares held_rate with it (errors clustered by day). An edge_z of 2 or more on a few hundred touches, consistent across years, is worth a strategy; below that it is noise — with many studies some will reach 2 by luck.
+- by_touch shows first vs. later tests of the same level that day; by_year shows stability.
+- Level candidates: pivot_high/pivot_low(n) swings, prev_high/prev_low (previous session), prev_week_high/prev_week_low, window_high/window_low (e.g. the Asia range 19:00-03:00 New York), or_high/or_low (opening range), round_above/round_below(s) (round numbers: try 50/100/250 on NQ, 5/10/25 on gold), prev_poc/prev_vah/prev_val (previous session's volume profile), vwap. Filters in "when" (session time, trend, distance) show where a level works.
+- NQ and gold behave differently (sessions, round-number scale, volatility). Study them separately.
+- Studies use only in-sample data. Strategies built from them are still judged out-of-sample.
+
 # Each round
-Read your notes and earlier results, decide what would teach you the most now, run your backtests, record what you learned (write_note), and end with finish_round. Be concise; your notes are what you keep."""
+Read the research focus, your notes and earlier results, decide what would teach you the most now, run level studies and backtests, record what you learned (write_note), and end with finish_round. Be concise; your notes are what you keep."""
 
 
 _EXPR = {"type": "string", "maxLength": 200}
@@ -125,6 +134,52 @@ TOOLS = [
         },
     ),
     ToolDefinition(
+        name="study_levels",
+        description=(
+            "Measure how a support or resistance level behaves on the in-sample period: "
+            "touches, how often it held vs. broke, compared with placebo levels, by touch "
+            "number and by year."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "maxLength": 80},
+                "question": {"type": "string", "maxLength": 400},
+                "instrument": {"type": "string", "enum": ["NQ", "XAUUSD"]},
+                "timeframe": {
+                    "type": "string",
+                    "enum": ["1m", "2m", "3m", "5m", "10m", "15m", "30m"],
+                },
+                "session": {
+                    "type": "object",
+                    "properties": {
+                        "start": {"type": "string", "description": "HH:MM"},
+                        "end": {"type": "string", "description": "HH:MM"},
+                        "tz": {"type": "string", "enum": ["America/New_York", "Europe/London"]},
+                    },
+                    "required": ["start", "end"],
+                },
+                "level": {**_EXPR, "description": "the level's price, e.g. pivot_low(10)"},
+                "side": {"type": "string", "enum": ["support", "resistance"]},
+                "tolerance": {
+                    **_EXPR,
+                    "description": "touch zone in points (default 0.1 * atr(14))",
+                },
+                "hold": {
+                    **_EXPR,
+                    "description": "move away that counts as held (default 1.0 * atr(14))",
+                },
+                "breach": {
+                    **_EXPR,
+                    "description": "move through that counts as broken (default 0.5 * atr(14))",
+                },
+                "horizon_minutes": {"type": "integer", "minimum": 5, "maximum": 1440},
+                "when": {"type": "array", "items": _EXPR, "maxItems": 4},
+            },
+            "required": ["name", "question", "instrument", "timeframe", "session", "level", "side"],
+        },
+    ),
+    ToolDefinition(
         name="write_note",
         description=(
             "Save one lesson to your knowledge notes. Use replaces to update an existing note."
@@ -175,13 +230,18 @@ def briefing(
     focus: str,
     tests_per_round: int,
     searches: int,
+    research_focus: str = "",
+    studies: list[dict[str, Any]] | None = None,
+    studies_per_round: int = 0,
     max_notes: int = 60,
 ) -> str:
     lines = [
         f"Round {round_number} · {today} · budget left today ${budget_left:.2f}",
         "",
-        "Data (minute bars):",
     ]
+    if research_focus:
+        lines += [f"Research focus (set by the user): {research_focus}", ""]
+    lines += ["Data (minute bars):"]
     for name, info in data.items():
         lines.append(f"- {name}: {info}")
     lines += [
@@ -209,6 +269,10 @@ def briefing(
             f"{test['timeframe']}, in-sample {stats.get('trades', 0)} trades, "
             f"avg {stats.get('avg_r', 0):+.2f} R"
         )
+    lines += ["", "Recent level studies (oldest first, in-sample):"]
+    if not studies:
+        lines.append("(none yet)")
+    lines += [json.dumps(study, separators=(",", ":")) for study in studies or []]
     lines += ["", "Recent tests (oldest first):"]
     if not tests:
         lines.append("(none yet)")
@@ -216,9 +280,10 @@ def briefing(
     if focus:
         lines += ["", f"Your plan from last round: {focus}"]
     search = f" and up to {searches} web searches" if searches else ""
+    study = f" up to {studies_per_round} level studies," if studies_per_round else ""
     lines += [
         "",
-        f"Use up to {tests_per_round} backtests{search} this round, record what you learned, "
-        "then call finish_round.",
+        f"Use{study} up to {tests_per_round} backtests{search} this round, record what you "
+        "learned, then call finish_round.",
     ]
     return "\n".join(lines)

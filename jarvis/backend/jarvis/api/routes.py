@@ -27,6 +27,7 @@ from jarvis.api.schemas import (
     ChatAccepted,
     ChatRequest,
     Health,
+    LearningFocus,
     LearningView,
     LevelPolicy,
     MissionCreate,
@@ -212,6 +213,19 @@ async def learning_start(rt: RuntimeDep) -> LearningView:
 async def learning_stop(rt: RuntimeDep) -> LearningView:
     await rt.learning.disable()
     return learning_view(rt)
+
+
+@router.post("/learning/focus")
+async def learning_focus(body: LearningFocus, rt: RuntimeDep) -> LearningView:
+    await rt.learning.set_focus(body.text)
+    return learning_view(rt)
+
+
+@router.get("/learning/studies")
+async def learning_studies(
+    rt: RuntimeDep, limit: Annotated[int, Query(ge=1, le=200)] = 50
+) -> list[dict[str, Any]]:
+    return await rt.learning_journal.studies(limit=limit)
 
 
 @router.get("/learning/tests")

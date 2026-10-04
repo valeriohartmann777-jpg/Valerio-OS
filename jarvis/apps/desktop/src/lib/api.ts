@@ -4,6 +4,7 @@ import type {
   LearningNote,
   LearningRound,
   LearningStatus,
+  LearningStudy,
   LearningTest,
   VoiceStatus,
   ChatAccepted,
@@ -85,6 +86,8 @@ export const api = {
   learningTests: (limit = 50) => request<LearningTest[]>(`/learning/tests?limit=${limit}`),
   learningFindings: () => request<LearningTest[]>("/learning/tests?status=validated&limit=50"),
   learningNotes: () => request<LearningNote[]>("/learning/notes"),
+  learningStudies: (limit = 30) => request<LearningStudy[]>(`/learning/studies?limit=${limit}`),
+  setLearningFocus: (text: string) => post<LearningStatus>("/learning/focus", { text }),
   learningRounds: (limit = 20) => request<LearningRound[]>(`/learning/rounds?limit=${limit}`),
   connectVoice: (apiKey: string) => post<VoiceStatus>("/voice/key", { api_key: apiKey }),
   voicePreferences: (prefs: { wake_word?: boolean; speak_replies?: boolean }) =>

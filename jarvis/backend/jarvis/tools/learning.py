@@ -37,8 +37,9 @@ class LearningReportTool(Tool[NoArgs]):
     name = "learning_report"
     description = (
         "What JARVIS has learned on its own about scalping and day trading NQ and XAUUSD: "
-        "learning status and budget, knowledge notes, validated findings (with their "
-        "out-of-sample and holdout results) and recent rounds and tests."
+        "learning status and budget, knowledge notes, support/resistance level studies "
+        "(how often levels held vs. random prices, in-sample), validated findings (with "
+        "their out-of-sample and holdout results) and recent rounds and tests."
     )
     permission_level = PermissionLevel.READ
     input_model = NoArgs
@@ -53,6 +54,7 @@ class LearningReportTool(Tool[NoArgs]):
         validated = await self._journal.tests(limit=20, status="validated")
         recent = await self._journal.tests(limit=10)
         rounds = await self._journal.rounds(limit=5)
+        studies = await self._journal.studies(limit=15)
         summary = (
             f"Learning is {status.state}; {counts.get('rounds', 0)} rounds, "
             f"{counts.get('tests', 0)} backtests, {counts.get('validated', 0)} validated "
@@ -61,7 +63,9 @@ class LearningReportTool(Tool[NoArgs]):
         )
         data: dict[str, Any] = {
             "status": {
-                k: v for k, v in asdict(status).items() if k not in ("data", "counts", "progress")
+                k: v
+                for k, v in asdict(status).items()
+                if k not in ("data", "counts", "progress", "focus")
             },
             "counts": counts,
             "notes": [
@@ -90,6 +94,31 @@ class LearningReportTool(Tool[NoArgs]):
                 }
                 for t in recent
             ],
+            "level_studies": [
+                {
+                    "study": f"S{st['number']}",
+                    "name": st["name"],
+                    "setup": {
+                        k: (st["spec"] or {}).get(k)
+                        for k in ("instrument", "timeframe", "side", "level", "when")
+                    },
+                    "result": {
+                        k: (st["result"] or {}).get(k)
+                        for k in (
+                            "touches",
+                            "held_rate",
+                            "expected_rate",
+                            "edge_z",
+                            "by_touch",
+                            "avg_favourable_points",
+                            "avg_adverse_points",
+                        )
+                    },
+                }
+                for st in studies
+                if st["ok"]
+            ],
+            "research_focus": status.focus,
             "recent_rounds": [
                 {"round": r["number"], "status": r["status"], "summary": r["summary"]}
                 for r in rounds

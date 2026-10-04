@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 # Features ---------------------------------------------------------------------------
 
-ArgKind = Literal["period", "minutes", "time"]
+ArgKind = Literal["period", "minutes", "time", "step"]
 
 
 @dataclass(frozen=True)
@@ -64,10 +64,25 @@ FEATURES: dict[str, FeatureSpec] = {
     # time windows in the session's time zone, may cross midnight
     "window_high": FeatureSpec(("time", "time"), "high of the last completed local time window"),
     "window_low": FeatureSpec(("time", "time"), "low of the last completed local time window"),
+    # support and resistance levels
+    "pivot_high": FeatureSpec(
+        ("period",), "last confirmed swing high (n bars each side; known n bars later)"
+    ),
+    "pivot_low": FeatureSpec(
+        ("period",), "last confirmed swing low (n bars each side; known n bars later)"
+    ),
+    "prev_week_high": FeatureSpec((), "previous trading week's high (weeks start Sun 18:00 NY)"),
+    "prev_week_low": FeatureSpec((), "previous trading week's low"),
+    "round_above": FeatureSpec(("step",), "nearest multiple of s at or above close"),
+    "round_below": FeatureSpec(("step",), "nearest multiple of s at or below close"),
+    "prev_poc": FeatureSpec((), "previous session's volume point of control"),
+    "prev_vah": FeatureSpec((), "previous session's value area high (70% of volume)"),
+    "prev_val": FeatureSpec((), "previous session's value area low"),
 }
 
 COMPARATORS = (">=", "<=", ">", "<", "crosses_above", "crosses_below")
 MAX_PERIOD = 500
+MAX_STEP = 5000
 MAX_LAG = 500
 
 
@@ -224,7 +239,7 @@ class _Parser:
         if token_kind != "num" or not value.isdigit():
             raise RuleError(f"{name} takes a whole number")
         number = int(value)
-        limit = MAX_PERIOD if kind == "period" else 360
+        limit = {"period": MAX_PERIOD, "minutes": 360, "step": MAX_STEP}[kind]
         if not 1 <= number <= limit:
             raise RuleError(f"{name}({number}): the number must be 1 to {limit}")
         return number

@@ -162,7 +162,10 @@ class LearningSettings(BaseModel):
     round_interval_minutes: float = 15.0
     stall_limit: int = 20
     tests_per_round: int = 3
-    max_steps_per_round: int = 6
+    studies_per_round: int = 4
+    max_steps_per_round: int = 8
+    # What to research; the Learning page can override it (data/preferences.json).
+    focus: str = ""
     web_search: bool = True
     searches_per_round: int = 2
     web_search_usd: float = 0.01

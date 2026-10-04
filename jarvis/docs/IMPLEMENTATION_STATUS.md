@@ -185,6 +185,22 @@ _Last updated: 2026-10-04_
 - Not yet run against the real data API (blocked from the development
   container) — the next start on the MacBook downloads and validates it
 
+### Learning: support and resistance
+- New levels in the rule language: pivot_high/pivot_low(n) (confirmed swings,
+  no look-ahead), prev_week_high/low (trading weeks from Sunday 18:00 NY),
+  round_above/round_below(s), prev_poc/prev_vah/prev_val (previous session's
+  volume profile)
+- `study_levels`: touches of a level from the right side, held / broken /
+  undecided from the touching bar's close, by touch number and year, against
+  a matched control group with day-clustered errors; in-sample only
+- Calibrated: 100 random-walk studies give z ≈ 0 ± 1 (max 2.2); a rising
+  market shows no false support; a planted support gives z ≈ 6 (D-019)
+- Research focus (default: S/R on NQ and XAUUSD) in every briefing, editable
+  on the Learning page; studies listed there and in `learning_report`
+- Tests: new levels incl. look-ahead over two weeks, pivots, weekly levels,
+  volume profile, studies (real level, random level, trend, period limits,
+  validation), loop with studies and focus, API; E2E edits the focus
+
 ## IN PROGRESS
 - —
 

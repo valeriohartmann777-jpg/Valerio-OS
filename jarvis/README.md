@@ -84,6 +84,11 @@ replies to typed commands too, and plays a sample. Voice and model are in
    XAUUSD from Dukascopy (a few minutes). Then a research round runs every
    15 minutes until the day's $3 are used up.
 
+The research focus is support and resistance: which levels hold on NQ and
+gold (swing highs/lows, previous day and week, Asia range, opening range,
+round numbers, volume profile), measured against chance. Change the focus on
+the Learning page any time.
+
 It only learns: no broker, no orders. Budget, models, costs per trade and the
 test periods are in `config/learning.yaml`. A finding counts as validated only
 after it passed in-sample and out-of-sample; the holdout result (shown to you,

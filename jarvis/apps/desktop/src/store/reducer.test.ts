@@ -108,6 +108,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       next_round_at: null,
       round: null,
       web_search: true,
+      focus: "Support and resistance on NQ and XAUUSD.",
       counts: {},
       data: {},
     },

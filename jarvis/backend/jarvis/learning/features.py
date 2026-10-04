@@ -131,6 +131,18 @@ class FeatureFrame:
             return self.clock.weekday.astype(np.float64)
         if name in ("window_high", "window_low"):
             return self._window(args[0], args[1], high=name == "window_high")
+        if name == "pivot_high":
+            return pivots(b.high, args[0])
+        if name == "pivot_low":
+            return -pivots(-b.low, args[0])
+        if name in ("prev_week_high", "prev_week_low"):
+            return self._prev_week(high=name == "prev_week_high")
+        if name == "round_above":
+            return np.ceil(b.close / args[0]) * float(args[0])
+        if name == "round_below":
+            return np.floor(b.close / args[0]) * float(args[0])
+        if name in ("prev_poc", "prev_vah", "prev_val"):
+            return self._prev_profile(name)
         return self._session(name, args)
 
     def _session(self, name: str, args: tuple[int, ...]) -> np.ndarray:
@@ -168,6 +180,36 @@ class FeatureFrame:
                 raise KeyError(name)
         return out
 
+    def _prev_week(self, *, high: bool) -> np.ndarray:
+        """High/low of the previous trading week. Futures weeks open Sunday 18:00
+        New York, so local time is shifted by six hours before cutting weeks."""
+        out = np.full(self.n, NAN)
+        if self.n == 0:
+            return out
+        shifted_day = (self.clock.day * 1440 + self.clock.minute + 360) // 1440
+        week = (shifted_day + 3) // 7  # day 0 was a Thursday; weeks start on Monday
+        starts = np.flatnonzero(np.r_[True, week[1:] != week[:-1]])
+        source = self.bars.high if high else self.bars.low
+        levels = (np.maximum if high else np.minimum).reduceat(source, starts)
+        ends = np.r_[starts[1:], self.n]
+        for k in range(1, len(starts)):
+            out[starts[k] : ends[k]] = levels[k - 1]
+        return out
+
+    def _prev_profile(self, name: str) -> np.ndarray:
+        """Point of control and 70% value area of the previous session's volume."""
+        b = self.bars
+        out = np.full(self.n, NAN)
+        prev: tuple[float, float, float] | None = None
+        for s, e in zip(self.group_starts.tolist(), self.group_ends.tolist(), strict=True):
+            sl = slice(s, e + 1)
+            if prev is not None:
+                out[sl] = {"prev_poc": prev[0], "prev_vah": prev[1], "prev_val": prev[2]}[name]
+            prev = volume_profile(
+                (b.high[sl] + b.low[sl] + b.close[sl]) / 3.0, b.volume[sl], float(b.close[e])
+            )
+        return out
+
     def _window(self, start: int, end: int, *, high: bool) -> np.ndarray:
         """High/low of the most recent completed local time window."""
         minute = self.clock.minute
@@ -195,6 +237,59 @@ class FeatureFrame:
 
 
 # Numeric helpers ----------------------------------------------------------------------
+
+
+def pivots(high: np.ndarray, n: int) -> np.ndarray:
+    """Level of the last confirmed swing high: a bar higher than the n bars
+    before it and at least as high as the n bars after it. It is only known
+    once those n bars have closed, so the level appears n bars after the high."""
+    size = len(high)
+    out = np.full(size, NAN)
+    if size < 2 * n + 1:
+        return out
+    centre_max = rolling_max(high, 2 * n + 1)  # window ending at j + n
+    left_max = rolling_max(high, n)  # window ending at j - 1, shifted below
+    j = np.arange(n, size - n)
+    is_pivot = (high[j] >= centre_max[j + n]) & (high[j] > left_max[j - 1])
+    pivot_bars = j[is_pivot]
+    confirmed = pivot_bars + n
+    marks = np.full(size, -1, dtype=np.int64)
+    marks[confirmed] = pivot_bars
+    latest = np.maximum.accumulate(marks)
+    known = latest >= 0
+    out[known] = high[latest[known]]
+    return out
+
+
+def volume_profile(
+    price: np.ndarray, volume: np.ndarray, reference: float, share: float = 0.7
+) -> tuple[float, float, float]:
+    """(point of control, value area high, value area low) of one session.
+    Bins are 0.02% of the price wide (≈4 points on NQ, ≈0.6 on gold)."""
+    width = max(reference * 0.0002, 1e-9)
+    lowest = float(price.min())
+    index = np.floor((price - lowest) / width).astype(np.int64)
+    weights = np.where(volume > 0, volume, 0.0)
+    if weights.sum() <= 0:
+        weights = np.ones_like(price)
+    hist = np.bincount(index, weights=weights)
+    poc = int(np.argmax(hist))
+    lo = hi = poc
+    covered, total = hist[poc], hist.sum()
+    while covered < share * total and (lo > 0 or hi < len(hist) - 1):
+        below = hist[lo - 1] if lo > 0 else -1.0
+        above = hist[hi + 1] if hi < len(hist) - 1 else -1.0
+        if above >= below:
+            hi += 1
+            covered += above
+        else:
+            lo -= 1
+            covered += below
+    return (
+        lowest + (poc + 0.5) * width,
+        lowest + (hi + 1) * width,
+        lowest + lo * width,
+    )
 
 
 def _diff(a: np.ndarray, b: np.ndarray) -> np.ndarray:

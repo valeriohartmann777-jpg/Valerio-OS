@@ -160,6 +160,25 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-019 — Support/resistance studies against a matched control group
+
+- **Decision:** Level studies compare how often price "holds" at a level with
+  how often it holds at arbitrary prices touched *the same way* (same side,
+  same distance from the close, same horizon, same period and session), and
+  test the difference with errors clustered by trading day. Levels are taken
+  as known before the touching bar.
+- **Reason:** The first two designs reported edges on pure random walks
+  (z ≈ 2–10 for swing lows, previous-day lows and round numbers): shifted
+  "placebo" levels were rarely touched and sat in a different context, and the
+  coin-flip formula ignored that the touching bar closes above the level and
+  that the horizon censors outcomes. Calibrated on 100 random-walk studies,
+  the matched control gives z ≈ 0 ± 1 (max 2.2), a trending market shows no
+  false support, and a planted support shows z ≈ 6.
+- **Consequences:** An edge_z of 2 is the bar; with many studies some will
+  pass by luck, so strategies built on them are still judged out-of-sample.
+  Studies see only the in-sample years.
+- **Date:** 2026-10-04
+
 ## D-018 — Self-directed trading research: honest scoring instead of a survival drive
 
 - **Decision:** JARVIS learns scalping and day trading on NQ and XAUUSD in a

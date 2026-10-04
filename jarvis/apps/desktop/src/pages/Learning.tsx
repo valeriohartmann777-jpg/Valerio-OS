@@ -1,4 +1,11 @@
-import type { LearningNote, LearningRound, LearningStats, LearningStatus, LearningTest } from "@jarvis/protocol";
+import type {
+  LearningNote,
+  LearningRound,
+  LearningStats,
+  LearningStatus,
+  LearningStudy,
+  LearningTest,
+} from "@jarvis/protocol";
 import { useEffect, useState } from "react";
 
 import { Button, Empty, Meter, Pill, StatusDot, type Tone, cx } from "../components/ui/primitives";
@@ -31,21 +38,29 @@ export function Learning() {
   const [tests, setTests] = useState<LearningTest[]>([]);
   const [notes, setNotes] = useState<LearningNote[]>([]);
   const [rounds, setRounds] = useState<LearningRound[]>([]);
+  const [studies, setStudies] = useState<LearningStudy[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Reload the lists whenever something was recorded.
   const counts = learning?.counts ?? {};
-  const changed = `${counts.tests}-${counts.notes}-${counts.rounds}-${learning?.round}-${learning?.state}`;
+  const changed = [counts.tests, counts.notes, counts.rounds, counts.studies, learning?.round, learning?.state].join("-");
   useEffect(() => {
     let live = true;
-    void Promise.all([api.learningFindings(), api.learningTests(40), api.learningNotes(), api.learningRounds(12)]).then(
-      ([f, t, n, r]) => {
+    void Promise.all([
+      api.learningFindings(),
+      api.learningTests(40),
+      api.learningNotes(),
+      api.learningRounds(12),
+      api.learningStudies(30),
+    ]).then(
+      ([f, t, n, r, st]) => {
         if (!live) return;
         setFindings(f);
         setTests(t);
         setNotes(n);
         setRounds(r);
+        setStudies(st);
       },
       () => undefined,
     );
@@ -91,6 +106,8 @@ export function Learning() {
 
         {learning && <StatusStrip learning={learning} />}
 
+        {learning && <FocusEditor focus={learning.focus} />}
+
         <section className="mt-12">
           <h2 className="label mb-3">Validated findings</h2>
           {findings.length === 0 ? (
@@ -133,6 +150,22 @@ export function Learning() {
             )}
           </section>
         </div>
+
+        <section className="mt-12">
+          <h2 className="label mb-3">Support &amp; resistance studies · {studies.filter((x) => x.ok).length}</h2>
+          {studies.length === 0 ? (
+            <Empty>
+              Level studies measure how often a level type held compared with arbitrary prices touched the same way —
+              on the in-sample years only.
+            </Empty>
+          ) : (
+            <ul className="divide-y divide-hairline border-y border-hairline" data-testid="learning-studies">
+              {studies.map((study) => (
+                <StudyRow key={study.number} study={study} />
+              ))}
+            </ul>
+          )}
+        </section>
 
         <section className="mt-12">
           <h2 className="label mb-3">Rounds</h2>
@@ -213,10 +246,94 @@ function StatusStrip({ learning }: { learning: LearningStatus }) {
           <Count label="Passed in-sample" value={counts.in_sample_passed} />
           <Count label="Validated" value={counts.validated} strong />
           <Count label="Confirmed" value={counts.confirmed} />
+          <Count label="Level studies" value={counts.studies} />
           <Count label="Notes" value={counts.notes} />
         </dl>
       </Cell>
     </div>
+  );
+}
+
+function FocusEditor({ focus }: { focus: string }) {
+  const [text, setText] = useState(focus);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => setText(focus), [focus]);
+  const dirty = text.trim() !== focus.trim();
+
+  const save = async (value: string) => {
+    setSaving(true);
+    try {
+      await api.setLearningFocus(value);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="mt-8">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="label">Research focus</h2>
+        <span className="text-2xs text-fg-faint">{saved ? "Saved — used from the next round on" : "What JARVIS studies"}</span>
+      </div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        maxLength={1500}
+        className="selectable w-full resize-y rounded-xl border border-hairline bg-canvas-2 px-4 py-3 text-[13px] leading-relaxed text-fg outline-none focus:border-hairline-strong"
+        data-testid="learning-focus"
+      />
+      <div className="mt-2 flex justify-end gap-2">
+        <Button onClick={() => void save("")} disabled={saving} title="Back to the default from config/learning.yaml">
+          Default
+        </Button>
+        <Button variant="primary" onClick={() => void save(text)} disabled={saving || !dirty} data-testid="learning-focus-save">
+          Save focus
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function StudyRow({ study }: { study: LearningStudy }) {
+  const r = study.result;
+  const z = r.edge_z;
+  const tone: Tone = !study.ok ? "danger" : z === null ? "faint" : z >= 2 ? "success" : z <= -2 ? "warning" : "muted";
+  const verdict = !study.ok
+    ? "Invalid"
+    : z === null
+      ? "Too few touches"
+      : z >= 2
+        ? "Holds more than chance"
+        : z <= -2
+          ? "Breaks more than chance"
+          : "No edge";
+  return (
+    <li className="py-2.5">
+      <div className="flex items-baseline justify-between gap-4">
+        <div className="min-w-0 truncate text-[13px] text-fg">
+          <span className="mr-2 font-mono text-2xs text-fg-faint">S{study.number}</span>
+          {study.name}
+        </div>
+        <Pill tone={tone}>{verdict}</Pill>
+      </div>
+      <div className="mt-1 flex items-baseline justify-between gap-4 text-xs">
+        <span className="min-w-0 truncate text-fg-faint" title={study.spec.question}>
+          {[study.instrument, study.spec.timeframe, study.spec.side].filter(Boolean).join(" ")} ·{" "}
+          <span className="font-mono">{study.spec.level}</span>
+          {!study.ok && r.error && ` · ${r.error}`}
+        </span>
+        {study.ok && r.held_rate !== null && r.expected_rate !== null && (
+          <span className="shrink-0 font-mono text-fg-muted tabular" title="held vs. by chance (control group)">
+            {r.touches} touches · held {Math.round(r.held_rate * 100)}% vs {Math.round(r.expected_rate * 100)}% · z{" "}
+            {z?.toFixed(1)}
+          </span>
+        )}
+      </div>
+    </li>
   );
 }
 

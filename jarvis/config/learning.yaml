@@ -3,9 +3,10 @@
 # no access to your computer. Start and stop it on the Learning page.
 #
 # How a round works: Claude reads its notes and earlier results (optionally
-# searches the web for ideas), writes up to `tests_per_round` strategies in a
-# small rule language, JARVIS backtests them, and Claude records what it
-# learned. Only results that hold up on data Claude never tuned on count.
+# searches the web for ideas), measures how support and resistance behave
+# (level studies), writes up to `tests_per_round` strategies in a small rule
+# language, JARVIS backtests them, and Claude records what it learned. Only
+# results that hold up on data Claude never tuned on count.
 
 model: claude-opus-5-5
 effort: medium
@@ -17,7 +18,20 @@ round_interval_minutes: 15
 # Learning stops itself after this many rounds without a new validated finding.
 stall_limit: 20
 tests_per_round: 3
-max_steps_per_round: 6
+studies_per_round: 4      # level studies (support/resistance), in-sample only
+max_steps_per_round: 8
+
+# What to research. The Learning page can change it without editing this file.
+focus: >-
+  Support and resistance on NQ and XAUUSD. Find out which levels actually
+  hold: swing pivots, the previous day's and week's high and low, the
+  overnight / Asia range, the opening range, round numbers, the previous
+  session's point of control and value area, VWAP. How does price react on
+  the first touch versus later touches, in which session (London, New York
+  open, afternoon), and when does a level break instead of holding? Measure
+  with level studies first, then turn what is robust into strategies —
+  bounces and breakouts — for scalping and day trading, separately for each
+  market.
 
 web_search: true          # Claude's web search for ideas; turns itself off if the key can't use it
 searches_per_round: 2

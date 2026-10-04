@@ -231,6 +231,11 @@ try {
     await page.getByTestId("learning-state").filter({ hasText: "Off" }).waitFor();
     await page.getByTestId("learning-budget").filter({ hasText: "$0.00 / $3.00" }).waitFor();
     await page.getByTestId("learning-stall").filter({ hasText: "0 / 20 rounds" }).waitFor();
+    // The research focus starts with the default (support and resistance) and can be changed.
+    assert.match(await page.getByTestId("learning-focus").inputValue(), /^Support and resistance on NQ/);
+    await page.getByTestId("learning-focus").fill("Gold: does the Asia range hold at the London open?");
+    await page.getByTestId("learning-focus-save").click();
+    await page.getByText("Saved — used from the next round on").waitFor();
     await page.getByTestId("learning-toggle").click();
     await page.getByTestId("learning-state").filter({ hasText: "Needs Claude" }).waitFor();
     await page.getByText("Connect Claude under Settings").waitFor();

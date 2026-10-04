@@ -415,3 +415,65 @@ async def test_jarvis_can_report_what_it_learned(tmp_path: Path) -> None:
         assert note == {"note": "N1", "topic": "Morning drift", "text": "It holds."}
     finally:
         await rt.stop()
+
+
+STUDY = {
+    "name": "Morning low",
+    "question": "Does the 10:00 low hold?",
+    "instrument": "NQ",
+    "timeframe": "5m",
+    "session": {"start": "09:30", "end": "16:00"},
+    "level": "session_low",
+    "side": "support",
+}
+
+
+async def test_level_studies_are_run_recorded_and_briefed(harness: Harness) -> None:
+    service = await harness.start(
+        [
+            call("study_levels", STUDY, "toolu_s1"),
+            call("study_levels", {**STUDY, "level": "nonsense(3)"}, "toolu_s2"),
+            finish("Studied the morning low.", "Try prev_low next."),
+            finish("second"),
+        ],
+        round_interval_minutes=0.0,
+        stall_limit=2,
+    )
+    await harness.service.set_focus("  Gold   round numbers only  ")  # type: ignore[union-attr]
+    await service.enable()
+    await eventually(state_is(service, LearningState.STALLED), seconds=10)
+
+    [good] = harness.tool_results(1)[:1]
+    body = json.loads(good["content"])
+    assert body["study"] == "S1" and body["touches"] > 0 and "edge_z" in body
+    bad = harness.tool_results(2)[0]
+    assert bad["is_error"] and "unknown feature 'nonsense'" in bad["content"]
+
+    studies = await harness.journal.studies()
+    assert [s["number"] for s in studies] == [2, 1] and studies[1]["ok"]
+    assert service.status.counts["studies"] == 1
+
+    first, second = harness.briefing(0), harness.briefing(3)
+    assert "Research focus (set by the user): Gold round numbers only" in first
+    assert "Recent level studies (oldest first, in-sample):\n(none yet)" in first
+    assert '"study":"S1"' in second and '"held_rate"' in second
+    assert "up to 4 level studies" in first
+
+
+async def test_focus_defaults_to_the_config_and_can_be_reset(harness: Harness) -> None:
+    service = await harness.start(None)
+    assert service.focus.startswith("Support and resistance on NQ and XAUUSD")
+    await service.set_focus("Only scalping")
+    assert service.status.focus == "Only scalping"
+    await service.set_focus("   ")
+    assert service.focus.startswith("Support and resistance")
+
+
+def test_focus_and_studies_api(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    runtime = Runtime(settings, research_model=lambda: None, market=FakeMarket(TRENDING))
+    with TestClient(create_app(runtime=runtime)) as client:
+        assert client.get("/learning").json()["focus"].startswith("Support and resistance")
+        changed = client.post("/learning/focus", json={"text": "Gold Asia range"}).json()
+        assert changed["focus"] == "Gold Asia range"
+        assert client.get("/learning/studies").json() == []

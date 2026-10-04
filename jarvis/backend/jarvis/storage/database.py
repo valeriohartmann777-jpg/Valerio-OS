@@ -120,6 +120,22 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # 4: level studies (how support and resistance behave, in-sample)
+    [
+        """
+        CREATE TABLE learning_studies (
+            id          TEXT PRIMARY KEY,
+            number      INTEGER NOT NULL UNIQUE,
+            round_id    TEXT,
+            created_at  TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            instrument  TEXT,
+            ok          INTEGER NOT NULL,
+            spec        TEXT NOT NULL,
+            result      TEXT NOT NULL
+        )
+        """,
+    ],
 ]
 
 

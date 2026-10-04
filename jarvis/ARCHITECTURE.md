@@ -455,8 +455,8 @@ Home hierarchy: 1 JARVIS Core → 2 active mission → 3 command bar →
 
 `backend/jarvis/learning/` — a background loop (`LearningService`) in which
 Claude researches scalping and day trading on NQ and XAUUSD. It only learns:
-the research model's tools are `run_backtest`, `write_note`, `finish_round`
-and Anthropic's web search — nothing that touches the computer or a broker.
+the research model's tools are `study_levels`, `run_backtest`, `write_note`,
+`finish_round` and Anthropic's web search — nothing that touches the computer or a broker.
 
 ```
 market.py    Dukascopy data API (jetta.dukascopy.com/v1) minute candles → validated,
@@ -465,11 +465,15 @@ strategy.py  JSON strategy + rule parser ("close crosses_above or_high(15)")
 features.py  numpy evaluation, no look-ahead (tested by truncation)
 backtest.py  next-bar entries, stop-first, gaps, costs → trades, stats in R
 evaluate.py  in-sample → out-of-sample (Bonferroni bar) → holdout
+levels.py    support/resistance studies: touches vs. a matched control (in-sample)
 journal.py   SQLite: learning_rounds, learning_tests, learning_notes
 prompt.py    system prompt (method, rule language), per-round briefing
 service.py   loop: data → budget/stall checks → round → wait
 ```
 
+- **Focus:** a research focus (default in `config/learning.yaml`: support
+  and resistance on NQ and XAUUSD) heads every briefing; the Learning page
+  can change it (`learning.focus` in preferences).
 - **What the model sees:** in-sample statistics, out-of-sample pass/fail and
   the reason, its own notes, validated findings. Never out-of-sample numbers,
   never the holdout (`journal.prompt_tests`, `validated_for_prompt`).

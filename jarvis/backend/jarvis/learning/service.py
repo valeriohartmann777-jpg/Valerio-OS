@@ -35,6 +35,7 @@ from jarvis.events.bus import EventBus
 from jarvis.events.types import Event, EventType, Severity
 from jarvis.learning.evaluate import Outcome, evaluate, t_required
 from jarvis.learning.journal import LearningJournal
+from jarvis.learning.levels import LevelStudy, run_study
 from jarvis.learning.market import Bars, DataError, Instrument, MarketData
 from jarvis.learning.prompt import SYSTEM_PROMPT, TOOLS, briefing
 from jarvis.learning.strategy import Strategy
@@ -47,6 +48,8 @@ log = logging.getLogger("jarvis.learning")
 
 ENABLED = "learning.enabled"
 STALL_SINCE = "learning.stall_since"
+FOCUS = "learning.focus"
+MAX_FOCUS = 1500
 _RETRYABLE = {"rate_limited", "overloaded", "timeout", "connection", "server_error"}
 _SYNC_EVERY = 12 * 3600
 _NOTE_REF = re.compile(r"^[Nn]?(\d+)$")
@@ -99,6 +102,7 @@ class LearningStatus:
     next_round_at: str | None
     round: int | None
     web_search: bool
+    focus: str = ""
     counts: dict[str, int] = field(default_factory=dict)
     data: dict[str, dict[str, Any]] = field(default_factory=dict)
 
@@ -156,6 +160,19 @@ class LearningService:
         return bool(self._prefs.get(ENABLED, False))
 
     @property
+    def focus(self) -> str:
+        """What to research: the user's text from the Learning page, else the config's."""
+        chosen = self._prefs.get(FOCUS)
+        return str(chosen) if isinstance(chosen, str) else self._settings.focus.strip()
+
+    async def set_focus(self, text: str) -> LearningStatus:
+        """Empty text goes back to the default from config/learning.yaml."""
+        clean = " ".join(text.split())[:MAX_FOCUS]
+        self._prefs.update(**{FOCUS: clean or None})
+        await self._emit("Research focus changed", Severity.INFO)
+        return self.status
+
+    @property
     def status(self) -> LearningStatus:
         return LearningStatus(
             state=self._state,
@@ -170,6 +187,7 @@ class LearningService:
             next_round_at=self._next_round_at,
             round=self._round,
             web_search=self._web_search,
+            focus=self.focus,
             counts=dict(self._counts),
             data=dict(self._coverage),
         )
@@ -420,7 +438,7 @@ class LearningService:
         self._round = number
         await self._set(LearningState.RUNNING, f"Round {number}: reading notes and results")
         messages: list[Any] = [model.user_message([await self._briefing(number)])]
-        tests = validated = searches = 0
+        tests = validated = searches = studies = 0
         summary = focus = ""
         try:
             for _ in range(self._settings.max_steps_per_round):
@@ -469,6 +487,22 @@ class LearningService:
                         text, ok, passed = await self._backtest(call.input, round_id)
                         validated += passed
                         outcomes.append(ToolOutcome(call.id, text, is_error=not ok))
+                    elif call.name == "study_levels":
+                        if studies >= self._settings.studies_per_round:
+                            outcomes.append(
+                                ToolOutcome(
+                                    call.id,
+                                    "This round's level studies are used up.",
+                                    is_error=True,
+                                )
+                            )
+                            continue
+                        studies += 1
+                        await self._set(
+                            LearningState.RUNNING, f"Round {number}: level study {studies}"
+                        )
+                        text, ok = await self._study(call.input, round_id)
+                        outcomes.append(ToolOutcome(call.id, text, is_error=not ok))
                     elif call.name == "write_note":
                         text, ok = await self._note(call.input, round_id)
                         outcomes.append(ToolOutcome(call.id, text, is_error=not ok))
@@ -493,8 +527,9 @@ class LearningService:
         await self._journal.finish_round(round_id, "completed", summary=summary, next_focus=focus)
         await self._refresh()
         found = f", {validated} validated" if validated else ""
+        studied = f"{studies} level stud{'ies' if studies != 1 else 'y'}, " if studies else ""
         await self._emit(
-            f"Learning round {number}: {tests} test{'s' * (tests != 1)}{found}"
+            f"Learning round {number}: {studied}{tests} test{'s' * (tests != 1)}{found}"
             + (f" — {summary}" if summary else ""),
             Severity.INFO,
         )
@@ -542,6 +577,9 @@ class LearningService:
             focus=await self._journal.last_focus(),
             tests_per_round=self._settings.tests_per_round,
             searches=self._settings.searches_per_round if self._web_search else 0,
+            research_focus=self.focus,
+            studies=await self._journal.prompt_studies(15),
+            studies_per_round=self._settings.studies_per_round,
         )
 
     async def _backtest(self, raw: dict[str, Any], round_id: str) -> tuple[str, bool, int]:
@@ -585,6 +623,36 @@ class LearningService:
         if outcome.skipped_small_stop:
             result["signals_skipped_for_tiny_stops"] = outcome.skipped_small_stop
         return json.dumps(result), True, int(outcome.status == "validated")
+
+    async def _study(self, raw: dict[str, Any], round_id: str) -> tuple[str, bool]:
+        name = str(raw.get("name") or "unnamed")[:80]
+        stored = raw if len(json.dumps(raw)) <= 8000 else {"name": name, "truncated": True}
+        try:
+            study = LevelStudy.model_validate(raw)
+        except ValidationError as exc:
+            reason = _validation_message(exc)
+            number = await self._journal.add_study(
+                round_id, name, stored, {"error": reason}, ok=False
+            )
+            return f"S{number} is not a valid study: {reason}", False
+        bars = await self._minute_bars(study.instrument)
+        result = await asyncio.to_thread(
+            run_study, study, bars, self._settings.data_start, self._settings.oos_start
+        )
+        number = await self._journal.add_study(
+            round_id, study.name, study.model_dump(mode="json", exclude_none=True), result
+        )
+        held, chance, z = result["held_rate"], result["expected_rate"], result["edge_z"]
+        summary = (
+            f"held {held:.0%} vs {chance:.0%} by chance (z {z:+.1f})"
+            if held is not None and chance is not None and z is not None
+            else "too few touches to judge"
+        )
+        await self._emit(
+            f"S{number} {study.name} ({study.instrument} {study.side}): "
+            f"{result['touches']} touches, {summary}"
+        )
+        return json.dumps({"study": f"S{number}", **result}), True
 
     async def _note(self, raw: dict[str, Any], round_id: str) -> tuple[str, bool]:
         topic = str(raw.get("topic") or "").strip()[:60]

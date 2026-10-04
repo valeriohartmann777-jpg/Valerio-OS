@@ -14,11 +14,14 @@ from jarvis.learning.evaluate import evaluate, t_required
 from jarvis.learning.features import (
     FeatureFrame,
     ewm,
+    pivots,
     rolling_max,
     rolling_mean,
     rolling_std,
     rsi,
+    volume_profile,
 )
+from jarvis.learning.levels import LevelStudy, run_study
 from jarvis.learning.market import Bars
 from jarvis.learning.strategy import (
     FEATURES,
@@ -133,19 +136,21 @@ def test_ema_and_rsi_follow_their_definitions() -> None:
 @pytest.mark.parametrize("minute", [37, 600, 1200])  # in a window, a session, a window
 def test_no_feature_looks_ahead(minute: int) -> None:
     """A value at bar i may not change when later bars are added."""
-    days = weekdays(date(2024, 3, 4), date(2024, 3, 8))
+    days = weekdays(date(2024, 2, 26), date(2024, 3, 8))  # two weeks
     bars = session_bars(days, start="00:00", end="23:59")
-    cut = 3 * 1439 + minute  # on the fourth day
+    cut = 7 * 1439 + minute  # on the second Wednesday
     session = Session(start="09:30", end="16:00")
     full = FeatureFrame(bars, session)
     part = FeatureFrame(bars.between(0, int(bars.t[cut])), session)
-    args = {"period": 14, "minutes": 30, "time": 0}
+    args = {"period": 14, "minutes": 30, "time": 0, "step": 25}
     for name, spec in FEATURES.items():
         values = tuple(args[kind] for kind in spec.args)
         if name.startswith("window_"):
             values = (19 * 60, 3 * 60)
         a, b = full.feature(name, values)[:cut], part.feature(name, values)
         assert np.allclose(a, b, equal_nan=True), name
+        if name in ("pivot_high", "prev_week_low", "prev_poc", "round_above"):
+            assert np.isfinite(a).any(), name  # the check isn't vacuous
 
 
 def test_session_features() -> None:
@@ -165,6 +170,117 @@ def test_session_features() -> None:
     assert vwap[2] == pytest.approx((typical * volume).sum() / volume.sum())
     assert frame.feature("minutes")[second[0]] == 1.0
     assert frame.feature("weekday")[second[0]] == 1.0  # Tuesday
+
+
+def test_pivots_appear_once_confirmed() -> None:
+    high = np.array([1, 2, 3, 9, 4, 3, 2, 5, 6, 4, 3, 2], dtype=np.float64)
+    levels = pivots(high, 2)
+    # The 9 at bar 3 is a swing high once bars 4 and 5 have closed.
+    assert np.isnan(levels[:5]).all() and levels[5] == 9
+    # The 6 at bar 8 is confirmed at bar 10.
+    assert levels[9] == 9 and levels[10] == 6 and levels[11] == 6
+    flat = np.array([5, 5, 5, 5, 5, 5, 5], dtype=np.float64)
+    assert np.isnan(pivots(flat, 2)).all()  # a plateau is not a swing
+
+
+def test_weekly_levels_round_numbers_and_profile() -> None:
+    days = weekdays(date(2024, 3, 4), date(2024, 3, 15))
+    bars = session_bars(days, noise=2.0)
+    frame = FeatureFrame(bars, RTH)
+    week_two = bars.t >= int(datetime(2024, 3, 11, tzinfo=NY).timestamp())
+    first_week = ~week_two
+    prev_high = frame.feature("prev_week_high")
+    assert np.isnan(prev_high[first_week]).all()
+    assert (prev_high[week_two] == bars.high[first_week].max()).all()
+    above, below = frame.feature("round_above", (25,)), frame.feature("round_below", (25,))
+    assert (above % 25 == 0).all() and (below % 25 == 0).all()
+    assert (below <= bars.close).all() and (bars.close <= above).all()
+
+    price = np.array([100.0] * 10 + [101.0] * 3 + [99.0] * 2 + [104.0])
+    poc, vah, val = volume_profile(price, np.ones(len(price)), 100.0)
+    assert 100.0 <= poc < 100.03
+    assert val <= poc <= vah and vah >= 101.0 and vah < 104.0  # 70% of the volume, no tail
+
+
+# Level studies ------------------------------------------------------------------------
+
+
+def _bouncing(days: list[date], seed: int) -> Bars:
+    """Every morning price drops 30 points below the open and bounces: a real
+    support at session_open - 30, in an otherwise random market."""
+
+    def path(_: int, minute: int) -> float:
+        if minute < 20:
+            return -1.5
+        if minute < 40:
+            return 1.5
+        return 0.0
+
+    return session_bars(days, path=path, noise=1.0, seed=seed)
+
+
+def _study(**overrides: Any) -> LevelStudy:
+    spec: dict[str, Any] = {
+        "name": "fixed support",
+        "question": "does the morning low hold?",
+        "instrument": "NQ",
+        "timeframe": "1m",
+        "session": {"start": "09:30", "end": "16:00"},
+        "level": "session_open - 30",
+        "side": "support",
+        "tolerance": "2",
+        "hold": "10",
+        "breach": "5",
+        "horizon_minutes": 60,
+    }
+    spec.update(overrides)
+    return LevelStudy.model_validate(spec)
+
+
+def test_a_real_level_beats_its_placebo() -> None:
+    days = weekdays(date(2024, 1, 2), date(2024, 3, 29))
+    result = run_study(_study(), _bouncing(days, seed=4), date(2024, 1, 1), date(2024, 4, 1))
+    assert result["touches"] >= 50
+    assert result["held_rate"] > 0.7 and result["expected_rate"] < 0.5
+    assert result["edge_z"] is not None and result["edge_z"] > 3
+    assert result["by_touch"]["first"]["decided"] >= 40
+    assert set(result["by_year"]) == {"2024"}
+
+
+def test_an_arbitrary_level_shows_no_edge() -> None:
+    days = weekdays(date(2024, 1, 2), date(2024, 6, 28))
+    noise = session_bars(days, noise=1.0, seed=11)
+    study = _study(level="pivot_low(10)", tolerance="0.5", hold="6", breach="3")
+    result = run_study(study, noise, date(2024, 1, 1), date(2024, 7, 1))
+    assert result["touches"] > 200
+    assert abs(result["edge_z"]) < 3  # random walks have no support
+
+
+@pytest.mark.parametrize("seed", [21, 22, 23])
+def test_a_trend_doesnt_make_support(seed: int) -> None:
+    """In a rising random market every support seems to hold — the control
+    group rises too, so no edge is reported."""
+    days = weekdays(date(2024, 1, 2), date(2024, 6, 28))
+    rising = session_bars(days, noise=1.0, seed=seed, path=lambda _d, _m: 0.05)
+    study = _study(level="pivot_low(10)", tolerance="2", hold="10", breach="5")
+    result = run_study(study, rising, date(2024, 1, 1), date(2024, 7, 1))
+    assert result["held_rate"] > 0.5  # it does look like support …
+    assert abs(result["edge_z"]) < 2.5  # … but no more than any price
+
+
+def test_studies_only_see_the_period_they_are_given() -> None:
+    days = weekdays(date(2024, 1, 2), date(2024, 3, 29))
+    bars = _bouncing(days, seed=4)
+    january = run_study(_study(), bars, date(2024, 1, 1), date(2024, 2, 1))
+    everything = run_study(_study(), bars, date(2024, 1, 1), date(2024, 4, 1))
+    assert 0 < january["touches"] < everything["touches"] / 2
+
+
+def test_bad_studies_are_explained() -> None:
+    with pytest.raises(ValidationError, match="unknown feature"):
+        _study(level="magic_level")
+    with pytest.raises(ValidationError, match="side"):
+        _study(side="sideways")
 
 
 # Backtest -----------------------------------------------------------------------------
