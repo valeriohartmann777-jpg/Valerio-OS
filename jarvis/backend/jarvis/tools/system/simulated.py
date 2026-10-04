@@ -12,13 +12,19 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import replace
+from pathlib import PureWindowsPath
+from urllib.parse import urlsplit
 
 from jarvis.settings import AppCatalogSettings
 from jarvis.tools.system.backend import (
+    ActionError,
     EnvironmentSnapshot,
     LaunchError,
+    MediaCommand,
+    PlayerState,
     ProcessInfo,
     SystemBackend,
+    VolumeState,
     WindowInfo,
 )
 
@@ -27,6 +33,20 @@ _SIMULATED_ENV = {
     "LOCALAPPDATA": r"C:\Users\user\AppData\Local",
     "APPDATA": r"C:\Users\user\AppData\Roaming",
     "ProgramFiles": r"C:\Program Files",
+}
+
+
+# Which simulated app shows a document, by extension (folders open in Explorer).
+_VIEWERS = {
+    ".txt": "notepad.exe",
+    ".md": "notepad.exe",
+    ".csv": "notepad.exe",
+    ".log": "notepad.exe",
+    ".json": "notepad.exe",
+    ".pdf": "msedge.exe",
+    ".jpg": "photos.exe",
+    ".jpeg": "photos.exe",
+    ".png": "photos.exe",
 }
 
 
@@ -60,6 +80,13 @@ class SimulatedSystemBackend(SystemBackend):
             )
         ]
         self._pending: set[asyncio.Task[None]] = set()
+        self._hidden: list[WindowInfo] = []
+        # Test hook: apps that keep running when asked to quit ("save changes?").
+        self.refuse_quit: set[str] = set()
+        self._volume = VolumeState(level=40, muted=False)
+        self._playlist = [("Midnight City", "M83"), ("Intro", "The xx"), ("Nightcall", "Kavinsky")]
+        self._track = 0
+        self._playing = True
 
     async def snapshot(self) -> EnvironmentSnapshot:
         processes = tuple(ProcessInfo(pid=pid, name=name) for pid, name in self._processes.items())
@@ -79,6 +106,70 @@ class SimulatedSystemBackend(SystemBackend):
         task = asyncio.create_task(self._start(*installed))
         self._pending.add(task)
         task.add_done_callback(self._pending.discard)
+
+    async def open_location(self, location: str) -> None:
+        if "://" in location:
+            host = urlsplit(location).hostname or location
+            target = ("msedge.exe", f"{host} - Microsoft Edge")
+        else:
+            path = PureWindowsPath(location)
+            app = _VIEWERS.get(path.suffix.lower(), "explorer.exe")
+            target = (app, f"{path.name} - {app.removesuffix('.exe').capitalize()}")
+        task = asyncio.create_task(self._start(*target))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def hide_app(self, processes: frozenset[str]) -> int:
+        hidden = [w for w in self._windows if w.process_name in processes]
+        if not hidden:
+            raise ActionError("not_running", "That application has no open windows (simulated).")
+        self._hidden.extend(hidden)
+        self._windows = [w for w in self._windows if w.process_name not in processes]
+        self._focus_last()
+        return len(hidden)
+
+    async def quit_app(self, processes: frozenset[str]) -> int:
+        pids = [pid for pid, name in self._processes.items() if name in processes]
+        if not pids:
+            raise ActionError("not_running", "That application isn't running (simulated).")
+        if self.refuse_quit & processes:  # models an app asking to save first
+            return len(pids)
+        self._windows = [w for w in self._windows if w.process_name not in processes]
+        self._hidden = [w for w in self._hidden if w.process_name not in processes]
+        self._processes = {p: n for p, n in self._processes.items() if n not in processes}
+        self._focus_last()
+        return len(pids)
+
+    async def volume(self) -> VolumeState:
+        return self._volume
+
+    async def set_volume(self, *, level: int | None = None, muted: bool | None = None) -> None:
+        self._volume = VolumeState(
+            level=self._volume.level if level is None else max(0, min(100, level)),
+            muted=self._volume.muted if muted is None else muted,
+        )
+
+    async def player(self) -> PlayerState | None:
+        if "spotify.exe" not in self._processes.values():
+            return None
+        track, artist = self._playlist[self._track]
+        return PlayerState(
+            "Spotify", "spotify.exe", "playing" if self._playing else "paused", track, artist
+        )
+
+    async def media(self, command: MediaCommand, player: PlayerState | None) -> None:
+        if player is None:
+            raise ActionError("no_player", "No music app is running (simulated).")
+        if command in ("next", "previous"):
+            step = 1 if command == "next" else -1
+            self._track = (self._track + step) % len(self._playlist)
+            self._playing = True
+        else:
+            self._playing = {"play": True, "pause": False}.get(command, not self._playing)
+
+    def _focus_last(self) -> None:
+        if self._windows and not any(w.is_foreground for w in self._windows):
+            self._windows[-1] = replace(self._windows[-1], is_foreground=True)
 
     async def _start(self, process_name: str, title: str) -> None:
         await asyncio.sleep(self._latency)

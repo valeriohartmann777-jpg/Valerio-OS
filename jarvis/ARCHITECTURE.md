@@ -246,10 +246,33 @@ permission gate → emit `tool.started` → execute with timeout → emit
 errors with a user-facing message and a suggestion. Developer detail goes to
 the JSON log.
 
-Phase 1 tools: `get_system_info` (L0), `get_active_window` (L0),
-`list_running_apps` (L0), `open_application` (L1, target-dependent — see §9).
+| Group | Tools (level) | Verified by |
+|---|---|---|
+| System | `get_system_info`, `get_active_window`, `list_running_apps` (L0); `open_application` (L1, target-dependent — §9); `hide_application` (L1); `quit_application` (L2) | windows / processes re-observed |
+| Web | `open_url`, `search_web` (L1; local-network URLs L2) | a browser window in front |
+| Files | `find_files`, `list_folder`, `read_file` (L0); `open_file` (L1, unknown types L2) | a window showing the file / its app |
+| Media | `get_volume`, `now_playing` (L0); `set_volume`, `media_control` (L1) | volume / player state read back |
+
 Unknown applications: Windows L2 (Windows decides what an executable name
-runs); macOS L1 (only installed `.app` bundles can be launched).
+runs); macOS L1 (only installed `.app` bundles can be launched). Every tool
+the model can call must be in the Operator's `available_tools`
+(`agents/catalog.py`) — a test fails when they drift apart.
+
+**Files** (`tools/files.py`): `FileAccess.check` resolves every path (`~`,
+`..`, symlinks) and requires it to lie inside a root from
+`config/files.yaml` (Desktop, Documents, Downloads by default); hidden files
+and blocked patterns (`.env`, keys, password files — accent-insensitive) are
+refused. `read_file` extracts text from plain text, PDF (`pypdf`), Word/RTF
+(`textutil` on macOS, a `.docx` reader elsewhere) and cuts it at
+`max_read_chars`. `open_file` never opens programs or scripts (by extension
+or executable bit).
+
+**Exposure rule** (`ToolExecutor`): a tool with `reads_private_data`
+(`read_file`) adds the item to `TraceContext.exposed`, a set shared by every
+context derived from one request. A tool with `sends_data_out` (`open_url`,
+`search_web`) is raised to level 2 while that set is non-empty, and the
+approval card says why. Text inside a file can therefore never silently make
+JARVIS carry the file's content to a website.
 
 ### System backends
 
@@ -265,7 +288,16 @@ runs); macOS L1 (only installed `.app` bundles can be launched).
   executable lives inside its `.app` bundle (outermost bundle wins, so helper
   processes count). Only bundles from the standard application folders are
   launched. No privacy permission required; window titles of other apps need
-  Screen Recording, otherwise the app name is used.
+  Screen Recording, otherwise the app name is used. `open <url|path>` for web
+  pages and documents; `NSRunningApplication` (AppKit) to hide/quit apps — the
+  Dock's own mechanism, no permission prompt; volume via `osascript` (`set
+  volume`, no permission); Spotify / Apple Music via AppleScript, which macOS
+  asks the user to allow once (Automation). Only players that are already
+  running are addressed.
+- Windows (same class as above): `ShellExecute` for URLs/documents,
+  `ShowWindow(SW_MINIMIZE)` and `WM_CLOSE` for hide/quit, volume and media
+  keys via `keybd_event` — the level and player state can't be read there, so
+  those results are reported as unverifiable instead of verified.
 - **`SimulatedSystemBackend`** — **MOCK**, clearly labelled in code, API and UI
   (`simulated: true`, "SIMULATED" badge). In-memory Windows-style desktop with
   realistic launch latency. Used automatically on other hosts and in tests.
@@ -315,10 +347,14 @@ Unanswered requests expire (default 5 min) and count as rejected.
   `localhost`. (A per-session token is planned when remote/mobile clients arrive.)
 - **Electron hardening.** `contextIsolation`, `sandbox`, no `nodeIntegration`,
   strict CSP, custom `app://` protocol instead of `file://`, minimal preload.
-- **Untrusted content (planned with Phase 3+).** Web pages, documents, tool
-  output and screenshots are data, never instructions. Model prompts will wrap
-  them in explicit untrusted-content envelopes, and tool calls are authorized
-  by user intent + policy, never by text inside content.
+- **Untrusted content.** Window titles, file contents and tool output are data,
+  never instructions: the system prompt says so, `read_file` results carry a
+  note, and tool calls are authorized by user intent + policy, never by text
+  inside content. After private data was read in a request, anything that can
+  send data out needs approval (exposure rule, §8).
+- **File allowlist.** File tools see only the configured roots; paths are
+  resolved before checking, so `..` and symlinks can't escape; keys, `.env`,
+  password files and hidden files are never read or opened.
 - **Audit log.** Every tool execution (incl. denied/rejected) is persisted with
   trace id, mission, agent, tool, redacted argument summary, permission level,
   approval outcome and result. Secrets are redacted by key name.

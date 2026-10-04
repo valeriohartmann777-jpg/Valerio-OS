@@ -20,21 +20,30 @@ the Quartz call itself is exercised by the test-suite on any OS.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import psutil
 
 from jarvis.tools.system.backend import (
+    ActionError,
     EnvironmentSnapshot,
     LaunchError,
+    MediaCommand,
+    PlayerState,
     ProcessInfo,
     SystemBackend,
+    VolumeState,
     WindowInfo,
+    unsupported,
 )
+from jarvis.tools.system.macos_audio import PLAYERS, MacAudio
+
+log = logging.getLogger("jarvis.tools")
 
 WindowSource = Callable[[], list[dict[str, Any]]]
 
@@ -164,6 +173,55 @@ def _key_for_pid(pid: int) -> str | None:
         return None
 
 
+def is_main_executable(executable: str) -> bool:
+    """``…/Spotify.app/Contents/MacOS/Spotify`` yes; helpers inside the bundle no."""
+    marker = executable.find(".app/")
+    if marker == -1:
+        return False
+    rest = executable[marker + 5 :]
+    return rest.startswith("Contents/MacOS/") and "/" not in rest[len("Contents/MacOS/") :]
+
+
+def _main_pids(processes: frozenset[str]) -> list[int]:
+    pids = []
+    for proc in psutil.process_iter(["pid", "exe"]):
+        executable = proc.info.get("exe") or ""
+        if bundle_key(executable) in processes and is_main_executable(executable):
+            pids.append(int(proc.info["pid"]))
+    return pids
+
+
+class AppControl(Protocol):
+    def hide(self, pid: int) -> bool: ...
+    def terminate(self, pid: int) -> bool: ...
+
+
+class AppKitControl:
+    """``NSRunningApplication`` — the Dock's own way to hide and quit apps.
+    Needs no privacy permission (unlike AppleScript or Accessibility)."""
+
+    def __init__(self) -> None:
+        from AppKit import NSRunningApplication  # part of pyobjc (Quartz depends on it)
+
+        self._lookup = NSRunningApplication.runningApplicationWithProcessIdentifier_
+
+    def hide(self, pid: int) -> bool:
+        app = self._lookup(pid)
+        return bool(app is not None and app.hide())
+
+    def terminate(self, pid: int) -> bool:
+        app = self._lookup(pid)
+        return bool(app is not None and app.terminate())
+
+
+def _appkit_control() -> AppControl | None:
+    try:
+        return AppKitControl()
+    except Exception:  # pyobjc without AppKit: everything else still works
+        log.warning("AppKit unavailable — hiding and quitting apps is disabled", exc_info=True)
+        return None
+
+
 class MacOSSystemBackend(SystemBackend):
     name = "macos"
     simulated = False
@@ -174,10 +232,17 @@ class MacOSSystemBackend(SystemBackend):
         app_index: AppIndex | None = None,
         window_source: WindowSource | None = None,
         opener: str = "/usr/bin/open",
+        app_control: AppControl | None = None,
+        main_pids: Callable[[frozenset[str]], list[int]] = _main_pids,
+        audio: MacAudio | None = None,
     ) -> None:
         self._index = app_index or AppIndex()
         self._window_source = window_source or QuartzWindowSource()
         self._opener = opener
+        # AppKit must load on the main thread, like Quartz — so here, not lazily.
+        self._control = app_control if app_control is not None else _appkit_control()
+        self._main_pids = main_pids
+        self._audio = audio or MacAudio()
 
     async def snapshot(self) -> EnvironmentSnapshot:
         return await asyncio.to_thread(self._snapshot)
@@ -219,5 +284,60 @@ class MacOSSystemBackend(SystemBackend):
             raise LaunchError(
                 "launch_failed",
                 "macOS couldn't open the application.",
+                stderr.decode(errors="replace").strip(),
+            )
+
+    async def hide_app(self, processes: frozenset[str]) -> int:
+        if self._control is None:
+            raise unsupported("Hiding applications")
+        return await asyncio.to_thread(self._each_app, processes, self._control.hide, "hide")
+
+    async def quit_app(self, processes: frozenset[str]) -> int:
+        if self._control is None:
+            raise unsupported("Quitting applications")
+        return await asyncio.to_thread(self._each_app, processes, self._control.terminate, "quit")
+
+    def _each_app(self, processes: frozenset[str], action: Callable[[int], bool], verb: str) -> int:
+        pids = self._main_pids(processes)
+        if not pids:
+            raise ActionError("not_running", "That application isn't running.")
+        accepted = sum(1 for pid in pids if action(pid))
+        if accepted == 0:
+            raise ActionError("refused", f"macOS refused to {verb} the application.")
+        return accepted
+
+    async def volume(self) -> VolumeState:
+        return await self._audio.volume()
+
+    async def set_volume(self, *, level: int | None = None, muted: bool | None = None) -> None:
+        await self._audio.set_volume(level=level, muted=muted)
+
+    async def player(self) -> PlayerState | None:
+        running = await asyncio.to_thread(
+            lambda: {key for key in PLAYERS if self._main_pids(frozenset({key}))}
+        )
+        return await self._audio.player(running)
+
+    async def media(self, command: MediaCommand, player: PlayerState | None) -> None:
+        if player is None:
+            raise ActionError("no_player", "No music app is running.")
+        await self._audio.media(command, player)
+
+    async def open_location(self, location: str) -> None:
+        # `open <url|path>` = LaunchServices default handler, like a click in Finder.
+        try:
+            process = await asyncio.create_subprocess_exec(
+                self._opener,
+                location,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError as exc:
+            raise ActionError("open_failed", "macOS couldn't open it.", str(exc)) from exc
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise ActionError(
+                "open_failed",
+                "macOS couldn't open it — no application handles this type.",
                 stderr.decode(errors="replace").strip(),
             )

@@ -62,6 +62,8 @@ export interface SettingsView {
   models: Record<string, string>;
   brain: BrainStatus;
   known_apps: string[];
+  /** Folders the file tools may see. */
+  file_roots: string[];
   config_dir: string;
   database_path: string;
 }

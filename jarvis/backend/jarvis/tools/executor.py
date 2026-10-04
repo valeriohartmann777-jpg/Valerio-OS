@@ -79,6 +79,20 @@ class ToolExecutor:
             return result
 
         action = tool.describe_action(args)
+        if tool.sends_data_out and ctx.exposed:
+            # Untrusted file content could have planted this request: whatever
+            # leaves the computer after private data was read needs a human.
+            read = ", ".join(sorted(ctx.exposed)[:3]) + (" …" if len(ctx.exposed) > 3 else "")
+            action = action.model_copy(
+                update={
+                    "level": max(action.level, PermissionLevel.MODIFICATION),
+                    "effects": [
+                        *action.effects,
+                        f"Asked because I read private data in this request ({read}); "
+                        "this address could carry some of it to the website",
+                    ],
+                }
+            )
         decision = await self._permissions.authorize(tool_name, action, reason=reason, ctx=ctx)
         if not decision.approved:
             result = ToolResult.failure(
@@ -127,6 +141,8 @@ class ToolExecutor:
                 target=action.target,
             )
         result.duration_ms = int((time.perf_counter() - started) * 1000)
+        if tool.reads_private_data and result.success:
+            ctx.exposed.add(result.target or tool_name)
         await self._finish(
             tool_name, raw_args, action.level, decision.approval_label, result, ctx, source
         )

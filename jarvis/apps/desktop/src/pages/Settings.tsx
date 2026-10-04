@@ -75,6 +75,13 @@ export function Settings() {
               <Item label="Traits">{settings.personality_traits.join(" · ")}</Item>
             </Group>
 
+            <Group title="Files">
+              <Item label="Visible folders">{settings.file_roots.join(" · ") || "—"}</Item>
+              <Item label="Never read">
+                <span className="text-fg-muted">Hidden files, keys, .env and password files</span>
+              </Item>
+            </Group>
+
             <Group title="Known applications">
               <p className="text-[13px] leading-relaxed text-fg-muted">{settings.known_apps.join(" · ")}</p>
             </Group>

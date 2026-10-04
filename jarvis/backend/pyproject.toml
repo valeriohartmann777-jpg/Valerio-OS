@@ -15,6 +15,7 @@ dependencies = [
   "aiosqlite>=0.20",
   "psutil>=6.0",
   "anthropic>=1.11",
+  "pypdf>=5.0",
   "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
 ]
 
@@ -56,5 +57,5 @@ plugins = ["pydantic.mypy"]
 warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
-module = ["aiosqlite.*", "Quartz", "Quartz.*"]
+module = ["aiosqlite.*", "Quartz", "Quartz.*", "AppKit", "AppKit.*"]
 ignore_missing_imports = true

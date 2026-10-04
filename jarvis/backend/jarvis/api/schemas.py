@@ -100,5 +100,6 @@ class SettingsView(BaseModel):
     models: dict[str, str]
     brain: BrainView
     known_apps: list[str]
+    file_roots: list[str]
     config_dir: str
     database_path: str

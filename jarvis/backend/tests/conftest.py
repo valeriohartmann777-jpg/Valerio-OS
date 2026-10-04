@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 import pytest
@@ -73,3 +74,9 @@ class Recorder:
 @pytest.fixture
 def recorder(runtime: Runtime) -> Recorder:
     return Recorder(runtime.bus)
+
+
+async def eventually(predicate: Callable[[], object], seconds: float = 3) -> None:
+    async with asyncio.timeout(seconds):
+        while not predicate():  # noqa: ASYNC110 - polling a plain condition in tests
+            await asyncio.sleep(0.01)

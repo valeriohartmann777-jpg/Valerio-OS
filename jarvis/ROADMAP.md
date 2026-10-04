@@ -40,14 +40,18 @@ docs that match reality.
 - [x] Personality-driven system prompt, working memory (recent exchanges)
 - [x] Prompt caching, refusal fallbacks, typed error handling, untrusted-data rules
 
-## Phase 2 — Real system control (next)
+## Phase 2 — Real system control (in progress)
 
-1. Dashboard polish from real-world use on Windows
-2. `get_volume` / `set_volume` (Core Audio via `pycaw`), mute
-3. Window management: focus, minimize, maximize, close (UI Automation first)
-4. `list_directory`, `read_file`, `search_files` (L0, path allowlist)
-5. Context: clipboard metadata, cursor, monitor layout, available windows list
-6. Router rules for the above; Settings page edits permission policy
+- [x] Web: `open_url`, `search_web` (browser-in-front verification)
+- [x] Files: `find_files`, `list_folder`, `read_file` (text, PDF, Word/RTF),
+      `open_file` — folder allowlist, secret patterns, programs never opened
+- [x] Windows: `hide_application`, `quit_application` (graceful, approval)
+- [x] Sound: `get_volume`, `set_volume`, `media_control`, `now_playing`
+- [x] Exposure rule: after reading private data, outbound actions need approval
+- [ ] Context: clipboard metadata, monitor layout, window list in the UI
+- [ ] Instant rules for the common ones ("lauter", "pause") without a model call
+- [ ] Settings page edits permission policy and file roots
+- [ ] JARVIS as a real Mac app (dock icon, no terminal)
 
 ## Order after the first demo
 

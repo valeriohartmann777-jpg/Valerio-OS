@@ -40,7 +40,7 @@ _PURPOSE = {
     "type": "string",
     "description": "One short sentence, shown to the user, saying what you are doing and why.",
 }
-_MAX_RESULT_CHARS = 6000
+_MAX_RESULT_CHARS = 60_000  # fits read_file's 30k characters plus JSON escaping
 
 
 @dataclass

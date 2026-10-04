@@ -7,7 +7,9 @@ starts it, and process detection goes through real psutil + bundle paths.
 
 from __future__ import annotations
 
+import os
 import shutil
+import signal
 import stat
 import subprocess
 from collections.abc import Iterator
@@ -27,8 +29,15 @@ from jarvis.settings import (
     resolve_backend,
 )
 from jarvis.tools.system.apps import AppCatalog
-from jarvis.tools.system.backend import LaunchError
-from jarvis.tools.system.macos import AppIndex, MacOSSystemBackend, bundle_key, windows_from_cg
+from jarvis.tools.system.backend import ActionError, LaunchError
+from jarvis.tools.system.control import AppNameArgs, QuitApplicationTool
+from jarvis.tools.system.macos import (
+    AppIndex,
+    MacOSSystemBackend,
+    bundle_key,
+    is_main_executable,
+    windows_from_cg,
+)
 from jarvis.tools.system.tools import OpenApplicationArgs, OpenApplicationTool
 
 SLEEP = shutil.which("sleep")
@@ -73,6 +82,19 @@ def test_windows_from_cg_filters_and_orders() -> None:
     assert windows[0].process_name == "textedit.app"
     assert windows[1].title == "Rechner"  # no Screen Recording permission → app name
     assert windows[1].process_name == "rechner"
+
+
+@pytest.mark.parametrize(
+    ("executable", "main"),
+    [
+        ("/Applications/Spotify.app/Contents/MacOS/Spotify", True),
+        ("/Applications/Spotify.app/Contents/Frameworks/Helper.app/Contents/MacOS/Helper", False),
+        ("/Applications/Spotify.app/Contents/MacOS/sub/tool", False),
+        ("/usr/bin/python3", False),
+    ],
+)
+def test_main_executable(executable: str, main: bool) -> None:
+    assert is_main_executable(executable) is main
 
 
 def test_jarvis_recognises_its_own_window() -> None:
@@ -146,6 +168,21 @@ def test_macos_catalog_understands_how_people_ask() -> None:
 # --- integration: real processes, fake window server ------------------------------
 
 
+class SignalControl:
+    """Stands in for NSRunningApplication: terminate = SIGTERM, a polite quit."""
+
+    def __init__(self) -> None:
+        self.hidden: list[int] = []
+
+    def hide(self, pid: int) -> bool:
+        self.hidden.append(pid)
+        return True
+
+    def terminate(self, pid: int) -> bool:
+        os.kill(pid, signal.SIGTERM)
+        return True
+
+
 @pytest.fixture
 def mac_env(tmp_path: Path) -> Iterator[dict[str, Any]]:
     if SLEEP is None:
@@ -183,7 +220,10 @@ def mac_env(tmp_path: Path) -> Iterator[dict[str, Any]]:
         return [*ordered, cg(1, "JARVIS")]
 
     backend = MacOSSystemBackend(
-        app_index=AppIndex([apps]), window_source=window_server, opener=str(opener)
+        app_index=AppIndex([apps]),
+        window_source=window_server,
+        opener=str(opener),
+        app_control=SignalControl(),
     )
     catalog = AppCatalog(
         AppCatalogSettings(
@@ -264,3 +304,43 @@ def test_missing_quartz_falls_back_to_simulation_with_a_reason(
         backend = create_backend(settings)
     assert backend.simulated
     assert "macOS control unavailable" in caplog.text
+
+
+async def test_quit_asks_the_main_process_and_observes_it_ending(
+    mac_env: dict[str, Any],
+) -> None:
+    backend, catalog = mac_env["backend"], mac_env["catalog"]
+    ctx = TraceContext.new()
+    opened = await OpenApplicationTool(backend, catalog, verify_timeout=5).execute(
+        OpenApplicationArgs(name="phony"), ctx
+    )
+    assert opened.success
+
+    tool = QuitApplicationTool(backend, catalog, settle=5)
+    args = AppNameArgs(name="Fake")
+    assert await tool.precheck(args, ctx) is None
+    result = await tool.execute(args, ctx)
+    assert result.success and result.data["quit"] is True
+    assert result.observed_result == "Fake has quit"
+    assert (await tool.verify(args, result, ctx)).status == "verified"
+
+    gone = await tool.precheck(args, ctx)
+    assert gone is not None and gone.code == "not_running"
+
+
+async def test_open_location_uses_open(mac_env: dict[str, Any], tmp_path: Path) -> None:
+    log = tmp_path / "opened.txt"
+    opener = tmp_path / "open-location"
+    opener.write_text(f'#!/bin/sh\necho "$@" >> {log}\n[ "$1" != "bad:" ]\n')
+    opener.chmod(0o755)
+    backend = MacOSSystemBackend(
+        app_index=AppIndex([]),
+        window_source=lambda: [],
+        opener=str(opener),
+        app_control=SignalControl(),
+    )
+    await backend.open_location("https://example.org")
+    assert log.read_text() == "https://example.org\n"
+    with pytest.raises(ActionError) as caught:
+        await backend.open_location("bad:")
+    assert caught.value.code == "open_failed"

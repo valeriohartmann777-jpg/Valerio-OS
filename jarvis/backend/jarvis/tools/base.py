@@ -97,6 +97,10 @@ class Tool[Args: BaseModel](ABC):
     permission_level: ClassVar[PermissionLevel]
     input_model: ClassVar[type[BaseModel]]
     side_effects: ClassVar[bool] = False
+    # Returns private data (file contents) — marks the request as exposed.
+    reads_private_data: ClassVar[bool] = False
+    # Can carry data off the computer (a URL) — needs approval once exposed.
+    sends_data_out: ClassVar[bool] = False
 
     def describe_action(self, args: Args) -> ActionDescriptor:
         """Describe exactly what will happen. Override for target-dependent risk."""

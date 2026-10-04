@@ -31,9 +31,14 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   missions with pause/resume/stop, Operator + Sentinel agents, tool framework,
   permission levels 0–4 with approvals, SQLite persistence, audit log,
   structured JSON logs with trace/mission ids.
-- **Real system control on Windows and macOS**: `open_application` (launch,
-  window/process observation before and after, independent verification),
-  `get_active_window`, `list_running_apps`, `get_system_info`.
+- **Real system control on Windows and macOS** — every action observed before
+  and after and verified independently:
+  - apps & windows: open (or bring to front), hide, quit (asks first), what's
+    in front, what's running, system status
+  - web: open pages, search Google / YouTube / Maps / Wikipedia
+  - files in Desktop, Documents, Downloads: find, list, read (text, PDF,
+    Word, RTF), open — never secrets, hidden files or programs
+  - sound: volume, mute, play / pause / skip in Spotify or Apple Music
   - Windows: ShellExecute, EnumWindows/DWM, UWP-aware.
   - macOS: `open -a` (LaunchServices), CGWindowList + bundle-aware process
     detection. No privacy permission needed; with Screen Recording allowed,
@@ -79,9 +84,10 @@ npm run dev
 
 `npm run dev` starts Vite and Electron; Electron starts the Python backend from
 `backend\.venv` automatically (or reuses one already running on port 8765) and
-stops it when you quit. After `git pull`, just run `npm run dev` again: a
-running JARVIS of another version hands over to the new one by itself (the
-same version only brings its window to the front).
+stops it when you quit. After `git pull`, just run `npm run dev` again: new
+dependencies are installed automatically, and a running JARVIS of another
+version hands over to the new one by itself (the same version only brings its
+window to the front).
 
 Production-style run (built renderer served over `app://`):
 
@@ -114,6 +120,12 @@ On macOS JARVIS controls the real desktop: `open textedit`, `open safari`,
 `öffne den rechner`, `open spotify`, `open terminal` (asks for approval), or any
 installed app by name. Commands: `what's the active window`, `list running apps`.
 
+macOS asks once before JARVIS may look into Desktop, Documents or Downloads
+("Terminal would like to access files…" while you run it from the terminal)
+and once before it may control Spotify or Music (Automation) — allow both.
+If you declined, JARVIS says so and points to System Settings → Privacy &
+Security.
+
 ## Tests
 
 ```bash
@@ -143,5 +155,7 @@ Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · Decisions: [DECISIONS.md](DE
 - `config/apps.windows.yaml`, `config/apps.macos.yaml` — application catalogs
   (aliases incl. German, launch targets, process names, risk level)
 - `config/personality.yaml` — tone and reply templates
-- `config/models.yaml` — provider slots for Phase 3
+- `config/models.yaml` — Claude models, effort and limits
+- `config/files.yaml` — folders the file tools may see, never-read patterns
+- `config/web.yaml` — search engines for `search_web`
 - `.env` — overrides and the Anthropic API key (written by Settings → Brain); see `.env.example`

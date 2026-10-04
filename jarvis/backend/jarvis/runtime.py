@@ -32,10 +32,13 @@ from jarvis.settings import Settings
 from jarvis.storage.audit import AuditLog
 from jarvis.storage.database import Database
 from jarvis.tools.executor import ToolExecutor
+from jarvis.tools.files import FileAccess, register_file_tools
+from jarvis.tools.media import register_media_tools
 from jarvis.tools.registry import ToolRegistry
 from jarvis.tools.system import create_backend, register_system_tools
 from jarvis.tools.system.apps import AppCatalog
 from jarvis.tools.system.backend import SystemBackend
+from jarvis.tools.web import register_web_tools
 
 log = logging.getLogger("jarvis.runtime")
 
@@ -65,6 +68,22 @@ class Runtime:
         self.backend = backend or create_backend(settings)
         self.tools = ToolRegistry()
         register_system_tools(self.tools, self.backend, self.catalog, settings)
+        register_web_tools(
+            self.tools,
+            self.backend,
+            self.catalog,
+            settings.web,
+            verify_timeout=settings.runtime.launch_verify_timeout_seconds,
+        )
+        register_media_tools(self.tools, self.backend)
+        self.files = FileAccess(settings.files)
+        register_file_tools(
+            self.tools,
+            self.files,
+            self.backend,
+            self.catalog,
+            verify_timeout=settings.runtime.launch_verify_timeout_seconds,
+        )
         self.executor = ToolExecutor(
             self.tools,
             self.permissions,

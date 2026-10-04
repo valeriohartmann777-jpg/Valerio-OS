@@ -8,6 +8,7 @@ from jarvis.settings import Settings, resolve_backend
 from jarvis.tools.registry import ToolRegistry
 from jarvis.tools.system.apps import AppCatalog
 from jarvis.tools.system.backend import SystemBackend
+from jarvis.tools.system.control import HideApplicationTool, QuitApplicationTool
 from jarvis.tools.system.tools import (
     GetActiveWindowTool,
     GetSystemInfoTool,
@@ -52,3 +53,6 @@ def register_system_tools(
             backend, catalog, verify_timeout=settings.runtime.launch_verify_timeout_seconds
         )
     )
+    settle = settings.runtime.launch_verify_timeout_seconds
+    registry.register(HideApplicationTool(backend, catalog, settle=settle))
+    registry.register(QuitApplicationTool(backend, catalog, settle=settle))

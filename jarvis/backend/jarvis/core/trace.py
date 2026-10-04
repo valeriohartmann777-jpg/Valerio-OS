@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from jarvis.util import new_id
 
@@ -12,6 +12,10 @@ class TraceContext:
     trace_id: str
     mission_id: str | None = None
     agent: str | None = None
+    # Shared by every context derived from one request: private data the request
+    # has read so far (e.g. "file ~/Documents/x.pdf"). Actions that can send data
+    # out (opening a web address) need approval once this is non-empty.
+    exposed: set[str] = field(default_factory=set, compare=False, repr=False)
 
     @classmethod
     def new(cls) -> TraceContext:

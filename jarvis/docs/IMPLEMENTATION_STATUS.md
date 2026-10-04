@@ -77,20 +77,41 @@ _Last updated: 2026-10-04_
   refused-key path
 - Live API verified on the MacBook (see above), fast and think paths
 
+### Phase 2 — real system control (first batch)
+- Web: `open_url` (http/https only, local network needs approval),
+  `search_web` (engines in `config/web.yaml`); verified by a browser in front
+- Files: `find_files`, `list_folder`, `read_file` (text, PDF via pypdf,
+  Word/RTF via textutil on macOS), `open_file` (programs refused, unknown
+  types need approval); folder allowlist with path resolution and secret
+  patterns (`config/files.yaml`)
+- Windows: `hide_application`, `quit_application` (L2, graceful; JARVIS and the
+  desktop shell protected); macOS via `NSRunningApplication`, Windows via
+  `ShowWindow` / `WM_CLOSE`
+- Sound: `get_volume`, `set_volume`, `media_control`, `now_playing` (macOS
+  `osascript`; Windows volume/media keys, reported as unverifiable)
+- Exposure rule: after `read_file`, `open_url` / `search_web` need approval
+- Operator may run every registered tool (drift test); persona and help text
+  updated; Settings shows the visible folders
+- `scripts/preflight.mjs` installs changed Python/npm dependencies on start
+- macOS folder permission (Files & Folders) denials are reported with the fix,
+  never as "no matches"
+- Tests: 189 pytest (web 16, files 18, windows 4 + macOS integration with real
+  processes, media 8, brain-level prompt-injection test), 14-step E2E
+- Not yet run on the MacBook
+
 ## IN PROGRESS
 - —
 
 ## NEXT
-0. Live: multi-app requests and an approval requested by Claude
+0. Live on the MacBook: the new tools (web, files, hide/quit, volume, music);
+   Spotify/Music control asks once for the Automation permission
 
-### Phase 2 — real system control
-1. Exercise the dashboard on the MacBook (`open safari / finder / terminal`,
-   active window, running apps); on Windows: `scripts/smoke.py notepad`
-2. Volume (`get_volume` / `set_volume`, Core Audio)
-3. Window management via UI Automation (focus / minimize / maximize / close)
-4. File tools (`list_directory`, `read_file`, `search_files`) with path allowlist
-5. Context: clipboard metadata, cursor, monitors, window list in the UI
-6. Settings page: edit permission policy
+### Phase 2 — remaining
+1. Instant rules for common commands ("lauter", "pause", "nächster Song")
+2. Context: clipboard metadata, monitors, window list in the UI
+3. Settings page: edit permission policy and file roots
+4. JARVIS as a real Mac app (dock icon, no terminal)
+5. Windows: first real run (`scripts/smoke.py notepad`)
 
 ## BLOCKED
 - Real-OS runs could not happen in the development container (Linux).

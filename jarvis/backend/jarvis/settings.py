@@ -90,6 +90,19 @@ class AppCatalogSettings(BaseModel):
     denylist: list[str] = Field(default_factory=list)
 
 
+class WebSettings(BaseModel):
+    default_search: str = "web"
+    search_engines: dict[str, str] = Field(
+        default_factory=lambda: {"web": "https://www.google.com/search?q={query}"}
+    )
+
+
+class FileSettings(BaseModel):
+    roots: list[str] = Field(default_factory=lambda: ["~/Desktop", "~/Documents", "~/Downloads"])
+    blocked: list[str] = Field(default_factory=list)
+    max_read_chars: int = 30000
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -122,6 +135,8 @@ class Settings(BaseModel):
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
     apps: AppCatalogSettings = Field(default_factory=AppCatalogSettings)
     models: ModelSettings = Field(default_factory=ModelSettings)
+    web: WebSettings = Field(default_factory=WebSettings)
+    files: FileSettings = Field(default_factory=FileSettings)
 
     @property
     def env_file(self) -> Path:
@@ -175,6 +190,8 @@ def load_settings(
     data["permissions"] = _read_yaml(config_dir / "permissions.yaml")
     data["personality"] = _read_yaml(config_dir / "personality.yaml")
     data["models"] = _read_yaml(config_dir / "models.yaml")
+    data["web"] = _read_yaml(config_dir / "web.yaml")
+    data["files"] = _read_yaml(config_dir / "files.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))

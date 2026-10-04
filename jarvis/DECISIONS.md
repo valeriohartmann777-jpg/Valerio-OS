@@ -160,6 +160,33 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-015 — Phase 2 tools: permission-free OS paths, folder allowlist, exposure rule
+
+- **Decision:** Web, file, window and sound tools use only mechanisms that
+  need no macOS privacy permission where one exists (`open`,
+  `NSRunningApplication`, `set volume`); music control uses AppleScript to
+  Spotify / Apple Music (one Automation prompt) and only addresses players
+  that already run. File tools see only `config/files.yaml` roots, resolve
+  paths before checking and refuse secrets, hidden files and programs. A
+  request that has read file contents needs approval for anything that can
+  send data out (`open_url`, `search_web`).
+- **Reason:** Each permission prompt is friction and a reason to distrust the
+  system; Accessibility/Screen-Recording-based control is for Phase 5
+  (vision). Reading files makes JARVIS useful but turns file text into an
+  injection channel; combined with a URL opener it could leak data. Gating
+  the outbound step (instead of the read) keeps reading cheap and makes the
+  risky combination visible on the approval card.
+- **Alternatives:** Spotlight (`mdfind`) for search (faster, but macOS-only
+  and indexes everything incl. Library); approval for every `read_file`
+  (safe but tiring); media keys via CGEvent (needs Accessibility); `pycaw`
+  for Windows volume (extra dependency, untested here).
+- **Consequences:** Windows volume level and media state can't be read, so
+  those results are honestly *unverifiable*. Minimising a single window on
+  macOS (vs. hiding the app) waits for Accessibility. `pypdf` is a new
+  dependency — `scripts/preflight.mjs` now installs changed dependencies on
+  `npm run dev`, so updating stays `git pull && npm run dev`.
+- **Date:** 2026-10-04
+
 ## D-014 — The API key is connected from the dashboard, verified, then stored in `.env`
 
 - **Decision:** `POST /brain/key` (Origin-guarded) takes a pasted key, checks

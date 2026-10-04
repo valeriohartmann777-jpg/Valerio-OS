@@ -1,0 +1,28 @@
+# File tools (find_files, list_folder, read_file, open_file).
+#
+# JARVIS can only see inside these folders — nothing outside them is listed,
+# read or opened. Paths are resolved (symlinks too) before every check.
+roots:
+  - ~/Desktop
+  - ~/Documents
+  - ~/Downloads
+
+# Never read or opened, even inside the roots (shell-style patterns, any case).
+blocked:
+  - ".env"
+  - ".env.*"
+  - "*.pem"
+  - "*.key"
+  - "id_rsa*"
+  - "id_ed25519*"
+  - "*.p12"
+  - "*.pfx"
+  - "*.keychain*"
+  - "*.kdbx"
+  - ".netrc"
+  - "*.ovpn"
+  - "*password*"
+  - "*passwort*"
+
+# read_file returns at most this many characters (the model sees them).
+max_read_chars: 30000

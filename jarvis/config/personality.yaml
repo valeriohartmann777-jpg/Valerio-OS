@@ -23,10 +23,10 @@ address_user_as: ""
 responses:
   greeting: "Online. Everything is nominal."
   capabilities: >-
-    Ask me anything in your own words — I'll plan it and use my tools: opening
-    applications, checking what's in front, listing running apps, system status.
-    Every action is checked by policy and verified. Start with "think:" for
-    harder questions.
+    Ask me anything in your own words — I'll plan it and use my tools: apps and
+    windows, web pages and searches, files in Desktop, Documents and Downloads,
+    volume and music, system status. Every action is checked by policy and
+    verified. Start with "think:" for harder questions.
   unsupported: >-
     That needs my reasoning model, which isn't connected yet. Open Settings and
     paste your Anthropic API key — no restart needed.

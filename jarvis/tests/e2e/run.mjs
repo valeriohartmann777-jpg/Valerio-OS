@@ -185,6 +185,7 @@ try {
     await shot("07-mission-detail");
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByText("Strong confirmation").waitFor();
+    await page.getByText("~/Documents").first().waitFor(); // folders the file tools may see
     await page.waitForTimeout(300);
     await shot("08-settings");
     await page.getByRole("button", { name: "Home" }).click();

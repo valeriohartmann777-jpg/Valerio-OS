@@ -127,7 +127,10 @@ class AppCatalog:
 
     def is_self(self, window: WindowInfo) -> bool:
         """The JARVIS dashboard itself (in development an app called "Electron")."""
-        return self._ui_pid is not None and window.pid == self._ui_pid
+        return self.is_self_pid(window.pid)
+
+    def is_self_pid(self, pid: int) -> bool:
+        return self._ui_pid is not None and pid == self._ui_pid
 
     def window_label(self, window: WindowInfo) -> str:
         if self.is_self(window):

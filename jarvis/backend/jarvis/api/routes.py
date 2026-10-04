@@ -242,6 +242,7 @@ async def settings_view(rt: RuntimeDep) -> SettingsView:
         },
         brain=brain_view(rt),
         known_apps=sorted(app.name for app in rt.catalog.known_apps()),
+        file_roots=[rt.files.display(root) for root in rt.files.roots],
         config_dir=str(s.root_dir / "config"),
         database_path=str(s.database_path),
     )

@@ -1,0 +1,14 @@
+# Web tools (open_url, search_web).
+#
+# search_web builds the address from one of these templates; {query} is
+# URL-encoded. Claude picks the engine ("web", "youtube", …) from the request.
+
+default_search: web
+
+search_engines:
+  web: https://www.google.com/search?q={query}
+  images: https://www.google.com/search?tbm=isch&q={query}
+  news: https://www.google.com/search?tbm=nws&q={query}
+  youtube: https://www.youtube.com/results?search_query={query}
+  maps: https://www.google.com/maps/search/{query}
+  wikipedia: https://de.wikipedia.org/w/index.php?search={query}

@@ -28,8 +28,11 @@ from ctypes import wintypes
 import psutil
 
 from jarvis.tools.system.backend import (
+    ActionError,
     EnvironmentSnapshot,
     LaunchError,
+    MediaCommand,
+    PlayerState,
     ProcessInfo,
     SystemBackend,
     WindowInfo,
@@ -61,6 +64,14 @@ _user32.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
 _user32.GetWindow.restype = wintypes.HWND
 _user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
 _user32.GetWindowLongW.restype = wintypes.LONG
+_user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+_user32.keybd_event.restype = None
+_user32.IsIconic.argtypes = [wintypes.HWND]
+_user32.IsIconic.restype = wintypes.BOOL
+_user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+_user32.ShowWindow.restype = wintypes.BOOL
+_user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+_user32.PostMessageW.restype = wintypes.BOOL
 _dwmapi.DwmGetWindowAttribute.argtypes = [
     wintypes.HWND,
     wintypes.DWORD,
@@ -81,6 +92,19 @@ _ERROR_CANCELLED = 1223
 _COINIT_APARTMENTTHREADED = 0x2
 _COINIT_DISABLE_OLE1DDE = 0x4
 _FRAME_HOST = "applicationframehost.exe"
+_SW_MINIMIZE = 6
+_KEYEVENTF_KEYUP = 0x0002
+_VK_VOLUME_DOWN, _VK_VOLUME_UP = 0xAE, 0xAF
+_MEDIA_KEYS: dict[MediaCommand, int] = {
+    "play": 0xB3,  # VK_MEDIA_PLAY_PAUSE: Windows has no separate play / pause key
+    "pause": 0xB3,
+    "toggle": 0xB3,
+    "next": 0xB0,
+    "previous": 0xB1,
+}
+# Media keys reach whichever app owns the media session; its state isn't readable.
+_MEDIA_SESSION = PlayerState(app="the active media player", key="", status="unknown")
+_WM_CLOSE = 0x0010
 _SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
 _URI = re.compile(r"^[a-z][a-z0-9+.-]+:(?![\\/])", re.IGNORECASE)
 _APP_PATHS = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
@@ -187,6 +211,7 @@ def _snapshot() -> EnvironmentSnapshot:
                     pid=pid,
                     process_name=name,
                     is_foreground=handle == foreground,
+                    minimized=bool(_user32.IsIconic(handle)),
                 )
             )
         except Exception:  # never raise inside a ctypes callback
@@ -211,6 +236,32 @@ def _active_window() -> WindowInfo | None:
     return WindowInfo(
         handle=handle, title=_title(handle), pid=pid, process_name=name, is_foreground=True
     )
+
+
+def _app_windows(processes: frozenset[str]) -> list[int]:
+    handles = [w.handle for w in _snapshot().windows if w.process_name in processes]
+    if not handles:
+        raise ActionError("not_running", "That application has no open windows.")
+    return handles
+
+
+def _minimize(processes: frozenset[str]) -> int:
+    handles = _app_windows(processes)
+    for handle in handles:
+        _user32.ShowWindow(handle, _SW_MINIMIZE)
+    return len(handles)
+
+
+def _close(processes: frozenset[str]) -> int:
+    # WM_CLOSE = clicking the window's X: the app may still ask to save.
+    handles = _app_windows(processes)
+    return sum(1 for handle in handles if _user32.PostMessageW(handle, _WM_CLOSE, 0, 0))
+
+
+def _press(key: int, times: int = 1) -> None:
+    for _ in range(times):
+        _user32.keybd_event(key, 0, 0, 0)
+        _user32.keybd_event(key, 0, _KEYEVENTF_KEYUP, 0)
 
 
 def _uri_registered(scheme: str) -> bool:
@@ -256,6 +307,19 @@ def _launch(target: str) -> None:
             _ole32.CoUninitialize()
 
 
+def _open_location(location: str) -> None:
+    try:
+        _launch(location)
+    except LaunchError as exc:
+        raise ActionError(
+            "cancelled_by_user" if exc.code == "cancelled_by_user" else "open_failed",
+            "Windows couldn't open it — no application handles this type."
+            if exc.code != "cancelled_by_user"
+            else exc.message,
+            exc.detail,
+        ) from exc
+
+
 def _shell_execute(target: str) -> None:
     try:
         os.startfile(target)
@@ -288,3 +352,23 @@ class WindowsSystemBackend(SystemBackend):
 
     async def launch(self, target: str) -> None:
         await asyncio.to_thread(_launch, target)
+
+    async def open_location(self, location: str) -> None:
+        await asyncio.to_thread(_open_location, location)
+
+    async def hide_app(self, processes: frozenset[str]) -> int:
+        return await asyncio.to_thread(_minimize, processes)
+
+    async def quit_app(self, processes: frozenset[str]) -> int:
+        return await asyncio.to_thread(_close, processes)
+
+    async def step_volume(self, steps: int) -> None:
+        # Each volume key press moves the system volume by 2 %.
+        key = _VK_VOLUME_UP if steps > 0 else _VK_VOLUME_DOWN
+        await asyncio.to_thread(_press, key, min(abs(steps), 50))
+
+    async def player(self) -> PlayerState | None:
+        return _MEDIA_SESSION
+
+    async def media(self, command: MediaCommand, player: PlayerState | None) -> None:
+        await asyncio.to_thread(_press, _MEDIA_KEYS[command])

@@ -139,7 +139,10 @@ class OpenApplicationTool(Tool[OpenApplicationArgs]):
     """Launch an application and prove it opened by observing windows/processes."""
 
     name = "open_application"
-    description = "Open a desktop application and confirm that its window appeared."
+    description = (
+        "Open a desktop application and confirm that its window appeared. If it is already "
+        "running, it is brought to the front."
+    )
     permission_level = PermissionLevel.SAFE_ACTION
     input_model = OpenApplicationArgs
     side_effects = True

@@ -1,23 +1,36 @@
-"""The agents JARVIS is built from. Only Operator and Sentinel work in Phase 1."""
+"""The agents JARVIS is built from. Operator and Sentinel work today; the rest are
+declared with the phase that brings them."""
 
 from __future__ import annotations
 
 from jarvis.agents.base import AgentSpec
 from jarvis.permissions.models import PermissionLevel
 
-SYSTEM_TOOLS = ["get_system_info", "get_active_window", "list_running_apps", "open_application"]
+SYSTEM_TOOLS = [
+    "get_system_info",
+    "get_active_window",
+    "list_running_apps",
+    "open_application",
+    "hide_application",
+    "quit_application",
+]
+WEB_TOOLS = ["open_url", "search_web"]
+FILE_TOOLS = ["find_files", "list_folder", "read_file", "open_file"]
+MEDIA_TOOLS = ["get_volume", "set_volume", "media_control", "now_playing"]
+# Every tool the Operator may run; Sentinel verifies the same set.
+OPERATOR_TOOLS = [*SYSTEM_TOOLS, *WEB_TOOLS, *FILE_TOOLS, *MEDIA_TOOLS]
 
 AGENT_SPECS: list[AgentSpec] = [
     AgentSpec(
         id="operator",
         name="Operator",
         role="Computer interaction",
-        description="Operates Windows, applications and (later) the browser.",
+        description="Operates the computer: applications, windows, web pages, files, sound.",
         instructions=(
             "Execute exactly the requested action through tools. Observe before and after. "
             "Never assume success without observation."
         ),
-        available_tools=SYSTEM_TOOLS,
+        available_tools=OPERATOR_TOOLS,
         max_permission_level=PermissionLevel.HIGH_RISK,
     ),
     AgentSpec(
@@ -29,7 +42,7 @@ AGENT_SPECS: list[AgentSpec] = [
             "Re-observe the environment independently. Report verified, failed or unverifiable. "
             "Challenge assumptions; never trust a tool's own claim of success alone."
         ),
-        available_tools=SYSTEM_TOOLS,
+        available_tools=OPERATOR_TOOLS,
         max_permission_level=PermissionLevel.READ,
     ),
     AgentSpec(
