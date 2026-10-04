@@ -156,9 +156,15 @@ _Last updated: 2026-10-04_
   restart (18 steps total)
 
 ### Learning: self-directed trading research (NQ, XAUUSD)
-- Market data: Dukascopy minute candles (`BID_candles_min_1.bi5`), point
-  divisor chosen by plausible price range, OHLC/time validation, monthly
-  `.npz` cache with fetched days, retries; NQ = USA Tech 100 CFD
+- Market data: Dukascopy's data API (`jetta.dukascopy.com/v1`, delta-encoded
+  JSON per day; decoding checked against dukascopy-node's own fixture),
+  instrument codes looked up from Dukascopy's list, throttled (≈4 requests/s),
+  OHLC/time/price validation, monthly `.npz` cache with fetched days, retries,
+  early stop when the source is down, single failed days fetched again later;
+  NQ = USA Tech 100 CFD
+- 2026-10-04: the first start on the MacBook got HTTP 503 from the old
+  `datafeed.dukascopy.com` .bi5 files — that feed stopped answering in July
+  2026 (dukascopy-node issue #254); switched to the data API
 - Rule language parsed by a small recursive-descent parser (no code
   execution); 30 features incl. VWAP, opening range, previous session,
   time windows (Asia range), RSI/ATR/EMA; strictly no look-ahead
@@ -176,8 +182,8 @@ _Last updated: 2026-10-04_
   validated and noise is not, the loop with a scripted model (budget, stall,
   holdout never in the prompt, invalid strategies, search fallback, errors,
   restart), API, report tool, E2E step (19 steps total)
-- Not yet run against the real Dukascopy feed (blocked from the development
-  container) — the first start on the MacBook downloads and validates it
+- Not yet run against the real data API (blocked from the development
+  container) — the next start on the MacBook downloads and validates it
 
 ## IN PROGRESS
 - —

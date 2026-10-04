@@ -131,7 +131,8 @@ class ModelPrice(BaseModel):
 
 
 class InstrumentSettings(BaseModel):
-    symbol: str  # Dukascopy symbol
+    symbol: str  # Dukascopy's id (also the cache folder)
+    code: str = ""  # Dukascopy's API code; looked up from its instrument list when it differs
     label: str = ""
     price_range: tuple[float, float]
     cost_points: float  # round trip: commission + spread + slippage

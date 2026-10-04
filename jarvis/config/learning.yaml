@@ -29,7 +29,8 @@ prices:
   claude-opus-5-5: {input: 4.0, output: 20.0, cache_read: 0.2, cache_write: 5.0}
   claude-sonnet-5-5: {input: 2.0, output: 10.0, cache_read: 0.2, cache_write: 2.5}
 
-# History (UTC days). Claude sees full results only for in-sample tests; the
+# History (UTC days, from Dukascopy's free data API: jetta.dukascopy.com).
+# Claude sees full results only for in-sample tests; the
 # out-of-sample period answers pass/fail; the holdout is never shown to Claude
 # and only confirms findings for you.
 data_start: 2021-01-01
@@ -42,6 +43,7 @@ instruments:
     # the NQ future; prices differ by the futures basis and volume is
     # Dukascopy's quote volume, not exchange volume.
     symbol: USATECHIDXUSD
+    code: USATECH.IDX-USD  # the data API's name (checked against Dukascopy's instrument list)
     label: Nasdaq-100 (NQ) — Dukascopy USA Tech 100 CFD, bid prices
     price_range: [4000, 39000]
     cost_points: 1.0       # NQ round trip: ~0.2 commission + ~0.8 spread/slippage
@@ -49,6 +51,7 @@ instruments:
     point_value_usd: 20
   XAUUSD:
     symbol: XAUUSD
+    code: XAU-USD
     label: Gold spot (XAUUSD) — Dukascopy, bid prices
     price_range: [900, 8900]
     cost_points: 0.40      # spread + slippage per round trip, in USD per ounce

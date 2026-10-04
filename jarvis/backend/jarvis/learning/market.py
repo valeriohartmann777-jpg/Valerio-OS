@@ -1,15 +1,20 @@
 """Historical market data for learning: Dukascopy minute candles (free, no key).
 
-Source: ``https://datafeed.dukascopy.com/datafeed/{SYMBOL}/{YYYY}/{MM-1}/{DD}/BID_candles_min_1.bi5``
-— one LZMA file per UTC day of 24-byte big-endian records: seconds since the
-day began (uint32), open, close, low, high (uint32, in points) and volume
-(float32). Weekend and holiday minutes come as flat candles without volume and
-are dropped.
+Source: Dukascopy's data API, ``https://jetta.dukascopy.com/v1`` (the old
+``datafeed.dukascopy.com`` .bi5 files stopped answering in July 2026):
 
-The point divisor is not hard-coded: the one that puts the day's prices into
-the instrument's plausible range wins (ranges span less than a factor of ten,
-so only one can). Every file is validated — time order, OHLC consistency — so
-a format change shows up as a clear error, never as wrong backtests.
+    GET /instruments                                  → codes, e.g. "XAU-USD"
+    GET /candles/minute/{CODE}/BID/{YYYY}/{M}/{D}     → one UTC day, JSON
+
+A day comes delta-encoded: ``timestamp`` (ms) and a base candle, then per
+minute ``times`` (steps of ``shift`` ms) and ``opens``/``highs``/``lows``/
+``closes`` (steps of ``multiplier`` in price) plus ``volumes``. Minutes
+without trading are left out; flat candles without volume are dropped.
+
+Every day is validated — time order, OHLC consistency, plausible prices — so
+a format change shows up as a clear error, never as wrong backtests. Requests
+are throttled (a few per second); a run of failures stops the download early
+and a few failed days are simply fetched again next time.
 
 Cache: ``data/market/{SYMBOL}/{YYYY-MM}.npz`` with the candles and the days
 already fetched (including empty ones), so each day is downloaded once.
@@ -20,11 +25,14 @@ from __future__ import annotations
 import asyncio
 import calendar
 import logging
-import lzma
+import re
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx2
@@ -32,14 +40,13 @@ import numpy as np
 
 log = logging.getLogger("jarvis.learning")
 
-FEED = "https://datafeed.dukascopy.com/datafeed"
-_RECORD = np.dtype(
-    [("t", ">u4"), ("o", ">u4"), ("c", ">u4"), ("l", ">u4"), ("h", ">u4"), ("v", ">f4")]
-)
-_DIVISORS = (1, 10, 100, 1000, 10000, 100000)
-_HEADERS = {"User-Agent": "Mozilla/5.0 (JARVIS research; historical candles)"}
-# A missing file this close to today may just not be published yet.
+API = "https://jetta.dukascopy.com/v1"
+_HEADERS = {"User-Agent": "JARVIS/0.1 (personal trading research)", "Accept": "application/json"}
+_RETRYABLE = {408, 425, 429, 500, 502, 503, 504}
+# A missing day this close to today may just not be published yet.
 _RECENT_DAYS = 5
+# This many failed days in a row: the source is down — stop instead of trying them all.
+_FAILURE_RUN = 8
 
 
 class DataError(Exception):
@@ -155,54 +162,98 @@ def _empty_day() -> DayCandles:
     return DayCandles(np.empty(0, dtype=np.int64), f, f, f, f, f)
 
 
-def decode_day(
-    raw: bytes, day: date, price_range: tuple[float, float], symbol: str = ""
+_COLUMNS = ("times", "opens", "highs", "lows", "closes", "volumes")
+_BASE = ("open", "high", "low", "close")
+
+
+def decode_candles(
+    payload: Any, day: date, price_range: tuple[float, float], name: str = ""
 ) -> DayCandles:
-    """One ``BID_candles_min_1.bi5`` file → validated candles with traded volume."""
-    if not raw:
+    """One day of minute candles from the data API → validated candles with volume."""
+    broken = DataError(
+        f"Dukascopy's answer for {name} on {day} isn't minute candles (the API may have changed)."
+    )
+    if not isinstance(payload, dict) or not isinstance(payload.get("times"), list):
+        raise broken
+    if not payload["times"]:
         return _empty_day()
     try:
-        data = lzma.decompress(raw)
-    except lzma.LZMAError as exc:
-        raise DataError(f"Dukascopy sent a damaged file for {symbol} {day}.") from exc
-    if len(data) % _RECORD.itemsize:
-        raise DataError(f"Dukascopy's file for {symbol} {day} isn't in the expected candle layout.")
-    rec = np.frombuffer(data, dtype=_RECORD)
-    rec = rec[rec["v"] > 0]
-    if len(rec) == 0:
-        return _empty_day()
-    seconds = rec["t"].astype(np.int64)
-    o, c = rec["o"].astype(np.int64), rec["c"].astype(np.int64)
-    lo, hi = rec["l"].astype(np.int64), rec["h"].astype(np.int64)
-    ordered = bool(np.all(np.diff(seconds) > 0)) and bool(np.all(seconds % 60 == 0))
-    consistent = (lo <= np.minimum(o, c)) & (hi >= np.maximum(o, c))
-    if not ordered or seconds[-1] >= 86400 or consistent.mean() < 0.995:
+        cols = [np.asarray(payload[k], dtype=np.float64) for k in _COLUMNS]
+        base = [float(payload[k]) for k in _BASE]
+        multiplier, shift = float(payload["multiplier"]), float(payload["shift"])
+        start_ms = float(payload["timestamp"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise broken from exc
+    times, opens, highs, lows, closes, volumes = cols
+    if (
+        any(len(col) != len(times) for col in cols)
+        or not all(np.isfinite(col).all() for col in cols)
+        or not np.isfinite(base).all()
+        or multiplier <= 0
+        or shift <= 0
+        or (times < 0).any()
+    ):
+        raise broken
+    t_ms = start_ms + np.cumsum(times) * shift
+    o, h, lo, c = (
+        round(b / multiplier) + np.cumsum(np.rint(d)).astype(np.int64)
+        for b, d in zip(base, (opens, highs, lows, closes), strict=True)
+    )
+    day_ms = datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000
+    ordered = bool(np.all(np.diff(t_ms) > 0)) and bool(np.all(np.mod(t_ms, 60000) == 0))
+    inside = bool(t_ms[0] >= day_ms) and bool(t_ms[-1] < day_ms + 86_400_000)
+    consistent = (lo <= np.minimum(o, c)) & (h >= np.maximum(o, c))
+    if not ordered or not inside or consistent.mean() < 0.995:
         raise DataError(
-            f"Dukascopy's data for {symbol} on {day} doesn't look like minute candles "
-            "(the file format may have changed)."
+            f"Dukascopy's data for {name} on {day} doesn't look like minute candles "
+            "(the API may have changed)."
         )
-    divisor = _divisor(float(np.median(c)), price_range, symbol, day)
-    keep = consistent
-    start = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp())
+    keep = consistent & (volumes > 0)
+    if not keep.any():
+        return _empty_day()
+    decimals = max(0, -int(Decimal(repr(multiplier)).as_tuple().exponent))
+
+    def price(units: np.ndarray) -> np.ndarray:
+        out: np.ndarray = np.round(units[keep] * multiplier, decimals)
+        return out
+
+    closes_out = price(c)
+    low, high = price_range
+    if not low <= float(np.median(closes_out)) <= high:
+        raise DataError(
+            f"Prices for {name} on {day} are outside the expected range {low:g} to {high:g} "
+            "(check price_range in config/learning.yaml)."
+        )
     return DayCandles(
-        t=start + seconds[keep],
-        o=o[keep] / divisor,
-        h=hi[keep] / divisor,
-        low=lo[keep] / divisor,
-        c=c[keep] / divisor,
-        v=rec["v"][keep].astype(np.float64),
+        t=(t_ms[keep] // 1000).astype(np.int64),
+        o=price(o),
+        h=price(h),
+        low=price(lo),
+        c=closes_out,
+        v=volumes[keep],
     )
 
 
-def _divisor(median: float, price_range: tuple[float, float], symbol: str, day: date) -> int:
-    low, high = price_range
-    fits = [d for d in _DIVISORS if low <= median / d <= high]
-    if len(fits) != 1:
-        raise DataError(
-            f"Prices for {symbol} on {day} are outside the expected range "
-            f"{low:g} to {high:g} (check price_range in config/learning.yaml)."
-        )
-    return fits[0]
+def _plain(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def find_code(listing: Any, symbol: str) -> str | None:
+    """The API code (e.g. "USATECH.IDX-USD") for a symbol like "USATECHIDXUSD"."""
+    items: list[Any] = []
+    if isinstance(listing, list):
+        items = listing
+    elif isinstance(listing, dict):
+        lists = [v for v in listing.values() if isinstance(v, list)]
+        items = lists[0] if lists else [v for v in listing.values() if isinstance(v, dict)]
+    wanted = _plain(symbol)
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("code"), str):
+            continue
+        names = [item["code"], str(item.get("name") or "")]
+        if any(_plain(n) == wanted for n in names):
+            return str(item["code"])
+    return None
 
 
 # Download + cache -----------------------------------------------------------------
@@ -211,11 +262,24 @@ def _divisor(median: float, price_range: tuple[float, float], symbol: str, day: 
 @dataclass(frozen=True)
 class Instrument:
     name: str  # NQ, XAUUSD
-    symbol: str  # Dukascopy symbol
+    symbol: str  # Dukascopy's id, also the cache folder: USATECHIDXUSD
     price_range: tuple[float, float]
+    code: str = ""  # Dukascopy's API code, e.g. USATECH.IDX-USD (looked up when empty)
 
 
 Progress = Callable[[int, int], Awaitable[None]]  # (done, total)
+
+
+class _Failed:
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+
+class _Absent:
+    """The API has no file for this day (404)."""
+
+
+_ABSENT = _Absent()
 
 
 class MarketData:
@@ -224,13 +288,18 @@ class MarketData:
         root: Path,
         *,
         transport: httpx2.AsyncBaseTransport | None = None,
-        concurrency: int = 6,
-        retry_delays: tuple[float, ...] = (1.0, 3.0, 9.0),
+        concurrency: int = 3,
+        requests_per_second: float = 4.0,
+        retry_delays: tuple[float, ...] = (2.0, 6.0, 15.0),
     ) -> None:
         self._root = root
         self._transport = transport
         self._concurrency = concurrency
+        self._interval = 1.0 / requests_per_second if requests_per_second > 0 else 0.0
         self._retry_delays = retry_delays
+        self._codes: dict[str, str] = {}
+        self._next_slot = 0.0
+        self._slot_lock = asyncio.Lock()
 
     # Sync ------------------------------------------------------------------------
 
@@ -238,13 +307,16 @@ class MarketData:
         self, instrument: Instrument, start: date, end: date, progress: Progress | None = None
     ) -> int:
         """Download the days in [start, end] that aren't cached yet. Returns how
-        many days were fetched. Raises ``DataError``."""
+        many days were fetched. Raises ``DataError`` when the source is down or
+        has no data for the instrument."""
         months = _months(start, end)
         todo: dict[tuple[int, int], list[date]] = {}
         cached: dict[tuple[int, int], dict[str, np.ndarray]] = {}
+        had_data = False
         for month in months:
             stored = self._read_month(instrument.symbol, month)
             cached[month] = stored
+            had_data = had_data or len(stored["t"]) > 0
             done = set(stored["days"].tolist())
             days = [
                 d
@@ -256,60 +328,136 @@ class MarketData:
         total = sum(len(days) for days in todo.values())
         if total == 0:
             return 0
-        fetched = 0
+        fetched = failed = with_data = 0
+        run = 0
+        reason = ""
         semaphore = asyncio.Semaphore(self._concurrency)
         async with httpx2.AsyncClient(
             headers=_HEADERS, timeout=30.0, transport=self._transport, follow_redirects=True
         ) as client:
+            code = await self._code(client, instrument)
 
-            async def one(day: date) -> tuple[date, DayCandles | None]:
+            async def one(day: date) -> tuple[date, DayCandles | _Failed | _Absent | None]:
+                nonlocal run, reason
                 async with semaphore:
-                    return day, await self._fetch(client, instrument, day)
+                    result = await self._fetch(client, instrument, code, day)
+                if isinstance(result, _Failed):
+                    run, reason = run + 1, result.reason
+                    if run >= _FAILURE_RUN:
+                        raise DataError(
+                            f"I can't reach Dukascopy's data right now ({result.reason})."
+                        )
+                else:
+                    run = 0
+                return day, result
 
+            absent: dict[tuple[int, int], list[int]] = {}
             for month, days in todo.items():
-                results = await asyncio.gather(*(one(d) for d in days))
+                try:
+                    async with asyncio.TaskGroup() as group:  # a failure run cancels the rest
+                        tasks = [group.create_task(one(d)) for d in days]
+                except BaseExceptionGroup as errors:
+                    data_errors = [e for e in errors.exceptions if isinstance(e, DataError)]
+                    if data_errors:
+                        raise data_errors[0] from None
+                    raise
                 stored = cached[month]
                 parts = [_day_from_store(stored)]
                 new_days = []
-                for day, candles in results:
-                    if candles is None:
-                        continue  # not published yet; try again next time
-                    parts.append(candles)
+                for task in tasks:
+                    day, result = task.result()
+                    if isinstance(result, _Failed):
+                        failed += 1
+                        continue  # fetched again next time
+                    if isinstance(result, _Absent):
+                        absent.setdefault(month, []).append(_day_number(day))
+                        continue
+                    if result is None:
+                        continue  # not published yet
+                    parts.append(result)
                     new_days.append(_day_number(day))
+                    with_data += len(result.t) > 0
                 fetched += len(days)
                 if new_days:
                     self._write_month(instrument.symbol, month, parts, stored["days"], new_days)
                 if progress:
                     await progress(fetched, total)
+                if not had_data and with_data == 0 and fetched >= 60:
+                    break  # two months without a single candle: wrong code, don't go on
+        if not had_data and with_data == 0 and total >= 10:
+            # Never cache "no data" for a code that may be wrong.
+            raise DataError(
+                f"Dukascopy has no minute data for {instrument.name} (code {code}) from {start} on."
+            )
+        for month, numbers in absent.items():  # holidays: don't ask again
+            stored = self._read_month(instrument.symbol, month)
+            self._write_month(
+                instrument.symbol, month, [_day_from_store(stored)], stored["days"], numbers
+            )
+        if failed > max(3, total // 10):
+            raise DataError(
+                f"I can't reach Dukascopy's data right now ({reason}; "
+                f"{failed} of {total} days failed)."
+            )
         return fetched
 
+    async def _slot(self) -> None:
+        """Wait for this request's turn (throttling)."""
+        async with self._slot_lock:
+            now = time.monotonic()
+            wait = self._next_slot - now
+            self._next_slot = max(now, self._next_slot) + self._interval
+        if wait > 0:
+            await asyncio.sleep(wait)
+
+    async def _code(self, client: httpx2.AsyncClient, instrument: Instrument) -> str:
+        """The instrument's API code, from Dukascopy's list (config as fallback)."""
+        if instrument.symbol in self._codes:
+            return self._codes[instrument.symbol]
+        found = None
+        try:
+            await self._slot()
+            response = await client.get(f"{API}/instruments")
+            if response.status_code == 200:
+                found = find_code(response.json(), instrument.symbol)
+        except (httpx2.HTTPError, ValueError) as exc:
+            log.info("couldn't load Dukascopy's instrument list: %s", type(exc).__name__)
+        code = found or instrument.code or instrument.symbol
+        self._codes[instrument.symbol] = code
+        return code
+
     async def _fetch(
-        self, client: httpx2.AsyncClient, instrument: Instrument, day: date
-    ) -> DayCandles | None:
-        url = (
-            f"{FEED}/{instrument.symbol}/{day.year:04d}/{day.month - 1:02d}/{day.day:02d}/"
-            "BID_candles_min_1.bi5"
-        )
+        self, client: httpx2.AsyncClient, instrument: Instrument, code: str, day: date
+    ) -> DayCandles | _Failed | _Absent | None:
+        url = f"{API}/candles/minute/{code}/BID/{day.year}/{day.month}/{day.day}"
         recent = (datetime.now(UTC).date() - day).days <= _RECENT_DAYS
-        last: str = ""
+        last = ""
         for attempt in range(len(self._retry_delays) + 1):
+            await self._slot()
             try:
                 response = await client.get(url)
             except httpx2.HTTPError as exc:
                 last = type(exc).__name__
             else:
-                if response.status_code == 200:
-                    return decode_day(
-                        response.content, day, instrument.price_range, instrument.symbol
-                    )
-                if response.status_code == 404:
-                    return None if recent else _empty_day()
-                if response.status_code not in (429, 500, 502, 503, 504):
-                    raise DataError(f"Dukascopy refused the data request ({response.status_code}).")
-                last = f"HTTP {response.status_code}"
+                status = response.status_code
+                if status == 200:
+                    try:
+                        payload = response.json()
+                    except ValueError:
+                        last = "an answer that isn't JSON"
+                    else:
+                        return decode_candles(payload, day, instrument.price_range, instrument.name)
+                elif status == 404:
+                    return None if recent else _ABSENT
+                elif status in (401, 403):
+                    raise DataError(f"Dukascopy refused the data request ({status}).")
+                elif status not in _RETRYABLE:
+                    raise DataError(f"Dukascopy rejected the data request ({status}).")
+                else:
+                    last = f"HTTP {status}"
             if attempt < len(self._retry_delays):
                 await asyncio.sleep(self._retry_delays[attempt])
-        raise DataError(f"I can't reach Dukascopy's data feed right now ({last}).")
+        return _Failed(last)
 
     # Load ------------------------------------------------------------------------
 

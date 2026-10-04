@@ -459,7 +459,8 @@ the research model's tools are `run_backtest`, `write_note`, `finish_round`
 and Anthropic's web search — nothing that touches the computer or a broker.
 
 ```
-market.py    Dukascopy minute candles → validated, cached (data/market/*.npz)
+market.py    Dukascopy data API (jetta.dukascopy.com/v1) minute candles → validated,
+             throttled, cached (data/market/*.npz)
 strategy.py  JSON strategy + rule parser ("close crosses_above or_high(15)")
 features.py  numpy evaluation, no look-ahead (tested by truncation)
 backtest.py  next-bar entries, stop-first, gaps, costs → trades, stats in R

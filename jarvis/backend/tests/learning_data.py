@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import lzma
 from datetime import UTC, date, datetime, timedelta
+from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -13,12 +13,49 @@ from jarvis.learning.market import Bars
 NY = ZoneInfo("America/New_York")
 
 
-def bi5(rows: list[tuple[int, int, int, int, int, float]]) -> bytes:
-    """Dukascopy candle file: (seconds, open, close, low, high, volume)."""
-    dtype = np.dtype(
-        [("t", ">u4"), ("o", ">u4"), ("c", ">u4"), ("l", ">u4"), ("h", ">u4"), ("v", ">f4")]
-    )
-    return lzma.compress(np.array(rows, dtype=dtype).tobytes(), format=lzma.FORMAT_ALONE)
+def candles_json(
+    day: date, rows: list[tuple[int, float, float, float, float, float]], multiplier: float = 0.25
+) -> dict[str, object]:
+    """A day as Dukascopy's data API sends it: rows of (minute of day, open,
+    high, low, close, volume), delta-encoded against the first candle."""
+    start = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000)
+    if not rows:
+        return {
+            "timestamp": start,
+            "multiplier": multiplier,
+            "shift": 60000,
+            "times": [],
+            "opens": [],
+            "highs": [],
+            "lows": [],
+            "closes": [],
+            "volumes": [],
+            "open": None,
+            "high": None,
+            "low": None,
+            "close": None,
+        }
+    minutes = [r[0] for r in rows]
+    units = [[round(r[k] / multiplier) for r in rows] for k in (1, 2, 3, 4)]
+
+    def deltas(values: list[int]) -> list[int]:
+        return [0] + [b - a for a, b in pairwise(values)]
+
+    return {
+        "timestamp": start,
+        "multiplier": multiplier,
+        "shift": 60000,
+        "open": rows[0][1],
+        "high": rows[0][2],
+        "low": rows[0][3],
+        "close": rows[0][4],
+        "times": [minutes[0]] + [b - a for a, b in pairwise(minutes)],
+        "opens": deltas(units[0]),
+        "highs": deltas(units[1]),
+        "lows": deltas(units[2]),
+        "closes": deltas(units[3]),
+        "volumes": [r[5] for r in rows],
+    }
 
 
 def session_bars(

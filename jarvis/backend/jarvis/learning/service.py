@@ -129,7 +129,7 @@ class LearningService:
             lambda: (datetime.now().astimezone() - timedelta(days=1)).date()
         )
         self._instruments = {
-            name: Instrument(name, spec.symbol, spec.price_range)
+            name: Instrument(name, spec.symbol, spec.price_range, spec.code)
             for name, spec in settings.instruments.items()
         }
         self._state = LearningState.OFF

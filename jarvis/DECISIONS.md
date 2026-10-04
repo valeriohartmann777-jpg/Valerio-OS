@@ -180,7 +180,9 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   (plus an automatic stop on stagnation).
 - **Alternatives:** model-written Python strategies (arbitrary code from a
   model that reads the web — refused); paid tick/order-flow data (later);
-  NQ futures from Yahoo (≤ 60 days of intraday history).
+  NQ futures from Yahoo (≤ 60 days of intraday history). Data comes from
+  Dukascopy's data API (`jetta.dukascopy.com/v1`); the older `.bi5` feed
+  stopped answering in July 2026.
 - **Consequences:** "Learning" means a growing knowledge base and validated
   rules, not changed model weights. NQ is studied on Dukascopy's Nasdaq-100
   CFD (bid prices; quote volume, not exchange volume); scalping is tested on
