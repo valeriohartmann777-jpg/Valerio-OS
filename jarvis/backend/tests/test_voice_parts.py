@@ -19,7 +19,8 @@ def tone(db: float) -> np.ndarray:
     """One 80 ms frame at roughly ``db`` dBFS."""
     amplitude = 32768 * 10 ** (db / 20) * np.sqrt(2)
     t = np.arange(FRAME) / 16000
-    return (amplitude * np.sin(2 * np.pi * 220 * t)).astype(np.int16)
+    samples: np.ndarray = (amplitude * np.sin(2 * np.pi * 220 * t)).astype(np.int16)
+    return samples
 
 
 def feed(recorder: UtteranceRecorder, frames: list[np.ndarray]) -> list[Outcome]:

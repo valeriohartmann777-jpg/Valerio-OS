@@ -46,6 +46,10 @@ export interface UIState {
   showDebug: boolean;
   /** In-app update state from the Electron main process (null outside Electron). */
   updates: UpdateStatus | null;
+  /** The chat: commands and JARVIS's replies, oldest first (persisted by the backend). */
+  conversation: JarvisEvent[];
+  /** There is nothing older to load. */
+  conversationComplete: boolean;
 }
 
 export type Action =
@@ -54,7 +58,8 @@ export type Action =
   | { type: "event"; event: JarvisEvent; now: number }
   | { type: "navigate"; view: View }
   | { type: "toggleDebug" }
-  | { type: "updates"; status: UpdateStatus };
+  | { type: "updates"; status: UpdateStatus }
+  | { type: "conversation"; events: JarvisEvent[]; complete: boolean; older?: boolean };
 
 export const MAX_ACTIVITY = 400;
 export const MAX_MISSIONS = 50;
@@ -80,7 +85,12 @@ export const initialState: UIState = {
   view: { name: "home" },
   showDebug: false,
   updates: null,
+  conversation: [],
+  conversationComplete: false,
 };
+
+export const CHAT_EVENTS = new Set(["command.received", "jarvis.message"]);
+export const MAX_CONVERSATION = 1000;
 
 export function reduce(state: UIState, action: Action): UIState {
   switch (action.type) {
@@ -92,6 +102,13 @@ export function reduce(state: UIState, action: Action): UIState {
       return { ...state, showDebug: !state.showDebug };
     case "updates":
       return { ...state, updates: action.status };
+    case "conversation":
+      return {
+        ...state,
+        conversation: mergeConversation(state.conversation, action.events, Boolean(action.older)),
+        // Paging back only ever learns that the start was reached; a fresh load says so itself.
+        conversationComplete: action.older ? action.complete || state.conversationComplete : action.complete,
+      };
     case "snapshot":
       return applySnapshot(state, action.snapshot, action.now);
     case "event":
@@ -123,6 +140,7 @@ function applySnapshot(state: UIState, snapshot: Snapshot, now: number): UIState
 
 function applyEvent(state: UIState, event: JarvisEvent, now: number): UIState {
   const next: UIState = { ...state, activity: appendActivity(state.activity, event) };
+  if (CHAT_EVENTS.has(event.type)) next.conversation = mergeConversation(state.conversation, [event]);
   const payload = event.payload as Record<string, unknown>;
   switch (event.type) {
     case "jarvis.state.changed":
@@ -176,6 +194,15 @@ function applyEvent(state: UIState, event: JarvisEvent, now: number): UIState {
       break;
   }
   return next;
+}
+
+/** Merge by id, keep chronological order; drop the oldest beyond the cap (newest when paging back). */
+export function mergeConversation(existing: JarvisEvent[], incoming: JarvisEvent[], older = false): JarvisEvent[] {
+  const byId = new Map(existing.map((e) => [e.id, e]));
+  for (const event of incoming) byId.set(event.id, event);
+  const merged = [...byId.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  if (merged.length <= MAX_CONVERSATION) return merged;
+  return older ? merged.slice(0, MAX_CONVERSATION) : merged.slice(-MAX_CONVERSATION);
 }
 
 function appendActivity(activity: JarvisEvent[], event: JarvisEvent): JarvisEvent[] {

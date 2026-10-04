@@ -1,5 +1,6 @@
 import type {
   BrainStatus,
+  JarvisEvent,
   VoiceStatus,
   ChatAccepted,
   Mission,
@@ -70,6 +71,10 @@ export const api = {
     post<PermissionRequest>(`/permissions/${id}/approve`, { strong_confirmation: strongConfirmation }),
   reject: (id: string) => post<PermissionRequest>(`/permissions/${id}/reject`, {}),
   settings: () => request<SettingsView>("/settings"),
+  conversation: (limit: number, before?: string) =>
+    request<JarvisEvent[]>(
+      `/conversation?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ""}`,
+    ),
   connectBrain: (apiKey: string) => post<BrainStatus>("/brain/key", { api_key: apiKey }),
   connectVoice: (apiKey: string) => post<VoiceStatus>("/voice/key", { api_key: apiKey }),
   voicePreferences: (prefs: { wake_word?: boolean; speak_replies?: boolean }) =>

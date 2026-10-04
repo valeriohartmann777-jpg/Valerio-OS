@@ -140,6 +140,21 @@ _Last updated: 2026-10-04_
   reply, push-to-talk, silence, errors, key connect, API), E2E setup step
 - Not yet run on the MacBook (needs an ElevenLabs key; mic/speaker are real only there)
 
+### Conversation (persistent chat)
+- Everything typed or said (`command.received`) and every JARVIS answer
+  (`jarvis.message`) stays visible as a chat in the middle of Home, below the
+  core — across restarts and updates (read from the event store, new index on
+  `events(type, timestamp)`)
+- `GET /conversation?limit=&before=` pages backwards; the renderer loads the
+  newest 100 after every snapshot and older ones on *Earlier messages*
+- Day dividers, spoken requests marked, error reason + suggestion, link to the
+  mission, a working indicator while JARVIS is busy; stays on the newest
+  message unless you scrolled up
+- The core's headline now only states what JARVIS is doing
+- Tests: API (order, paging, restart persistence, bad cursor), reducer merge,
+  E2E — replies read from the chat, and the chat is still there after a
+  restart (18 steps total)
+
 ## IN PROGRESS
 - —
 

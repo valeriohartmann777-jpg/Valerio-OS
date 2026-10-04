@@ -1,7 +1,20 @@
 import type { ServerMessage } from "@jarvis/protocol";
 
 import type { Action } from "../store/reducer";
+import { api } from "./api";
 import { EVENTS_URL } from "./config";
+
+export const CONVERSATION_PAGE = 100;
+
+/** The chat history is loaded on every (re)connect; live events extend it. */
+async function loadConversation(dispatch: (action: Action) => void): Promise<void> {
+  try {
+    const events = await api.conversation(CONVERSATION_PAGE);
+    dispatch({ type: "conversation", events, complete: events.length < CONVERSATION_PAGE });
+  } catch {
+    /* the live stream still works; the history loads on the next connect */
+  }
+}
 
 const PING_MS = 15_000;
 const MAX_BACKOFF_MS = 5_000;
@@ -28,6 +41,7 @@ export function connectEvents(dispatch: (action: Action) => void): () => void {
       if (data.kind === "snapshot") {
         wasOnline = true;
         dispatch({ type: "snapshot", snapshot: data.data, now: Date.now() });
+        void loadConversation(dispatch);
       } else if (data.kind === "event") {
         dispatch({ type: "event", event: data.data, now: Date.now() });
       }

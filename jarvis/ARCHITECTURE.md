@@ -439,6 +439,10 @@ touches `storage/` and the repositories. Semantic memory will sit behind a
 - **Renderer** (`apps/desktop/src/`): React 19 + Tailwind 4 + Motion.
   A pure reducer (`store/reducer.ts`) folds snapshot + events into UI state
   (unit-tested); Zustand exposes it to components.
+- **Conversation**: the chat on Home is not a separate store — it is the
+  `command.received` and `jarvis.message` events, read with
+  `GET /conversation` (newest first page after each snapshot, older pages on
+  demand) and extended live from the event stream.
 - **Design tokens** live in `src/styles/tokens.css` (`@theme`). One accent
   color; status colors only for status.
 

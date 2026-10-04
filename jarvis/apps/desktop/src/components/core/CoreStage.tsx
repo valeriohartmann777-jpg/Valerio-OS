@@ -3,20 +3,15 @@ import { useEffect, useState } from "react";
 
 import { BACKEND_URL } from "../../lib/config";
 import { stateLabel } from "../../lib/format";
-import type { LastMessage } from "../../store/reducer";
-import { useJarvis, useNow } from "../../store/store";
+import { useJarvis } from "../../store/store";
 import { cx } from "../ui/primitives";
 import { JarvisCore } from "./JarvisCore";
-
-/** How long JARVIS's last reply stays on stage after it returned to idle. */
-const MESSAGE_LINGER_MS = 20_000;
 
 interface Copy {
   label: string;
   labelTone: string;
   headline: string;
   sub?: string;
-  message?: LastMessage;
 }
 
 /**
@@ -26,11 +21,10 @@ interface Copy {
 export function CoreStage({ compact }: { compact: boolean }) {
   const connection = useJarvis((s) => s.connection);
   const jarvis = useJarvis((s) => s.jarvis);
-  const lastMessage = useJarvis((s) => s.lastMessage);
-  const now = useNow(1000);
   const viewport = useViewportHeight();
 
-  const copy = describe(connection, jarvis.state, jarvis.detail, lastMessage, now);
+  // Replies live in the conversation below; the stage says what JARVIS is doing.
+  const copy = describe(connection, jarvis.state, jarvis.detail);
   const size = compact
     ? Math.round(Math.min(240, Math.max(132, viewport * 0.16)))
     : Math.round(Math.min(300, Math.max(200, viewport * 0.32)));
@@ -65,18 +59,6 @@ export function CoreStage({ compact }: { compact: boolean }) {
             {copy.sub && !(compact && jarvis.state === "WAITING_FOR_APPROVAL") && (
               <p className="mt-2 text-[13px] text-fg-muted">{copy.sub}</p>
             )}
-            {copy.message?.error && (
-              <dl className="mx-auto mt-4 grid max-w-[460px] grid-cols-[84px_minmax(0,1fr)] gap-x-3 gap-y-1 text-left text-[13px]">
-                <dt className="text-fg-faint">Reason</dt>
-                <dd className="text-fg-muted">{copy.message.error.message}</dd>
-                {copy.message.error.suggestion && (
-                  <>
-                    <dt className="text-fg-faint">Suggested</dt>
-                    <dd className="text-fg-muted">{copy.message.error.suggestion}</dd>
-                  </>
-                )}
-              </dl>
-            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -88,8 +70,6 @@ function describe(
   connection: string,
   state: ReturnType<typeof useJarvis.getState>["jarvis"]["state"],
   detail: string,
-  message: LastMessage | null,
-  now: number,
 ): Copy {
   if (connection === "connecting") {
     return {
@@ -107,20 +87,17 @@ function describe(
       sub: "Reconnecting automatically.",
     };
   }
-  const freshMessage = message && now - message.at < MESSAGE_LINGER_MS ? message : null;
   switch (state) {
     case "DORMANT":
-      return freshMessage
-        ? { label: "Online", labelTone: "text-accent", headline: freshMessage.text, message: freshMessage }
-        : { label: "Online", labelTone: "text-accent", headline: "Everything is nominal." };
+      return { label: "Online", labelTone: "text-accent", headline: "Everything is nominal." };
     case "COMPLETE":
+      return { label: stateLabel(state), labelTone: "text-success", headline: "Done." };
     case "FAILED":
-      return {
-        label: stateLabel(state),
-        labelTone: state === "COMPLETE" ? "text-success" : "text-danger",
-        headline: message?.text ?? detail,
-        message: message ?? undefined,
-      };
+      return { label: stateLabel(state), labelTone: "text-danger", headline: "That didn't work — details below." };
+    case "LISTENING":
+      return { label: "Listening", labelTone: "text-accent", headline: "I'm listening." };
+    case "SPEAKING":
+      return { label: "Speaking", labelTone: "text-accent", headline: "Speaking…" };
     case "WAITING_FOR_APPROVAL":
       return {
         label: stateLabel(state),

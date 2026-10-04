@@ -192,6 +192,19 @@ describe("reducer", () => {
     expect(state.voice?.state).toBe("listening");
   });
 
+  it("keeps the conversation in order, merges history with live messages", () => {
+    const said = event("command.received", { text: "hello", source: "text" });
+    const answer = event("jarvis.message", { text: "Online.", success: true, error: null });
+    let state = apply(initialState, said);
+    state = apply(state, event("tool.started", {}));
+    expect(state.conversation.map((e) => e.id)).toEqual([said.id]);
+    // History arrives after a live message: no duplicates, chronological order.
+    const older = event("command.received", { text: "earlier", source: "voice" }, { timestamp: "2020-01-01T00:00:00Z" });
+    state = reduce(state, { type: "conversation", events: [older, said, answer], complete: true });
+    expect(state.conversation.map((e) => e.id)).toEqual([older.id, said.id, answer.id]);
+    expect(state.conversationComplete).toBe(true);
+  });
+
   it("navigates and tracks connection", () => {
     let state = reduce(initialState, { type: "navigate", view: { name: "mission", id: "m1" } });
     state = reduce(state, { type: "connection", status: "offline" });

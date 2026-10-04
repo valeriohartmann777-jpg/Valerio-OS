@@ -63,6 +63,7 @@ for (let i = 0; i < 120 && (await health())?.build !== "0000000-outdated"; i += 
 }
 assert.equal((await health())?.build, "0000000-outdated", "stale backend did not start");
 
+const mainDataDir = mkdtempSync(path.join(tmpdir(), "jarvis-e2e-"));
 const app = await electron.launch({
   executablePath: electronBinary,
   args: [appDir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])],
@@ -70,7 +71,7 @@ const app = await electron.launch({
     ...process.env,
     JARVIS_BACKEND_URL: backendUrl,
     JARVIS_SYSTEM_BACKEND: "simulated",
-    JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-")),
+    JARVIS_DATA_DIR: mainDataDir,
     JARVIS_UPDATES: "off",
   },
 });
@@ -80,6 +81,8 @@ try {
   await page.setViewportSize({ width: 1480, height: 920 }).catch(() => {});
   const shot = (name) => page.screenshot({ path: path.join(outDir, `${name}.png`) });
   const headline = page.getByTestId("jarvis-headline");
+  // JARVIS's replies live in the persistent conversation below the core.
+  const reply = (text) => page.getByTestId("jarvis-reply").filter({ hasText: text }).first();
   const command = async (text) => {
     await page.getByTestId("command-input").fill(text);
     await page.getByTestId("command-input").press("Enter");
@@ -117,7 +120,7 @@ try {
     await page.getByTestId("agent-operator").and(page.locator('[data-status="active"]')).waitFor();
     await page.waitForTimeout(250);
     await shot("02-executing");
-    await headline.filter({ hasText: "Notepad is open." }).waitFor({ timeout: 10_000 });
+    await reply("Notepad is open.").waitFor({ timeout: 10_000 });
     const statuses = await page.getByTestId("mission-step").evaluateAll((els) => els.map((e) => e.dataset.status));
     assert.deepEqual(statuses, ["complete", "complete"]);
     const activity = await page.getByTestId("activity-stream").innerText();
@@ -145,7 +148,7 @@ try {
     await page.waitForTimeout(500);
     await shot("04-approval");
     await card.getByTestId("approve").click();
-    await headline.filter({ hasText: "PowerShell is open." }).waitFor();
+    await reply("PowerShell is open.").waitFor();
   });
 
   await step("level-4 action needs two-step confirmation", async () => {
@@ -157,24 +160,24 @@ try {
     await page.waitForTimeout(300);
     await shot("05-strong-confirm");
     await card.getByTestId("approve").click();
-    await headline.filter({ hasText: "Registry Editor is open." }).waitFor();
+    await reply("Registry Editor is open.").waitFor();
   });
 
   await step("rejection stops the mission and JARVIS acknowledges", async () => {
     await command("open cmd");
     await page.getByTestId("approval-card").getByTestId("reject").click();
-    await headline.filter({ hasText: "Understood. I won't open Command Prompt." }).waitFor();
+    await reply("Understood. I won't open Command Prompt.").waitFor();
   });
 
   await step("open-ended request without a key explains how to connect the model", async () => {
     await command("plan my evening");
-    await headline.filter({ hasText: "I can't reason about that yet." }).waitFor();
+    await reply("I can't reason about that yet.").waitFor();
     await page.getByRole("definition").filter({ hasText: "Settings" }).first().waitFor();
   });
 
   await step("failures are explained, not dumped", async () => {
     await command("open blender");
-    await headline.filter({ hasText: "I couldn't open Blender." }).waitFor();
+    await reply("I couldn't open Blender.").waitFor();
     await page.getByRole("definition").filter({ hasText: "isn't installed, or it can't be found on this computer." }).waitFor();
     await page.waitForTimeout(400);
     await shot("06-failure");
@@ -237,6 +240,33 @@ await step("backend supervised by Electron is stopped on quit", async () => {
     () => false,
   );
   assert.equal(alive, false);
+});
+
+await step("the conversation is still there after a restart", async () => {
+  const again = await electron.launch({
+    executablePath: electronBinary,
+    args: [appDir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])],
+    env: {
+      ...process.env,
+      JARVIS_BACKEND_URL: backendUrl,
+      JARVIS_SYSTEM_BACKEND: "simulated",
+      JARVIS_DATA_DIR: mainDataDir,
+      JARVIS_UPDATES: "off",
+    },
+  });
+  try {
+    const page = await again.firstWindow();
+    await page.setViewportSize({ width: 1480, height: 920 }).catch(() => {});
+    const conversation = page.getByTestId("conversation");
+    await conversation.getByText("Open Notepad.", { exact: true }).waitFor({ timeout: 30_000 });
+    await page.getByTestId("jarvis-reply").filter({ hasText: "I couldn't open Blender." }).waitFor();
+    const said = await page.getByTestId("you-said").count();
+    assert.ok(said >= 6, `expected the earlier commands, found ${said}`);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(outDir, "13-conversation-after-restart.png") });
+  } finally {
+    await again.close();
+  }
 });
 
 await step("starting a newer version takes over from the running one; the same version doesn't", async () => {

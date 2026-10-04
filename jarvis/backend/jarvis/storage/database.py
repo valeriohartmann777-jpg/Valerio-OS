@@ -63,6 +63,8 @@ MIGRATIONS: list[list[str]] = [
         """,
         "CREATE INDEX idx_audit_timestamp ON audit_log(timestamp)",
     ],
+    # 2: the conversation is read by event type
+    ["CREATE INDEX idx_events_type_timestamp ON events(type, timestamp)"],
 ]
 
 

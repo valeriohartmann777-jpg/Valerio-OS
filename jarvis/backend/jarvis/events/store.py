@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from jarvis.events.bus import EventBus
 from jarvis.events.types import Event, EventType, Severity
@@ -45,19 +46,36 @@ class EventStore:
         rows = await self._db.fetch_all(
             "SELECT * FROM events ORDER BY timestamp DESC LIMIT ?", (limit,)
         )
-        events = [
-            Event(
-                id=row["id"],
-                type=EventType(row["type"]),
-                timestamp=row["timestamp"],
-                severity=Severity(row["severity"]),
-                source=row["source"],
-                message=row["message"],
-                trace_id=row["trace_id"],
-                mission_id=row["mission_id"],
-                payload=json.loads(row["payload"]),
-            )
-            for row in rows
-        ]
-        events.reverse()
-        return events
+        return _oldest_first(rows)
+
+    async def conversation(self, limit: int = 100, before: str | None = None) -> list[Event]:
+        """What was said: commands and JARVIS's replies, oldest first.
+
+        ``before`` (an event timestamp) pages back through older history.
+        """
+        types = (EventType.COMMAND_RECEIVED.value, EventType.JARVIS_MESSAGE.value)
+        rows = await self._db.fetch_all(
+            "SELECT * FROM events WHERE type IN (?, ?) AND timestamp < ? "
+            "ORDER BY timestamp DESC LIMIT ?",
+            (*types, before or "9999", limit),
+        )
+        return _oldest_first(rows)
+
+
+def _oldest_first(rows: list[Any]) -> list[Event]:
+    events = [
+        Event(
+            id=row["id"],
+            type=EventType(row["type"]),
+            timestamp=row["timestamp"],
+            severity=Severity(row["severity"]),
+            source=row["source"],
+            message=row["message"],
+            trace_id=row["trace_id"],
+            mission_id=row["mission_id"],
+            payload=json.loads(row["payload"]),
+        )
+        for row in rows
+    ]
+    events.reverse()
+    return events

@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import os
 from dataclasses import asdict
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import (
@@ -267,6 +268,21 @@ async def activity(
 ) -> list[Event]:
     events = await rt.events.recent(limit=limit)
     return [e for e in events if e.at_least(min_severity)]
+
+
+@router.get("/conversation")
+async def conversation(
+    rt: RuntimeDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    before: Annotated[str | None, Query(max_length=40)] = None,
+) -> list[Event]:
+    """The chat history: commands (typed or spoken) and JARVIS's replies."""
+    if before is not None:
+        try:  # clients send JSON timestamps ("…Z"); stored ones are isoformat ("…+00:00")
+            before = datetime.fromisoformat(before).isoformat()
+        except ValueError as exc:
+            raise HTTPException(422, "before must be an ISO timestamp") from exc
+    return await rt.events.conversation(limit=limit, before=before)
 
 
 @router.get("/audit")

@@ -27,6 +27,8 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
 - **Desktop command center** (Electron + React): JARVIS Core visual with explicit
   states, active mission with live steps, approval requests, context, agents,
   missions, activity stream, command bar, mission detail, settings.
+- **Conversation**: everything you typed or said and every answer stays
+  visible as a chat on Home — across restarts and updates.
 - **Backend** (FastAPI): event bus + WebSocket stream, state service, router,
   missions with pause/resume/stop, Operator + Sentinel agents, tool framework,
   permission levels 0–4 with approvals, SQLite persistence, audit log,

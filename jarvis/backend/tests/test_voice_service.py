@@ -28,7 +28,7 @@ WAKE_MARK = 4321
 def frame(db: float, *, wake: bool = False) -> np.ndarray:
     amplitude = 32768 * 10 ** (db / 20) * np.sqrt(2)
     t = np.arange(FRAME) / 16000
-    samples = (amplitude * np.sin(2 * np.pi * 220 * t)).astype(np.int16)
+    samples: np.ndarray = (amplitude * np.sin(2 * np.pi * 220 * t)).astype(np.int16)
     if wake:
         samples[0] = WAKE_MARK
     return samples
