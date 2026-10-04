@@ -160,6 +160,32 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-016 — Mac app = loader bundle around the checkout; updates = fast-forward + staged build + relaunch
+
+- **Decision:** `scripts/install-mac-app.sh` turns a copy of the Electron
+  runtime into `~/Applications/JARVIS.app` (name, icon, bundle id, privacy
+  texts, ad-hoc signature) whose only content is a loader that starts JARVIS
+  from the git checkout. The in-app updater fast-forwards the checkout,
+  installs changed dependencies, builds into staging folders, swaps them in
+  and relaunches.
+- **Reason:** Three of the first real-world problems were update mechanics
+  (old instance still running, update not started), not JARVIS itself. A
+  packaged, self-contained app (electron-builder + PyInstaller'd backend +
+  release feed) needs a macOS build machine, signing/notarization and a
+  release pipeline — heavy for a single-user system developed from a cloud
+  container. The loader keeps one source of truth (the checkout) and makes an
+  update exactly what `git pull && npm run dev` did, minus the terminal.
+- **Alternatives:** electron-builder `.dmg` + `autoUpdater` (proper
+  distribution, later if JARVIS ever ships to others); an AppleScript/shell
+  launcher (Dock would still show "Electron", no single-instance semantics);
+  keep the terminal workflow.
+- **Consequences:** The app depends on the checkout path (it says so if the
+  folder is gone). Ad-hoc signatures change when the Electron version changes;
+  then macOS asks for privacy permissions again. Updates refuse to run over
+  local changes or local commits and say why. Updates are off in `npm run dev`
+  (developers use git) and with `JARVIS_UPDATES=off` (tests).
+- **Date:** 2026-10-04
+
 ## D-015 — Phase 2 tools: permission-free OS paths, folder allowlist, exposure rule
 
 - **Decision:** Web, file, window and sound tools use only mechanisms that

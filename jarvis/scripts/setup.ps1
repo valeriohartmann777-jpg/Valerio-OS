@@ -26,8 +26,7 @@ if (-not (Test-Path "backend\.venv")) {
 & backend\.venv\Scripts\python.exe -m pip install -e "backend[dev]"
 
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "Node.js 20+ is required (https://nodejs.org)." }
-npm install
-
+npm install --no-save
 if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 
 Write-Host "`nDone. Start JARVIS with:  npm run dev   (or scripts\dev.ps1)" -ForegroundColor Green

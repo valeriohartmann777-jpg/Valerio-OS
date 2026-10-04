@@ -51,7 +51,7 @@ docs that match reality.
 - [ ] Context: clipboard metadata, monitor layout, window list in the UI
 - [ ] Instant rules for the common ones ("lauter", "pause") without a model call
 - [ ] Settings page edits permission policy and file roots
-- [ ] JARVIS as a real Mac app (dock icon, no terminal)
+- [x] JARVIS as a real Mac app (dock icon, no terminal) with one-click updates
 
 ## Order after the first demo
 

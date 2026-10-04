@@ -50,8 +50,11 @@ if (!process.env.JARVIS_PYTHON) {
     `${path.join(root, "backend")}[dev]`,
   ]);
 }
+// --no-save: install exactly what the lockfile says and never rewrite it, so a
+// newer npm can't leave local changes that would block the next update.
 sync("package-lock.json", path.join(root, "package-lock.json"), path.join(root, "node_modules", ".jarvis-deps"), "npm", [
   "install",
+  "--no-save",
   "--no-audit",
   "--no-fund",
 ]);

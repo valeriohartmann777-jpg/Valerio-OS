@@ -387,6 +387,25 @@ touches `storage/` and the repositories. Semantic memory will sit behind a
   on quit. `/health` reports the backend's git commit (`build`); a JARVIS
   backend running older code (e.g. left over from a previous run) is stopped
   and replaced instead of being reused. The top bar shows the build.
+- **Launch modes**: `dev` (`npm run dev`, Vite), `start` (`npm start`) and
+  `app` (the installed `JARVIS.app`). All share one settings folder and so one
+  single-instance lock; a newly started different build — or the app replacing
+  a terminal-started JARVIS — makes the running one hand over.
+- **Mac app** (`scripts/install-mac-app.sh`): a copy of `Electron.app` with
+  JARVIS's name, icon, bundle id and privacy texts, signed ad-hoc, in
+  `~/Applications`. Its `Resources/app` is a loader
+  (`scripts/mac-app/bootstrap.mjs`) that starts JARVIS from the checkout and
+  restores `PATH` (node, git, Homebrew) — the bundle never contains JARVIS
+  code, so updates need no reinstall.
+- **Updates** (`electron/updater.ts`, not in `dev` mode): fetch the tracked
+  branch at start and hourly; the top bar offers *Update* when behind. Apply =
+  `git merge --ff-only` (never a merge commit, never over local changes) →
+  `scripts/preflight.mjs` (changed Python/npm dependencies) →
+  `scripts/build-app.mjs` (build into staging folders, swap only on success)
+  → reinstall the app bundle only if the Electron version changed → stop the
+  backend → `app.relaunch()`. Every failure is shown with its output and
+  leaves the running version intact. The E2E test performs a real update from
+  a temporary git remote, including the restart.
 - **Renderer** (`apps/desktop/src/`): React 19 + Tailwind 4 + Motion.
   A pure reducer (`store/reducer.ts`) folds snapshot + events into UI state
   (unit-tested); Zustand exposes it to components.

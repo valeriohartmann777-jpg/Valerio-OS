@@ -116,6 +116,20 @@ cd ~/dev/Valerio-OS/jarvis
 ./scripts/setup.sh && npm run dev
 ```
 
+### Install as a Mac app (recommended)
+
+```bash
+cd ~/dev/Valerio-OS/jarvis
+./scripts/install-mac-app.sh
+```
+
+This creates `~/Applications/JARVIS.app` (Dock, Spotlight — no terminal
+needed afterwards). It starts JARVIS from this folder, so it stays current:
+when a new version is available, the top bar shows **Update** — one click
+downloads it, installs changed packages, rebuilds and restarts JARVIS. Your
+key in `jarvis/.env` and all data stay where they are. macOS asks once more
+for folder and music permissions, now for "JARVIS" instead of Terminal.
+
 On macOS JARVIS controls the real desktop: `open textedit`, `open safari`,
 `öffne den rechner`, `open spotify`, `open terminal` (asks for approval), or any
 installed app by name. Commands: `what's the active window`, `list running apps`.

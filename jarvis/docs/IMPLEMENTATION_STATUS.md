@@ -101,17 +101,39 @@ _Last updated: 2026-10-04_
   test prompts (YouTube search, Downloads, invoice, volume, music, hide app)
   working
 
+### Mac app and in-app updates
+- `scripts/install-mac-app.sh`: `~/Applications/JARVIS.app` (icon, name,
+  bundle id, privacy texts, ad-hoc signature), loader that runs the checkout
+- App icon: `apps/desktop/assets/icon.svg` → `icon.png` (also the Dock icon
+  in `npm run dev` / window icon on Windows/Linux)
+- Updater: check at start + hourly, top-bar *Update* with progress, Settings
+  row; fast-forward only, staged build (`scripts/build-app.mjs`, ~2 s),
+  dependency sync, relaunch; errors shown with output
+- Launch modes share one settings folder/lock; the app replaces a
+  terminal-started JARVIS
+- Installs never rewrite `package-lock.json` (`--no-save`); a lockfile changed
+  locally by another npm version is reset before an update instead of
+  blocking it (any other local change still blocks, with the reason shown)
+- Tests: 7 updater tests against real git repositories (current, update +
+  steps, local changes, regenerated lockfile, local commits, failed build,
+  offline / no upstream);
+  E2E: loader start + takeover, and a full update from a temporary remote
+  through the UI including the restart (16 steps total)
+- Not yet run on the MacBook (`codesign`, `iconutil`, `sips` are macOS-only)
+
 ## IN PROGRESS
 - —
 
 ## NEXT
 
+0. Install the Mac app on the MacBook (`./scripts/install-mac-app.sh`) and do
+   the first real in-app update
+
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")
 2. Context: clipboard metadata, monitors, window list in the UI
 3. Settings page: edit permission policy and file roots
-4. JARVIS as a real Mac app (dock icon, no terminal)
-5. Windows: first real run (`scripts/smoke.py notepad`)
+4. Windows: first real run (`scripts/smoke.py notepad`)
 
 ## BLOCKED
 - Real-OS runs could not happen in the development container (Linux).

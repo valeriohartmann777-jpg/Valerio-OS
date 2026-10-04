@@ -15,14 +15,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { _electron as electron } from "playwright-core";
+import { _electron as electron, chromium } from "playwright-core";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const appDir = path.join(root, "apps", "desktop");
@@ -34,6 +34,7 @@ const require = createRequire(path.join(appDir, "package.json"));
 const electronBinary = require("electron");
 
 const steps = [];
+const shotOf = (page, name) => page.screenshot({ path: path.join(outDir, `${name}.png`) });
 const step = async (name, fn) => {
   const started = Date.now();
   await fn();
@@ -70,6 +71,7 @@ const app = await electron.launch({
     JARVIS_BACKEND_URL: backendUrl,
     JARVIS_SYSTEM_BACKEND: "simulated",
     JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-")),
+    JARVIS_UPDATES: "off",
   },
 });
 
@@ -186,6 +188,7 @@ try {
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByText("Strong confirmation").waitFor();
     await page.getByText("~/Documents").first().waitFor(); // folders the file tools may see
+    await page.getByText("Updates are turned off").waitFor();
     await page.waitForTimeout(300);
     await shot("08-settings");
     await page.getByRole("button", { name: "Home" }).click();
@@ -226,6 +229,7 @@ await step("starting a newer version takes over from the running one; the same v
   const env = (build) => ({
     ...process.env,
     JARVIS_BUILD: build,
+    JARVIS_UPDATES: "off",
     JARVIS_BACKEND_URL: backendUrl,
     JARVIS_SYSTEM_BACKEND: "simulated",
     JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-takeover-")),
@@ -255,6 +259,145 @@ await step("starting a newer version takes over from the running one; the same v
   } finally {
     await newer.close();
   }
+});
+
+await step("the Mac app's loader starts JARVIS from the checkout and replaces a terminal JARVIS", async () => {
+  const launchArgs = (dir) => [dir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])];
+  const env = {
+    ...process.env,
+    JARVIS_UPDATES: "off",
+    JARVIS_BACKEND_URL: backendUrl,
+    JARVIS_SYSTEM_BACKEND: "simulated",
+    JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-loader-")),
+  };
+  const online = (page) =>
+    page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 60_000 });
+
+  const terminal = await electron.launch({ executablePath: electronBinary, args: launchArgs(appDir), env });
+  await online(await terminal.firstWindow());
+  const terminalClosed = new Promise((resolve) => terminal.once("close", resolve));
+
+  // What JARVIS.app contains in Contents/Resources/app (see scripts/install-mac-app.sh).
+  const loader = path.join(mkdtempSync(path.join(tmpdir(), "jarvis-e2e-app-")), "app");
+  execFileSync(process.execPath, [path.join(root, "scripts", "mac-app", "bootstrap.mjs"), loader]);
+  const macApp = await electron.launch({ executablePath: electronBinary, args: launchArgs(loader), env });
+  try {
+    await terminalClosed; // same version, but the app takes over from the terminal one
+    const page = await macApp.firstWindow();
+    await online(page);
+    assert.equal(await macApp.evaluate(({ app }) => app.getName()), "JARVIS");
+    assert.equal(await macApp.evaluate(() => process.env.JARVIS_APP), "1");
+  } finally {
+    await macApp.close();
+  }
+});
+
+await step("the Update button installs a newer version and JARVIS restarts on it", async () => {
+  // A "GitHub" remote holding this code, the user's checkout of it, and a newer
+  // version pushed afterwards — then the user clicks Update.
+  const base = mkdtempSync(path.join(tmpdir(), "jarvis-e2e-update-"));
+  const gitEnv = { ...process.env, GIT_AUTHOR_NAME: "E2E", GIT_AUTHOR_EMAIL: "e2e@example.com" };
+  Object.assign(gitEnv, { GIT_COMMITTER_NAME: "E2E", GIT_COMMITTER_EMAIL: "e2e@example.com" });
+  const git = (cwd, ...args) =>
+    execFileSync("git", ["-c", "init.defaultBranch=main", ...args], { cwd, env: gitEnv }).toString().trim();
+
+  const checkout = path.join(base, "checkout");
+  const files = git(root, "ls-files", "--cached", "--others", "--exclude-standard").split("\n");
+  for (const file of files.filter((f) => f && existsSync(path.join(root, f)))) {
+    cpSync(path.join(root, file), path.join(checkout, file), { recursive: true });
+  }
+  // Reuse the installed packages instead of downloading them again.
+  symlinkSync(path.join(root, "node_modules"), path.join(checkout, "node_modules"));
+  symlinkSync(path.join(root, "backend", ".venv"), path.join(checkout, "backend", ".venv"));
+  git(checkout, "init", "-q");
+  git(checkout, "add", "-A", ":!node_modules", ":!backend/.venv");
+  git(checkout, "commit", "-q", "-m", "The version the user has");
+  git(base, "init", "-q", "--bare", "remote.git");
+  git(checkout, "remote", "add", "origin", path.join(base, "remote.git"));
+  git(checkout, "push", "-q", "-u", "origin", "main");
+  execFileSync(process.execPath, ["scripts/build-app.mjs"], { cwd: checkout, stdio: "ignore" });
+
+  const publisher = path.join(base, "publisher");
+  git(base, "clone", "-q", "remote.git", "publisher");
+  writeFileSync(path.join(publisher, "UPDATE-TEST.md"), "new version\n");
+  git(publisher, "add", "UPDATE-TEST.md");
+  git(publisher, "commit", "-q", "-m", "Add voice control");
+  git(publisher, "push", "-q", "origin", "main");
+  const newer = git(publisher, "rev-parse", "HEAD");
+
+  const updateUrl = "http://127.0.0.1:8797";
+  const updateHealth = () => fetch(`${updateUrl}/health`).then((r) => r.json(), () => null);
+  const appDirectory = path.join(checkout, "apps", "desktop");
+  // Started like a normal launch (no Node inspector, which would keep the old
+  // process alive at exit); the test attaches to the window over CDP instead —
+  // the restarted app gets the same arguments, so it is reachable the same way.
+  const cdpPort = 9337;
+  const app = spawn(
+    electronBinary,
+    [appDirectory, `--remote-debugging-port=${cdpPort}`, ...(process.platform === "linux" ? ["--no-sandbox"] : [])],
+    {
+      env: {
+        ...process.env,
+        JARVIS_BACKEND_URL: updateUrl,
+        JARVIS_SYSTEM_BACKEND: "simulated",
+        JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-update-data-")),
+      },
+      stdio: "ignore",
+    },
+  );
+  const exited = new Promise((resolve) => app.once("exit", resolve));
+  const attach = async () => {
+    for (let i = 0; i < 240; i += 1) {
+      try {
+        const browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
+        const page = browser.contexts()[0]?.pages().find((p) => p.url().startsWith("app://"));
+        if (page) return { browser, page };
+        await browser.close();
+      } catch {
+        /* not up yet */
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error("JARVIS window not reachable");
+  };
+
+  try {
+    const before = await attach();
+    const { page } = before;
+    await page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 60_000 });
+    await page.getByTestId("update-button").click({ timeout: 30_000 });
+    await page.getByTestId("update-panel").getByText("Add voice control").waitFor();
+    await page.waitForTimeout(200);
+    await shotOf(page, "11-update-available");
+    await page.getByTestId("update-now").click();
+    await page.getByTestId("update-progress").waitFor();
+    // JARVIS quits to restart itself on the new code — or shows what went wrong.
+    const problem = page.getByTestId("update-button").waitFor({ timeout: 150_000 }).then(
+      async () => `update failed: ${await page.getByTestId("update-panel").innerText().catch(() => "")}`,
+      () => new Promise(() => {}), // the window went away: expected while restarting
+    );
+    const timeout = new Promise((resolve) => setTimeout(() => resolve("no restart within 150 s"), 150_000));
+    const outcome = await Promise.race([exited.then(() => "restarted"), problem, timeout]);
+    assert.equal(outcome, "restarted", outcome);
+    await before.browser.close().catch(() => {});
+
+    const after = await attach();
+    await after.page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 60_000 });
+    assert.ok((await after.page.getByTestId("build").innerText()).includes(newer.slice(0, 7)));
+    assert.equal((await updateHealth())?.build, newer);
+    assert.ok(existsSync(path.join(checkout, "UPDATE-TEST.md")));
+    await after.page.waitForTimeout(300);
+    await shotOf(after.page, "12-updated-and-restarted");
+    await after.browser.close().catch(() => {});
+  } finally {
+    // The restarted app isn't a child of the test: end it like a user would.
+    app.kill("SIGTERM");
+    spawn("pkill", ["-TERM", "-f", appDirectory], { stdio: "ignore" });
+    for (let i = 0; i < 40 && (await updateHealth()); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  assert.equal(await updateHealth(), null, "the restarted JARVIS didn't stop its backend on quit");
 });
 
 console.log(`\nAll ${steps.length} end-to-end checks passed. Screenshots: ${outDir}`);

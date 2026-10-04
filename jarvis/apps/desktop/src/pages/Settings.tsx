@@ -1,6 +1,7 @@
 import type { SettingsView } from "@jarvis/protocol";
 import { type FormEvent, useEffect, useState } from "react";
 
+import { UpdateSummary } from "../components/UpdateControls";
 import { Button, Empty, StatusDot, cx } from "../components/ui/primitives";
 import { ApiError, api } from "../lib/api";
 import { BACKEND_URL } from "../lib/config";
@@ -42,6 +43,9 @@ export function Settings() {
 
             <Group title="System">
               <Item label="Version">{settings.version}</Item>
+              <Item label="Updates">
+                <UpdateSummary />
+              </Item>
               <Item label="Backend">{BACKEND_URL}</Item>
               <Item label="Environment">
                 <span className={cx(settings.simulated && "text-warning")}>

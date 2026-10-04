@@ -1,8 +1,11 @@
 import { DEFAULT_BACKEND_URL } from "@jarvis/protocol";
 
+import type { UpdatesBridge } from "./updates";
+
 interface Bridge {
   backendUrl?: string;
   platform?: string;
+  updates?: UpdatesBridge;
 }
 
 declare global {

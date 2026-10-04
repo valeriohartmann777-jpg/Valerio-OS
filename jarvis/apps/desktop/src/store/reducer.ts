@@ -15,6 +15,8 @@ import type {
   Snapshot,
 } from "@jarvis/protocol";
 
+import type { UpdateStatus } from "../lib/updates";
+
 export type View = { name: "home" } | { name: "mission"; id: string } | { name: "settings" };
 export type Connection = "connecting" | "online" | "offline";
 
@@ -40,6 +42,8 @@ export interface UIState {
   lastMessage: LastMessage | null;
   view: View;
   showDebug: boolean;
+  /** In-app update state from the Electron main process (null outside Electron). */
+  updates: UpdateStatus | null;
 }
 
 export type Action =
@@ -47,7 +51,8 @@ export type Action =
   | { type: "snapshot"; snapshot: Snapshot; now: number }
   | { type: "event"; event: JarvisEvent; now: number }
   | { type: "navigate"; view: View }
-  | { type: "toggleDebug" };
+  | { type: "toggleDebug" }
+  | { type: "updates"; status: UpdateStatus };
 
 export const MAX_ACTIVITY = 400;
 export const MAX_MISSIONS = 50;
@@ -71,6 +76,7 @@ export const initialState: UIState = {
   lastMessage: null,
   view: { name: "home" },
   showDebug: false,
+  updates: null,
 };
 
 export function reduce(state: UIState, action: Action): UIState {
@@ -81,6 +87,8 @@ export function reduce(state: UIState, action: Action): UIState {
       return { ...state, view: action.view };
     case "toggleDebug":
       return { ...state, showDebug: !state.showDebug };
+    case "updates":
+      return { ...state, updates: action.status };
     case "snapshot":
       return applySnapshot(state, action.snapshot, action.now);
     case "event":

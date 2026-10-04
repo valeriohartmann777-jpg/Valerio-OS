@@ -17,7 +17,7 @@ echo "Using $("$PYTHON" --version) and Node $(node --version)"
 [ -d backend/.venv ] || "$PYTHON" -m venv backend/.venv
 backend/.venv/bin/python -m pip install --upgrade pip
 backend/.venv/bin/python -m pip install -e "backend[dev]"
-npm install
+npm install --no-save
 [ -f .env ] || cp .env.example .env
 
 echo "Done. Start JARVIS with: npm run dev"

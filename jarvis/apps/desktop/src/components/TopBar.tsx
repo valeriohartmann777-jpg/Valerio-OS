@@ -2,6 +2,7 @@ import { HAS_TITLEBAR_OVERLAY, HAS_TRAFFIC_LIGHTS } from "../lib/config";
 import { clock } from "../lib/format";
 import type { View } from "../store/reducer";
 import { dispatch, useJarvis, useNow } from "../store/store";
+import { UpdateButton } from "./UpdateControls";
 import { StatusDot, cx } from "./ui/primitives";
 
 const CONNECTION = {
@@ -52,6 +53,7 @@ export function TopBar() {
       </nav>
 
       <div className="ml-auto flex items-center gap-5">
+        <UpdateButton />
         {simulated && (
           <span
             className="rounded-md border border-warning/30 px-2 py-0.5 font-mono text-2xs tracking-wider text-warning uppercase"
