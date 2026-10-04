@@ -88,6 +88,11 @@ class BrainConnector:
     def env_file(self) -> Path:
         return self._env_file
 
+    @property
+    def settings(self) -> ModelSettings:
+        """Current model settings, including a key connected while running."""
+        return self._settings
+
     async def connect(self, raw_key: str) -> BrainStatus:
         """Verify, persist and activate a key. Raises ``ModelError`` and changes
         nothing when the key is malformed, rejected or cannot be stored."""

@@ -25,6 +25,9 @@ from jarvis.core.state import StateService
 from jarvis.events.bus import EventBus
 from jarvis.events.store import EventStore
 from jarvis.events.types import EventType, Severity
+from jarvis.learning.journal import LearningJournal
+from jarvis.learning.market import MarketData
+from jarvis.learning.service import LearningService, ResearchModel
 from jarvis.llm.registry import ModelSet, build_models
 from jarvis.missions.engine import MissionEngine
 from jarvis.missions.planner import DeterministicPlanner
@@ -36,6 +39,7 @@ from jarvis.storage.database import Database
 from jarvis.storage.preferences import Preferences
 from jarvis.tools.executor import ToolExecutor
 from jarvis.tools.files import FileAccess, register_file_tools
+from jarvis.tools.learning import register_learning_tools
 from jarvis.tools.media import register_media_tools
 from jarvis.tools.registry import ToolRegistry
 from jarvis.tools.system import create_backend, register_system_tools
@@ -60,6 +64,8 @@ class Runtime:
         voice_audio: Callable[[], AudioDevice] | None = None,
         voice_detector: Callable[[Path], WakeDetector] | None = None,
         voice_provider: ProviderFactory | None = None,
+        research_model: Callable[[], ResearchModel | None] | None = None,
+        market: MarketData | None = None,
     ) -> None:
         self.settings = settings
         self.started_at = time.time()
@@ -174,6 +180,41 @@ class Runtime:
             provider_factory=voice_provider or elevenlabs_provider,
         )
 
+        self.learning_journal = LearningJournal(self.db)
+        self._research: tuple[str, ResearchModel] | None = None
+        self.learning = LearningService(
+            settings=settings.learning,
+            bus=self.bus,
+            journal=self.learning_journal,
+            market=market or MarketData(settings.data_dir / "market"),
+            preferences=self.preferences,
+            model_factory=research_model or self._research_model,
+        )
+        register_learning_tools(self.tools, self.learning_journal, lambda: self.learning.status)
+
+    def _research_model(self) -> ResearchModel | None:
+        """Claude for learning, with the key the brain currently uses."""
+        secret = self.connector.settings.anthropic_api_key
+        if secret is None or not self.brain.available:
+            return None
+        key = secret.get_secret_value()
+        if self._research is None or self._research[0] != key:
+            import anthropic
+
+            from jarvis.llm.anthropic_provider import AnthropicChatModel
+
+            learning = self.settings.learning
+            model = AnthropicChatModel(
+                client=anthropic.AsyncAnthropic(api_key=key),
+                model=learning.model,
+                max_tokens=learning.max_tokens,
+                effort=learning.effort,
+                timeout_seconds=learning.timeout_seconds,
+                refusal_fallback=self.settings.models.refusal_fallback,
+            )
+            self._research = (key, model)
+        return self._research[1]
+
     @property
     def uptime_seconds(self) -> float:
         return time.time() - self.started_at
@@ -211,8 +252,10 @@ class Runtime:
         elif self._verify_key_on_start:
             self._key_check = asyncio.create_task(self.connector.check(), name="key-check")
         await self.voice.start()
+        await self.learning.start()
 
     async def stop(self) -> None:
+        await self.learning.stop()
         await self.voice.stop()
         if self._key_check is not None:
             self._key_check.cancel()

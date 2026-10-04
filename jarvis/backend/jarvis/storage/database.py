@@ -65,6 +65,61 @@ MIGRATIONS: list[list[str]] = [
     ],
     # 2: the conversation is read by event type
     ["CREATE INDEX idx_events_type_timestamp ON events(type, timestamp)"],
+    # 3: self-directed learning (rounds, backtests, knowledge notes)
+    [
+        """
+        CREATE TABLE learning_rounds (
+            id            TEXT PRIMARY KEY,
+            number        INTEGER NOT NULL UNIQUE,
+            day           TEXT NOT NULL,
+            started_at    TEXT NOT NULL,
+            finished_at   TEXT,
+            status        TEXT NOT NULL,
+            summary       TEXT NOT NULL DEFAULT '',
+            next_focus    TEXT NOT NULL DEFAULT '',
+            cost_usd      REAL NOT NULL DEFAULT 0,
+            input_tokens  INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            searches      INTEGER NOT NULL DEFAULT 0,
+            error         TEXT
+        )
+        """,
+        "CREATE INDEX idx_learning_rounds_day ON learning_rounds(day)",
+        """
+        CREATE TABLE learning_tests (
+            id                TEXT PRIMARY KEY,
+            number            INTEGER NOT NULL UNIQUE,
+            round_id          TEXT,
+            created_at        TEXT NOT NULL,
+            name              TEXT NOT NULL,
+            instrument        TEXT,
+            style             TEXT,
+            timeframe         TEXT,
+            status            TEXT NOT NULL,
+            reason            TEXT NOT NULL,
+            spec              TEXT NOT NULL,
+            in_sample         TEXT,
+            out_of_sample     TEXT,
+            holdout           TEXT,
+            holdout_confirmed INTEGER,
+            t_required        REAL
+        )
+        """,
+        "CREATE INDEX idx_learning_tests_status ON learning_tests(status)",
+        """
+        CREATE TABLE learning_notes (
+            id          TEXT PRIMARY KEY,
+            number      INTEGER NOT NULL UNIQUE,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            topic       TEXT NOT NULL,
+            text        TEXT NOT NULL,
+            sources     TEXT NOT NULL,
+            active      INTEGER NOT NULL DEFAULT 1,
+            round_id    TEXT
+        )
+        """,
+    ],
 ]
 
 

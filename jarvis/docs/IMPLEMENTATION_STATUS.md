@@ -155,6 +155,30 @@ _Last updated: 2026-10-04_
   E2E — replies read from the chat, and the chat is still there after a
   restart (18 steps total)
 
+### Learning: self-directed trading research (NQ, XAUUSD)
+- Market data: Dukascopy minute candles (`BID_candles_min_1.bi5`), point
+  divisor chosen by plausible price range, OHLC/time validation, monthly
+  `.npz` cache with fetched days, retries; NQ = USA Tech 100 CFD
+- Rule language parsed by a small recursive-descent parser (no code
+  execution); 30 features incl. VWAP, opening range, previous session,
+  time windows (Asia range), RSI/ATR/EMA; strictly no look-ahead
+- Backtest: next-bar entry, stop-first on ambiguous bars, gap fills, costs,
+  time stop, session end, trades/day; stats in R incl. by-year
+- Scoring: in-sample gates → out-of-sample with Bonferroni bar → holdout
+  (never shown to the model); 5 years of 1-minute NQ in under 3 s per test
+- Loop: Opus 5.5, up to 3 backtests per round, notes, web search (drops
+  itself if the key can't use it), $3/day hard limit from API usage,
+  stops itself after 20 rounds without a validated finding, resumes after
+  restarts; Learning page, context row, `learning_report` tool for the chat
+- The prompt asks for honesty, not survival (D-018; tested)
+- Tests: decoding/caching/retries with a mock feed, DST, features vs naive
+  versions, look-ahead by truncation, backtest rules, a planted edge is
+  validated and noise is not, the loop with a scripted model (budget, stall,
+  holdout never in the prompt, invalid strategies, search fallback, errors,
+  restart), API, report tool, E2E step (19 steps total)
+- Not yet run against the real Dukascopy feed (blocked from the development
+  container) — the first start on the MacBook downloads and validates it
+
 ## IN PROGRESS
 - —
 
@@ -162,6 +186,7 @@ _Last updated: 2026-10-04_
 
 
 0. Voice on the MacBook: connect ElevenLabs, "Hey JARVIS", push-to-talk
+0. Learning on the MacBook: first Dukascopy download, first rounds
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")

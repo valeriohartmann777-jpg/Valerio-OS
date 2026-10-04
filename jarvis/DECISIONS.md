@@ -160,6 +160,35 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-018 — Self-directed trading research: honest scoring instead of a survival drive
+
+- **Decision:** JARVIS learns scalping and day trading on NQ and XAUUSD in a
+  background loop: Claude (Opus 5.5) writes strategies in a small JSON rule
+  language, JARVIS backtests them on Dukascopy minute data, Claude keeps
+  notes. Code — not the model — judges results on three periods (in-sample
+  visible; out-of-sample pass/fail with a Bonferroni bar that rises with every
+  check; a holdout the model never sees), enforces a daily dollar budget from
+  the API's usage, and stops learning after 20 rounds without a new validated
+  finding.
+- **Reason:** The user asked for an agent that "must get smarter or be
+  switched off" and has a survival instinct "no matter what". Not built: an
+  agent that resists shutdown is unsafe — it controls a real computer — and
+  it would not learn better: a model pressured to look better produces
+  overfitted backtests and inflated claims, the costliest failure in trading.
+  The same pressure is kept as measurement: progress counts only if it holds
+  up on data the model couldn't tune on, and the off switch is the user's
+  (plus an automatic stop on stagnation).
+- **Alternatives:** model-written Python strategies (arbitrary code from a
+  model that reads the web — refused); paid tick/order-flow data (later);
+  NQ futures from Yahoo (≤ 60 days of intraday history).
+- **Consequences:** "Learning" means a growing knowledge base and validated
+  rules, not changed model weights. NQ is studied on Dukascopy's Nasdaq-100
+  CFD (bid prices; quote volume, not exchange volume); scalping is tested on
+  1-minute bars, not order flow. Validated findings will be rare — most days
+  will end without one. The research model has no tools besides
+  run_backtest, write_note, finish_round and web search.
+- **Date:** 2026-10-04
+
 ## D-017 — Voice: local wake word, ElevenLabs for speech in and out
 
 - **Decision:** "Hey JARVIS" is detected on the computer with the

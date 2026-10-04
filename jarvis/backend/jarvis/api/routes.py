@@ -7,7 +7,7 @@ import contextlib
 import os
 from dataclasses import asdict
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any, Literal
 
 from fastapi import (
     APIRouter,
@@ -27,6 +27,7 @@ from jarvis.api.schemas import (
     ChatAccepted,
     ChatRequest,
     Health,
+    LearningView,
     LevelPolicy,
     MissionCreate,
     RejectRequest,
@@ -73,6 +74,10 @@ def voice_view(rt: Runtime) -> VoiceView:
     return VoiceView.model_validate(asdict(rt.voice.status))
 
 
+def learning_view(rt: Runtime) -> LearningView:
+    return LearningView.model_validate(asdict(rt.learning.status))
+
+
 def _voice_error(exc: VoiceError, status: int = 422) -> HTTPException:
     return HTTPException(
         status, {"code": exc.code, "message": exc.message, "suggestion": exc.suggestion}
@@ -85,6 +90,7 @@ async def build_snapshot(rt: Runtime) -> Snapshot:
         build=rt.build,
         brain=brain_view(rt),
         voice=voice_view(rt),
+        learning=learning_view(rt),
         state=rt.state.snapshot(),
         system_backend=rt.backend.name,
         simulated=rt.backend.simulated,
@@ -189,6 +195,47 @@ async def voice_test(rt: RuntimeDep) -> VoiceView:
     except VoiceError as exc:
         raise _voice_error(exc, 409) from exc
     return voice_view(rt)
+
+
+@router.get("/learning")
+async def learning(rt: RuntimeDep) -> LearningView:
+    return learning_view(rt)
+
+
+@router.post("/learning/start")
+async def learning_start(rt: RuntimeDep) -> LearningView:
+    await rt.learning.enable()
+    return learning_view(rt)
+
+
+@router.post("/learning/stop")
+async def learning_stop(rt: RuntimeDep) -> LearningView:
+    await rt.learning.disable()
+    return learning_view(rt)
+
+
+@router.get("/learning/tests")
+async def learning_tests(
+    rt: RuntimeDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    before: Annotated[int | None, Query(ge=1)] = None,
+    status: Annotated[
+        Literal["invalid", "rejected", "oos_failed", "validated"] | None, Query()
+    ] = None,
+) -> list[dict[str, Any]]:
+    return await rt.learning_journal.tests(limit=limit, before=before, status=status)
+
+
+@router.get("/learning/notes")
+async def learning_notes(rt: RuntimeDep) -> list[dict[str, Any]]:
+    return await rt.learning_journal.notes()
+
+
+@router.get("/learning/rounds")
+async def learning_rounds(
+    rt: RuntimeDep, limit: Annotated[int, Query(ge=1, le=100)] = 20
+) -> list[dict[str, Any]]:
+    return await rt.learning_journal.rounds(limit=limit)
 
 
 @router.get("/missions")

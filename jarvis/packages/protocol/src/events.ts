@@ -28,6 +28,7 @@ export const EVENT_TYPES = [
   "model.completed",
   "brain.changed",
   "voice.changed",
+  "learning.changed",
   "context.updated",
 ] as const;
 

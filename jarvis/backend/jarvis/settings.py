@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
@@ -120,6 +121,58 @@ class VoiceSettings(BaseModel):
     elevenlabs_api_key: SecretStr | None = None
 
 
+class ModelPrice(BaseModel):
+    """USD per million tokens."""
+
+    input: float
+    output: float
+    cache_read: float
+    cache_write: float
+
+
+class InstrumentSettings(BaseModel):
+    symbol: str  # Dukascopy symbol
+    label: str = ""
+    price_range: tuple[float, float]
+    cost_points: float  # round trip: commission + spread + slippage
+    min_stop_points: float
+    point_value_usd: float = 1.0
+
+
+class LearningGates(BaseModel):
+    min_trades: dict[str, int] = Field(default_factory=lambda: {"scalping": 150, "daytrading": 60})
+    min_oos_trades: dict[str, int] = Field(
+        default_factory=lambda: {"scalping": 50, "daytrading": 25}
+    )
+    in_sample_min_avg_r: float = 0.05
+    in_sample_min_profit_factor: float = 1.1
+    in_sample_min_t: float = 2.0
+    oos_min_profit_factor: float = 1.05
+    # Family-wise error rate across all out-of-sample evaluations (Bonferroni).
+    oos_alpha: float = 0.05
+
+
+class LearningSettings(BaseModel):
+    model: str = "claude-opus-5-5"
+    effort: str | None = "medium"
+    max_tokens: int = 8000
+    timeout_seconds: float = 180.0
+    daily_budget_usd: float = 3.0
+    round_interval_minutes: float = 15.0
+    stall_limit: int = 20
+    tests_per_round: int = 3
+    max_steps_per_round: int = 6
+    web_search: bool = True
+    searches_per_round: int = 2
+    web_search_usd: float = 0.01
+    prices: dict[str, ModelPrice] = Field(default_factory=dict)
+    data_start: date = date(2021, 1, 1)
+    oos_start: date = date(2024, 1, 1)
+    holdout_start: date = date(2025, 4, 1)
+    instruments: dict[str, InstrumentSettings] = Field(default_factory=dict)
+    gates: LearningGates = Field(default_factory=LearningGates)
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -155,6 +208,7 @@ class Settings(BaseModel):
     web: WebSettings = Field(default_factory=WebSettings)
     files: FileSettings = Field(default_factory=FileSettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
+    learning: LearningSettings = Field(default_factory=LearningSettings)
 
     @property
     def env_file(self) -> Path:
@@ -215,6 +269,7 @@ def load_settings(
     data["web"] = _read_yaml(config_dir / "web.yaml")
     data["files"] = _read_yaml(config_dir / "files.yaml")
     data["voice"] = _read_yaml(config_dir / "voice.yaml")
+    data["learning"] = _read_yaml(config_dir / "learning.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))

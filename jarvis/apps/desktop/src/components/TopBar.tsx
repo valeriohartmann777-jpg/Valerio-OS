@@ -47,6 +47,9 @@ export function TopBar() {
             Mission
           </NavItem>
         )}
+        <NavItem active={view.name === "learning"} view={{ name: "learning" }}>
+          Learning
+        </NavItem>
         <NavItem active={view.name === "settings"} view={{ name: "settings" }}>
           Settings
         </NavItem>

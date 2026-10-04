@@ -15,6 +15,18 @@ docs that match reality.
 | 8     | Voice                   | Local wake word, streaming STT/TTS, barge-in                            | **first version** (pulled ahead) |
 | 9     | Specialist agents       | Atlas, Forge, Archive fully online when missions justify them           | planned       |
 | 10    | Advanced                | War Room, MCP, calendar/email/GitHub, companion app, proactive engine   | planned       |
+| —     | Trading research        | Self-directed learning on NQ / XAUUSD with honest out-of-sample scoring | **first version** |
+
+## Trading research (first version)
+
+- [x] Dukascopy minute data for NQ (Nasdaq-100 CFD) and XAUUSD, cached, validated
+- [x] Strategy rule language, look-ahead-free features, conservative backtest with costs
+- [x] In-sample / out-of-sample (Bonferroni) / holdout scoring done by code
+- [x] Background loop with Claude: backtests, notes, web search; $3/day limit; stops itself after 20 rounds without a finding
+- [x] Learning page; "what have you learned?" in the chat (learning_report)
+- [ ] Tick data and order flow (Bookmap) for real scalping research
+- [ ] Walk-forward re-validation of findings as the holdout grows
+- [ ] NQ futures data instead of the CFD proxy
 
 ## Phase 8 — Voice (first version, pulled ahead)
 

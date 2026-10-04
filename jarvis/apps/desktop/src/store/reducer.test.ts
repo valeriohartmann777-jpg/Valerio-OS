@@ -95,6 +95,22 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       key_hint: "WXYZ",
       reason: null,
     },
+    learning: {
+      state: "off",
+      enabled: false,
+      detail: null,
+      progress: null,
+      model: "claude-opus-5-5",
+      budget_usd: 3,
+      spent_today_usd: 0,
+      stall_rounds: 0,
+      stall_limit: 20,
+      next_round_at: null,
+      round: null,
+      web_search: true,
+      counts: {},
+      data: {},
+    },
     state: { state: "DORMANT", detail: "" },
     system_backend: "simulated",
     simulated: true,
@@ -190,6 +206,15 @@ describe("reducer", () => {
     const listening = { ...snapshot().voice, state: "listening" as const };
     state = apply(state, event("voice.changed", { voice: listening }, { severity: "debug" }));
     expect(state.voice?.state).toBe("listening");
+  });
+
+  it("follows the learning state", () => {
+    let state = reduce(initialState, { type: "snapshot", snapshot: snapshot(), now: 0 });
+    expect(state.learning?.state).toBe("off");
+    const running = { ...snapshot().learning, state: "running" as const, enabled: true, round: 3 };
+    state = apply(state, event("learning.changed", { learning: running }, { severity: "info" }));
+    expect(state.learning?.round).toBe(3);
+    expect(visibleActivity(state).at(-1)?.type).toBe("learning.changed");
   });
 
   it("keeps the conversation in order, merges history with live messages", () => {

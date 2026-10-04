@@ -1,4 +1,4 @@
-import type { JarvisState, MissionStatus, StepStatus } from "@jarvis/protocol";
+import type { JarvisState, LearningPhase, MissionStatus, StepStatus } from "@jarvis/protocol";
 
 export function clock(iso: string | number | Date): string {
   const date = new Date(iso);
@@ -76,3 +76,26 @@ export function modelLabel(id: string): string {
 }
 
 export const LEVEL_LABELS = ["Read", "Safe action", "Modification", "External effect", "High risk"];
+
+const LEARNING_LABELS: Record<LearningPhase, string> = {
+  off: "Off",
+  preparing: "Preparing",
+  running: "Researching",
+  waiting: "Between rounds",
+  budget: "Budget used up",
+  stalled: "Stopped itself",
+  needs_brain: "Needs Claude",
+  error: "Problem",
+};
+
+export function learningLabel(state: LearningPhase): string {
+  return LEARNING_LABELS[state];
+}
+
+export function usd(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
+
+export function signed(value: number, digits = 2): string {
+  return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(digits)}`;
+}

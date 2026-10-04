@@ -189,11 +189,106 @@ export interface VoiceStatus {
   reason: string | null;
 }
 
+export type LearningPhase =
+  | "off"
+  | "preparing"
+  | "running"
+  | "waiting"
+  | "budget"
+  | "stalled"
+  | "needs_brain"
+  | "error";
+
+export interface LearningStatus {
+  state: LearningPhase;
+  /** The user switched learning on (it resumes after restarts). */
+  enabled: boolean;
+  detail: string | null;
+  /** Market data download, 0–1. */
+  progress: number | null;
+  model: string;
+  budget_usd: number;
+  spent_today_usd: number;
+  /** Completed rounds since the last validated finding (or since it was started). */
+  stall_rounds: number;
+  stall_limit: number;
+  next_round_at: string | null;
+  round: number | null;
+  web_search: boolean;
+  counts: Partial<
+    Record<
+      "tests" | "invalid" | "rejected" | "in_sample_passed" | "validated" | "confirmed" | "notes" | "rounds",
+      number
+    >
+  >;
+  data: Record<string, { first: string; last: string; bars: number }>;
+}
+
+export interface LearningStats {
+  trades: number;
+  win_rate: number;
+  avg_r: number;
+  t_stat: number;
+  total_r: number;
+  profit_factor: number;
+  max_drawdown_r: number;
+  avg_points: number;
+  trades_per_month: number;
+  avg_minutes: number;
+  long_trades: number;
+  short_trades: number;
+  exits: Record<string, number>;
+  by_year: Record<string, { trades: number; avg_r: number }>;
+}
+
+export type LearningTestStatus = "invalid" | "rejected" | "oos_failed" | "validated";
+
+export interface LearningTest {
+  number: number;
+  created_at: string;
+  name: string;
+  instrument: string | null;
+  style: string | null;
+  timeframe: string | null;
+  status: LearningTestStatus;
+  reason: string;
+  spec: Record<string, unknown> & { hypothesis?: string };
+  in_sample: LearningStats | null;
+  out_of_sample: LearningStats | null;
+  /** Never shown to the research model. */
+  holdout: LearningStats | null;
+  holdout_confirmed: boolean | null;
+  t_required: number | null;
+}
+
+export interface LearningNote {
+  number: number;
+  created_at: string;
+  updated_at: string;
+  topic: string;
+  text: string;
+  sources: string[];
+}
+
+export interface LearningRound {
+  number: number;
+  day: string;
+  started_at: string;
+  finished_at: string | null;
+  status: "running" | "completed" | "failed" | "interrupted";
+  summary: string;
+  next_focus: string;
+  cost_usd: number;
+  searches: number;
+  error: string | null;
+}
+
 export interface Snapshot {
   version: string;
   build: string;
   brain: BrainStatus;
   voice: VoiceStatus;
+  learning: LearningStatus;
   state: StateSnapshot;
   system_backend: string;
   simulated: boolean;

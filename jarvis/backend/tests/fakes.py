@@ -22,7 +22,9 @@ def say(text: str, model: str = "claude-test") -> ModelReply:
     )
 
 
-def call(name: str, args: dict[str, Any], call_id: str = "toolu_1") -> ModelReply:
+def call(
+    name: str, args: dict[str, Any], call_id: str = "toolu_1", usage: Usage | None = None
+) -> ModelReply:
     block = {"type": "tool_use", "id": call_id, "name": name, "input": args}
     return ModelReply(
         text="",
@@ -30,7 +32,7 @@ def call(name: str, args: dict[str, Any], call_id: str = "toolu_1") -> ModelRepl
         stop_reason="tool_use",
         assistant_message={"role": "assistant", "content": [block]},
         model="claude-test",
-        usage=Usage(input_tokens=100, output_tokens=20),
+        usage=usage or Usage(input_tokens=100, output_tokens=20),
     )
 
 
@@ -49,9 +51,21 @@ class ScriptedChatModel:
         return "Test Model"
 
     async def complete(
-        self, *, system: str, messages: list[Any], tools: list[ToolDefinition]
+        self,
+        *,
+        system: str,
+        messages: list[Any],
+        tools: list[ToolDefinition],
+        server_tools: list[dict[str, Any]] | None = None,
     ) -> ModelReply:
-        self.calls.append({"system": system, "messages": copy.deepcopy(messages), "tools": tools})
+        self.calls.append(
+            {
+                "system": system,
+                "messages": copy.deepcopy(messages),
+                "tools": tools,
+                "server_tools": server_tools,
+            }
+        )
         if not self._script:
             raise AssertionError("model called more often than scripted")
         step = self._script.pop(0)

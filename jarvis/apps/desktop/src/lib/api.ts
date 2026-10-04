@@ -1,6 +1,10 @@
 import type {
   BrainStatus,
   JarvisEvent,
+  LearningNote,
+  LearningRound,
+  LearningStatus,
+  LearningTest,
   VoiceStatus,
   ChatAccepted,
   Mission,
@@ -76,6 +80,12 @@ export const api = {
       `/conversation?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ""}`,
     ),
   connectBrain: (apiKey: string) => post<BrainStatus>("/brain/key", { api_key: apiKey }),
+  startLearning: () => post<LearningStatus>("/learning/start"),
+  stopLearning: () => post<LearningStatus>("/learning/stop"),
+  learningTests: (limit = 50) => request<LearningTest[]>(`/learning/tests?limit=${limit}`),
+  learningFindings: () => request<LearningTest[]>("/learning/tests?status=validated&limit=50"),
+  learningNotes: () => request<LearningNote[]>("/learning/notes"),
+  learningRounds: (limit = 20) => request<LearningRound[]>(`/learning/rounds?limit=${limit}`),
   connectVoice: (apiKey: string) => post<VoiceStatus>("/voice/key", { api_key: apiKey }),
   voicePreferences: (prefs: { wake_word?: boolean; speak_replies?: boolean }) =>
     post<VoiceStatus>("/voice/preferences", prefs),

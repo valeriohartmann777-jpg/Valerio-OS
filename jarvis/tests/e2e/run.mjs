@@ -224,6 +224,24 @@ try {
     await page.getByTestId("voice-off").waitFor();
   });
 
+  await step("learning starts and stops from its page; without Claude it says what it needs", async () => {
+    await page.getByTestId("learning-row").filter({ hasText: "Off" }).waitFor();
+    await page.getByRole("button", { name: "Learning", exact: true }).click();
+    await page.getByTestId("learning-page").waitFor();
+    await page.getByTestId("learning-state").filter({ hasText: "Off" }).waitFor();
+    await page.getByTestId("learning-budget").filter({ hasText: "$0.00 / $3.00" }).waitFor();
+    await page.getByTestId("learning-stall").filter({ hasText: "0 / 20 rounds" }).waitFor();
+    await page.getByTestId("learning-toggle").click();
+    await page.getByTestId("learning-state").filter({ hasText: "Needs Claude" }).waitFor();
+    await page.getByText("Connect Claude under Settings").waitFor();
+    await page.waitForTimeout(300);
+    await shot("10c-learning");
+    await page.getByTestId("learning-toggle").filter({ hasText: "Stop learning" }).click();
+    await page.getByTestId("learning-state").filter({ hasText: "Off" }).waitFor();
+    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("learning-row").filter({ hasText: "Off" }).waitFor();
+  });
+
   await step("idle state returns", async () => {
     await page.waitForTimeout(22_000);
     await headline.filter({ hasText: "Everything is nominal." }).waitFor();
@@ -351,7 +369,10 @@ await step("the Update button installs a newer version and JARVIS restarts on it
   for (const file of files.filter((f) => f && existsSync(path.join(root, f)))) {
     cpSync(path.join(root, file), path.join(checkout, file), { recursive: true });
   }
-  // Reuse the installed packages instead of downloading them again.
+  // Reuse the installed packages instead of downloading them again. Bring their
+  // dependency stamps up to date first: otherwise the copy's preflight would
+  // reinstall the backend into the shared venv, pointing it at the copy.
+  execFileSync(process.execPath, ["scripts/preflight.mjs"], { cwd: root, stdio: "ignore" });
   symlinkSync(path.join(root, "node_modules"), path.join(checkout, "node_modules"));
   symlinkSync(path.join(root, "backend", ".venv"), path.join(checkout, "backend", ".venv"));
   git(checkout, "init", "-q");

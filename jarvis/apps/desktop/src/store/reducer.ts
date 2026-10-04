@@ -10,6 +10,7 @@ import type {
   JarvisEvent,
   JarvisMessagePayload,
   JarvisState,
+  LearningStatus,
   Mission,
   PermissionRequest,
   Snapshot,
@@ -18,7 +19,11 @@ import type {
 
 import type { UpdateStatus } from "../lib/updates";
 
-export type View = { name: "home" } | { name: "mission"; id: string } | { name: "settings" };
+export type View =
+  | { name: "home" }
+  | { name: "mission"; id: string }
+  | { name: "learning" }
+  | { name: "settings" };
 export type Connection = "connecting" | "online" | "offline";
 
 export interface LastMessage extends JarvisMessagePayload {
@@ -35,6 +40,7 @@ export interface UIState {
   simulated: boolean;
   brain: BrainStatus | null;
   voice: VoiceStatus | null;
+  learning: LearningStatus | null;
   jarvis: { state: JarvisState; detail: string; since: number };
   context: EnvironmentContext | null;
   agents: AgentState[];
@@ -75,6 +81,7 @@ export const initialState: UIState = {
   simulated: false,
   brain: null,
   voice: null,
+  learning: null,
   jarvis: { state: "DORMANT", detail: "", since: 0 },
   context: null,
   agents: [],
@@ -128,6 +135,7 @@ function applySnapshot(state: UIState, snapshot: Snapshot, now: number): UIState
     simulated: snapshot.simulated,
     brain: snapshot.brain,
     voice: snapshot.voice,
+    learning: snapshot.learning ?? null,
     jarvis: { state: snapshot.state.state, detail: snapshot.state.detail, since: now },
     context: snapshot.context,
     agents: snapshot.agents,
@@ -185,6 +193,9 @@ function applyEvent(state: UIState, event: JarvisEvent, now: number): UIState {
       break;
     case "voice.changed":
       next.voice = payload.voice as VoiceStatus;
+      break;
+    case "learning.changed":
+      next.learning = payload.learning as LearningStatus;
       break;
     case "system.online":
       next.version = (payload.version as string | undefined) ?? state.version;

@@ -451,6 +451,40 @@ Home hierarchy: 1 JARVIS Core → 2 active mission → 3 command bar →
 
 ---
 
+## 13b. Learning (trading research)
+
+`backend/jarvis/learning/` — a background loop (`LearningService`) in which
+Claude researches scalping and day trading on NQ and XAUUSD. It only learns:
+the research model's tools are `run_backtest`, `write_note`, `finish_round`
+and Anthropic's web search — nothing that touches the computer or a broker.
+
+```
+market.py    Dukascopy minute candles → validated, cached (data/market/*.npz)
+strategy.py  JSON strategy + rule parser ("close crosses_above or_high(15)")
+features.py  numpy evaluation, no look-ahead (tested by truncation)
+backtest.py  next-bar entries, stop-first, gaps, costs → trades, stats in R
+evaluate.py  in-sample → out-of-sample (Bonferroni bar) → holdout
+journal.py   SQLite: learning_rounds, learning_tests, learning_notes
+prompt.py    system prompt (method, rule language), per-round briefing
+service.py   loop: data → budget/stall checks → round → wait
+```
+
+- **What the model sees:** in-sample statistics, out-of-sample pass/fail and
+  the reason, its own notes, validated findings. Never out-of-sample numbers,
+  never the holdout (`journal.prompt_tests`, `validated_for_prompt`).
+- **Money:** before every call the day's spend plus a worst-case reserve for
+  that call must fit `daily_budget_usd`; spend comes from the API's usage and
+  the price table in `config/learning.yaml`.
+- **Stagnation:** after `stall_limit` completed rounds without a new
+  validated finding the loop disables itself and says so; starting it again
+  grants fresh rounds.
+- **State:** `learning.enabled` in `data/preferences.json` (resumes after a
+  restart); `learning.changed` events carry the status to the UI; the
+  Learning page reads `/learning/*`. The chat brain answers questions about
+  it with the read-only `learning_report` tool.
+
+---
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

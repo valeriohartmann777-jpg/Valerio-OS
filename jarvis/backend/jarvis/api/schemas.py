@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from jarvis.agents.base import AgentState
@@ -51,6 +53,23 @@ class VoiceView(BaseModel):
     reason: str | None
 
 
+class LearningView(BaseModel):
+    state: str
+    enabled: bool
+    detail: str | None
+    progress: float | None
+    model: str
+    budget_usd: float
+    spent_today_usd: float
+    stall_rounds: int
+    stall_limit: int
+    next_round_at: str | None
+    round: int | None
+    web_search: bool
+    counts: dict[str, int]
+    data: dict[str, dict[str, Any]]
+
+
 class VoicePreferences(BaseModel):
     wake_word: bool | None = None
     speak_replies: bool | None = None
@@ -65,6 +84,7 @@ class Snapshot(BaseModel):
     build: str
     brain: BrainView
     voice: VoiceView
+    learning: LearningView
     state: StateSnapshot
     system_backend: str
     simulated: bool

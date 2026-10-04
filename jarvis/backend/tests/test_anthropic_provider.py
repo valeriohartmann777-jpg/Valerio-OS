@@ -279,3 +279,20 @@ async def test_empty_credit_balance_is_reported_as_billing() -> None:
         await model_with(server).complete(system="s", messages=[], tools=TOOLS)
     assert info.value.code == "billing"
     assert "credit" in info.value.message
+
+
+async def test_server_tools_are_sent_and_searches_counted() -> None:
+    reply = message([{"type": "text", "text": "Read two sources."}])
+    reply["usage"]["server_tool_use"] = {"web_search_requests": 2}
+    server = Server(httpx2.Response(200, json=reply), httpx2.Response(200, json=message([])))
+    model = model_with(server)
+    search = {"type": "web_search_20250305", "name": "web_search", "max_uses": 2}
+    first = await model.complete(
+        system="s", messages=[model.user_message(["hi"])], tools=TOOLS, server_tools=[search]
+    )
+    assert server.body()["tools"][-1] == search
+    assert server.body()["tools"][0]["name"] == "open_application"
+    assert first.usage.web_searches == 2
+    second = await model.complete(system="s", messages=[model.user_message(["hi"])], tools=TOOLS)
+    assert [t["name"] for t in server.body()["tools"]] == ["open_application"]
+    assert second.usage.web_searches == 0

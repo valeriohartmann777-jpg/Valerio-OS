@@ -80,8 +80,15 @@ class AnthropicChatModel:
     # Request ---------------------------------------------------------------------
 
     async def complete(
-        self, *, system: str, messages: list[Any], tools: list[ToolDefinition]
+        self,
+        *,
+        system: str,
+        messages: list[Any],
+        tools: list[ToolDefinition],
+        server_tools: list[dict[str, Any]] | None = None,
     ) -> ModelReply:
+        """``server_tools`` are tools Anthropic runs itself (e.g. web search);
+        their results come back inside the reply, never as ``tool_calls``."""
         params: dict[str, Any] = {
             "model": self._model,
             "max_tokens": self._max_tokens,
@@ -90,7 +97,8 @@ class AnthropicChatModel:
             "tools": [
                 {"name": t.name, "description": t.description, "input_schema": t.input_schema}
                 for t in tools
-            ],
+            ]
+            + list(server_tools or []),
             "cache_control": {"type": "ephemeral"},
         }
         if self._effort:
@@ -112,6 +120,8 @@ class AnthropicChatModel:
             if block.type == "tool_use"
         ]
         usage = response.usage
+        server_use = getattr(usage, "server_tool_use", None)
+        searches = getattr(server_use, "web_search_requests", 0) if server_use else 0
         return ModelReply(
             text=text,
             tool_calls=calls,
@@ -124,6 +134,7 @@ class AnthropicChatModel:
                 output_tokens=usage.output_tokens or 0,
                 cache_read_tokens=usage.cache_read_input_tokens or 0,
                 cache_write_tokens=usage.cache_creation_input_tokens or 0,
+                web_searches=int(searches or 0),
             ),
         )
 
@@ -233,7 +244,7 @@ def translate_error(exc: anthropic.APIError, model: str) -> ModelError:
 
 
 def _stop_reason(value: str | None) -> StopReason:
-    if value in ("end_turn", "tool_use", "max_tokens", "refusal"):
+    if value in ("end_turn", "tool_use", "max_tokens", "refusal", "pause_turn"):
         return value  # type: ignore[return-value]
     return "other"
 

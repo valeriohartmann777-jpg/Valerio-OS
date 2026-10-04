@@ -39,6 +39,7 @@ class EventType(StrEnum):
     MODEL_COMPLETED = "model.completed"
     BRAIN_CHANGED = "brain.changed"
     VOICE_CHANGED = "voice.changed"
+    LEARNING_CHANGED = "learning.changed"
     CONTEXT_UPDATED = "context.updated"
 
 

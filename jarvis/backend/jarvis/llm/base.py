@@ -11,7 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
-StopReason = Literal["end_turn", "tool_use", "max_tokens", "refusal", "other"]
+# pause_turn: a long server-side tool turn (e.g. web search) wants to be continued.
+StopReason = Literal["end_turn", "tool_use", "max_tokens", "refusal", "pause_turn", "other"]
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class Usage:
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    web_searches: int = 0
 
     def __add__(self, other: Usage) -> Usage:
         return Usage(
@@ -48,6 +50,7 @@ class Usage:
             self.output_tokens + other.output_tokens,
             self.cache_read_tokens + other.cache_read_tokens,
             self.cache_write_tokens + other.cache_write_tokens,
+            self.web_searches + other.web_searches,
         )
 
 

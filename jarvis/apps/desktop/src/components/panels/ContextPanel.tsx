@@ -1,4 +1,4 @@
-import { modelLabel, percent, uptime } from "../../lib/format";
+import { learningLabel, modelLabel, percent, uptime } from "../../lib/format";
 import { busyAgent, featuredMission } from "../../store/reducer";
 import { dispatch, useJarvis, useNow } from "../../store/store";
 import { Meter, Row, Section } from "../ui/primitives";
@@ -38,6 +38,9 @@ export function ContextPanel() {
         </Row>
         <Row label="Voice">
           <VoiceRow />
+        </Row>
+        <Row label="Learning">
+          <LearningRow />
         </Row>
       </dl>
 
@@ -113,4 +116,28 @@ function VoiceRow() {
         </span>
       );
   }
+}
+
+function LearningRow() {
+  const learning = useJarvis((s) => s.learning);
+  if (!learning) return <Faint>—</Faint>;
+  const validated = learning.counts.validated ?? 0;
+  const problem = learning.state === "error" || learning.state === "needs_brain" || learning.state === "stalled";
+  return (
+    <button
+      type="button"
+      className={problem ? "no-drag text-warning hover:underline" : "no-drag text-fg hover:text-fg-muted"}
+      title={learning.detail ?? undefined}
+      data-testid="learning-row"
+      onClick={() => dispatch({ type: "navigate", view: { name: "learning" } })}
+    >
+      {learningLabel(learning.state)}
+      {(validated > 0 || (learning.enabled && learning.state !== "off")) && (
+        <span className="text-fg-faint">
+          {" "}
+          · {validated} finding{validated === 1 ? "" : "s"}
+        </span>
+      )}
+    </button>
+  );
 }

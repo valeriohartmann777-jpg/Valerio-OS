@@ -29,6 +29,11 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   missions, activity stream, command bar, mission detail, settings.
 - **Conversation**: everything you typed or said and every answer stays
   visible as a chat on Home — across restarts and updates.
+- **Learning (trading research)**: JARVIS studies scalping and day trading on
+  NQ and XAUUSD on its own — Claude writes strategies, JARVIS backtests them on
+  minute data, and only results that hold up on data Claude never tuned on
+  count. $3/day limit; it stops itself when nothing new holds up. Learning
+  page; ask "what have you learned?" in the chat.
 - **Backend** (FastAPI): event bus + WebSocket stream, state service, router,
   missions with pause/resume/stop, Operator + Sentinel agents, tool framework,
   permission levels 0–4 with approvals, SQLite persistence, audit log,
@@ -70,6 +75,21 @@ after it (or after a click). The first time, macOS asks whether JARVIS may use
 the microphone. Settings → Voice turns the wake word off, makes JARVIS speak
 replies to typed commands too, and plays a sample. Voice and model are in
 `config/voice.yaml`.
+
+## Let JARVIS learn
+
+1. Connect Claude (below) — learning uses the same key.
+2. Open **Learning** in the top bar and click **Start learning**.
+3. The first start downloads about five years of free minute data for NQ and
+   XAUUSD from Dukascopy (a few minutes). Then a research round runs every
+   15 minutes until the day's $3 are used up.
+
+It only learns: no broker, no orders. Budget, models, costs per trade and the
+test periods are in `config/learning.yaml`. A finding counts as validated only
+after it passed in-sample and out-of-sample; the holdout result (shown to you,
+never to Claude) says whether it also held on unseen data. After 20 rounds
+without a new validated finding learning stops itself — start it again to
+give it another 20.
 
 ## Connect Claude
 
