@@ -121,14 +121,14 @@ _Last updated: 2026-10-04_
   through the UI including the restart (16 steps total)
 - 2026-10-04: installed on the MacBook with `scripts/install-mac-app.sh`
   (`codesign`, `iconutil`, `sips` ran fine); JARVIS.app runs and replaced the
-  terminal-started JARVIS. This commit is the first real in-app update.
+  terminal-started JARVIS. The first real in-app update (to ff189f0) went
+  through: Update → download, packages, build → restart on the new version.
 
 ## IN PROGRESS
 - —
 
 ## NEXT
 
-0. Confirm the first real in-app update on the MacBook
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")
