@@ -28,6 +28,8 @@ def make_settings(tmp_path: Path, **runtime_overrides: object) -> Settings:
     storage = settings.storage.model_copy(
         update={"database_path": tmp_path / "jarvis.db", "log_dir": tmp_path / "logs"}
     )
+    # The morning briefing would fetch real market data on its own.
+    briefing = settings.briefing.model_copy(update={"enabled": False})
     # root_dir = tmp_path: nothing a test does can touch the real jarvis/.env.
     return settings.model_copy(
         update={
@@ -35,6 +37,7 @@ def make_settings(tmp_path: Path, **runtime_overrides: object) -> Settings:
             "runtime": runtime,
             "permissions": permissions,
             "storage": storage,
+            "briefing": briefing,
         }
     )
 

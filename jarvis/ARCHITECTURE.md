@@ -490,6 +490,27 @@ service.py   loop: data → budget/stall checks → round → wait
 
 ---
 
+## 13c. Memory and the morning briefing
+
+- **Memory** (`backend/jarvis/memory/store.py`, migration 5): numbered
+  sentences (M1, M2, …) of kind preference / fact / routine / correction.
+  Loaded at start, mirrored in memory, listed in the `<context>` block of
+  every brain request. Tools `remember` / `forget`; API `/memory`;
+  `memory.changed` events feed the Memory panel. `remember` is marked
+  `stores_instructions`: after a tool returned private or untrusted text in
+  the same request (`reads_private_data`, `returns_untrusted_text`), it needs
+  approval.
+- **Morning briefing** (`backend/jarvis/briefing/`): `levels.py` computes key
+  levels from minute bars (history from the learning cache + today's live
+  data, `MarketData.today`), `service.py` annotates them with level studies,
+  composes the German text, and posts it as a `jarvis.message`
+  (`kind: briefing`, a short `speech` for the voice). Schedule and catch-up
+  are checked every minute; settings in `config/briefing.yaml` and
+  Settings → Morning briefing (`/briefing`). Tool `market_levels` gives the
+  same on request.
+
+---
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

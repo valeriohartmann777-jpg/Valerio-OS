@@ -17,9 +17,17 @@ SYSTEM_TOOLS = [
 WEB_TOOLS = ["open_url", "search_web"]
 FILE_TOOLS = ["find_files", "list_folder", "read_file", "open_file"]
 MEDIA_TOOLS = ["get_volume", "set_volume", "media_control", "now_playing"]
-LEARNING_TOOLS = ["learning_report"]
+LEARNING_TOOLS = ["learning_report", "market_levels"]
+MEMORY_TOOLS = ["remember", "forget"]
 # Every tool the Operator may run; Sentinel verifies the same set.
-OPERATOR_TOOLS = [*SYSTEM_TOOLS, *WEB_TOOLS, *FILE_TOOLS, *MEDIA_TOOLS, *LEARNING_TOOLS]
+OPERATOR_TOOLS = [
+    *SYSTEM_TOOLS,
+    *WEB_TOOLS,
+    *FILE_TOOLS,
+    *MEDIA_TOOLS,
+    *LEARNING_TOOLS,
+    *MEMORY_TOOLS,
+]
 
 AGENT_SPECS: list[AgentSpec] = [
     AgentSpec(

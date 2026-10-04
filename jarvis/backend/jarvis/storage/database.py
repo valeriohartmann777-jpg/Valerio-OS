@@ -136,6 +136,21 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # 5: long-term memory of the user
+    [
+        """
+        CREATE TABLE memories (
+            id          TEXT PRIMARY KEY,
+            number      INTEGER NOT NULL UNIQUE,
+            kind        TEXT NOT NULL,
+            text        TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            source      TEXT NOT NULL,
+            active      INTEGER NOT NULL DEFAULT 1
+        )
+        """,
+    ],
 ]
 
 

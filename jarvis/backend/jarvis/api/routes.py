@@ -24,12 +24,16 @@ from jarvis.api.schemas import (
     ApiKeyRequest,
     ApproveRequest,
     BrainView,
+    BriefingPreferences,
+    BriefingView,
     ChatAccepted,
     ChatRequest,
     Health,
     LearningFocus,
     LearningView,
     LevelPolicy,
+    MemoryCreate,
+    MemoryView,
     MissionCreate,
     RejectRequest,
     SettingsView,
@@ -38,8 +42,10 @@ from jarvis.api.schemas import (
     VoicePreferences,
     VoiceView,
 )
+from jarvis.briefing.service import BriefingError
 from jarvis.events.types import Event, Severity
 from jarvis.llm.base import ModelError
+from jarvis.memory.store import MemoryRefused
 from jarvis.missions.engine import MissionError
 from jarvis.missions.models import Mission
 from jarvis.permissions.models import LEVEL_LABELS, PermissionRequest
@@ -75,6 +81,10 @@ def voice_view(rt: Runtime) -> VoiceView:
     return VoiceView.model_validate(asdict(rt.voice.status))
 
 
+def memory_views(rt: Runtime) -> list[MemoryView]:
+    return [MemoryView.model_validate(asdict(m)) for m in rt.memory.items]
+
+
 def learning_view(rt: Runtime) -> LearningView:
     return LearningView.model_validate(asdict(rt.learning.status))
 
@@ -92,6 +102,7 @@ async def build_snapshot(rt: Runtime) -> Snapshot:
         brain=brain_view(rt),
         voice=voice_view(rt),
         learning=learning_view(rt),
+        memories=memory_views(rt),
         state=rt.state.snapshot(),
         system_backend=rt.backend.name,
         simulated=rt.backend.simulated,
@@ -196,6 +207,48 @@ async def voice_test(rt: RuntimeDep) -> VoiceView:
     except VoiceError as exc:
         raise _voice_error(exc, 409) from exc
     return voice_view(rt)
+
+
+@router.get("/briefing")
+async def briefing(rt: RuntimeDep) -> BriefingView:
+    return BriefingView.model_validate(asdict(rt.briefing.status))
+
+
+@router.post("/briefing/preferences")
+async def briefing_preferences(body: BriefingPreferences, rt: RuntimeDep) -> BriefingView:
+    try:
+        status = await rt.briefing.set_preferences(enabled=body.enabled, at=body.time)
+    except BriefingError as exc:
+        raise HTTPException(422, {"code": "invalid", "message": str(exc)}) from exc
+    return BriefingView.model_validate(asdict(status))
+
+
+@router.post("/briefing/send")
+async def briefing_send(rt: RuntimeDep) -> dict[str, str]:
+    return {"text": await rt.briefing.send()}
+
+
+@router.get("/memory")
+async def memories(rt: RuntimeDep) -> list[MemoryView]:
+    return memory_views(rt)
+
+
+@router.post("/memory")
+async def add_memory(body: MemoryCreate, rt: RuntimeDep) -> list[MemoryView]:
+    try:
+        await rt.memory.remember(body.text, body.kind, source="dashboard")
+    except MemoryRefused as exc:
+        raise HTTPException(422, {"code": "refused", "message": str(exc)}) from exc
+    return memory_views(rt)
+
+
+@router.delete("/memory/{number}")
+async def forget_memory(number: int, rt: RuntimeDep) -> list[MemoryView]:
+    try:
+        await rt.memory.forget(number)
+    except MemoryRefused as exc:
+        raise HTTPException(404, {"code": "not_found", "message": str(exc)}) from exc
+    return memory_views(rt)
 
 
 @router.get("/learning")

@@ -43,6 +43,8 @@ class LearningReportTool(Tool[NoArgs]):
     )
     permission_level = PermissionLevel.READ
     input_model = NoArgs
+    # Notes and study names come from the research model, which reads the web.
+    returns_untrusted_text = True
 
     def __init__(self, journal: LearningJournal, status: Callable[[], LearningStatus]) -> None:
         self._journal = journal

@@ -25,6 +25,8 @@ import { fileURLToPath } from "node:url";
 import { _electron as electron, chromium } from "playwright-core";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+// Every JARVIS started here inherits this: no morning briefing fetching real market data.
+process.env.JARVIS_BRIEFING = "off";
 const appDir = path.join(root, "apps", "desktop");
 const outDir = path.resolve(process.argv[2] ?? path.join(root, "tests", "e2e", "output"));
 const backendUrl = "http://127.0.0.1:8799";
@@ -245,6 +247,27 @@ try {
     await page.getByTestId("learning-state").filter({ hasText: "Off" }).waitFor();
     await page.getByRole("button", { name: "Home" }).click();
     await page.getByTestId("learning-row").filter({ hasText: "Off" }).waitFor();
+  });
+
+  await step("memory: added on Home, kept, forgotten; the morning briefing is set in Settings", async () => {
+    await page.getByTestId("memory-input").fill("Prefers short answers.");
+    await page.getByTestId("memory-input").press("Enter");
+    await page.getByTestId("memory-item").filter({ hasText: "Prefers short answers." }).waitFor();
+    await page.waitForTimeout(300);
+    await shot("10d-memory");
+    await page.getByTestId("memory-item").first().hover();
+    await page.getByRole("button", { name: "Forget M1" }).click();
+    await page.getByTestId("memory-item").waitFor({ state: "detached" });
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("briefing-toggle").waitFor();
+    assert.equal(await page.getByTestId("briefing-toggle").getAttribute("aria-checked"), "false"); // off in tests
+    await page.getByTestId("briefing-toggle").click();
+    await page.getByTestId("briefing-toggle").and(page.locator('[aria-checked="true"]')).waitFor();
+    await page.getByTestId("briefing-next").filter({ hasText: ":00" }).waitFor();
+    await page.getByTestId("briefing-toggle").click(); // back off: no real market data here
+    await page.getByTestId("briefing-toggle").and(page.locator('[aria-checked="false"]')).waitFor();
+    await page.getByRole("button", { name: "Home" }).click();
   });
 
   await step("idle state returns", async () => {

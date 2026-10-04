@@ -393,7 +393,8 @@ class VoiceService:
         if spoken:
             self._voice_traces.discard(event.trace_id or "")
         if spoken or self.status.speak_replies:
-            text = str(event.payload.get("text") or "")
+            # Long messages (the morning briefing) bring a short version to say.
+            text = str(event.payload.get("speech") or event.payload.get("text") or "")
             if text:
                 self._spawn(self.say(text))
 

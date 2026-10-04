@@ -32,7 +32,7 @@ def create_app(settings: Settings | None = None, *, runtime: Runtime | None = No
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.server.allowed_origins,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["content-type"],
     )
     app.add_middleware(OriginGuard, allowed_origins=settings.server.allowed_origins)

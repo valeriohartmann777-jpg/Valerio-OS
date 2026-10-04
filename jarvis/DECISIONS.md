@@ -160,6 +160,39 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-021 — Morning briefing: computed levels, deterministic text, checked every minute
+
+- **Decision:** On weekdays at 08:00 (configurable) JARVIS posts today's key
+  levels for NQ and gold in the chat: previous day (NQ: regular session),
+  overnight / Asia range, previous week, previous volume profile, intact
+  15-minute swings, round numbers — merged where they coincide and annotated
+  with the matching level study. The text is composed by code, not a model.
+  The schedule is checked every minute; a missed briefing comes until 11:00.
+- **Reason:** Numbers must be exact and free; a model adds cost and the risk
+  of a wrong digit. Timers don't run while a Mac sleeps, so a long sleep
+  towards 08:00 would miss it; polling once a minute doesn't.
+- **Consequences:** Data is Dukascopy's CFD (NQ) and spot (gold) — close to,
+  not identical with, the futures. The same levels are available any time in
+  the chat (market_levels). Statistics, not trade advice.
+- **Date:** 2026-10-04
+
+## D-020 — Memory: short sentences in every request, only from the user
+
+- **Decision:** JARVIS keeps memories (preference, fact, routine,
+  correction) as numbered sentences in SQLite and puts all of them into the
+  context of every request. The brain stores them with `remember` when the
+  user states something lasting or corrects it; the user sees and edits them
+  in the Memory panel.
+- **Reason:** A personal assistant improves by remembering the person and
+  their corrections — there is no automatic score to train on. A short list
+  in the context is simple, transparent and works with any model; retrieval
+  can come when the list outgrows the context.
+- **Consequences:** Text the brain read (files, research notes) can't plant a
+  memory unnoticed: after such content in the same request, `remember` needs
+  the user's approval (`stores_instructions`). At most 200 memories of 300
+  characters.
+- **Date:** 2026-10-04
+
 ## D-019 — Support/resistance studies against a matched control group
 
 - **Decision:** Level studies compare how often price "holds" at a level with

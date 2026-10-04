@@ -1,0 +1,25 @@
+# Morning briefing: every weekday JARVIS posts today's key levels for NQ and
+# XAUUSD in the chat — previous day, overnight / Asia range, previous week,
+# volume profile, intact swing highs and lows, round numbers — with what its
+# own research says about each kind of level. Statistics, not trade advice.
+# Turn it on or off and change the time in Settings → Morning briefing.
+
+enabled: true
+time: "08:00"           # this Mac's local time
+weekdays: [0, 1, 2, 3, 4]  # Monday … Friday
+catch_up_until: "11:00" # started later? The briefing still comes until then
+levels_each_side: 4     # levels above and below the price
+history_days: 21        # minute data used for the levels
+
+instruments:            # market data comes from config/learning.yaml
+  NQ:
+    round_step: 100
+    major_step: 500
+    merge_within: 3.0   # points: closer levels are shown as one
+    regular_session: true  # "previous day" = the 09:30-16:00 session
+    decimals: 2
+  XAUUSD:
+    round_step: 10
+    major_step: 50
+    merge_within: 0.8
+    decimals: 2

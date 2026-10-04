@@ -11,11 +11,21 @@ docs that match reality.
 | 4     | Missions                | Model planning, multi-step delegation, redirect, per-mission state      | planned       |
 | 5     | Screen vision           | Screenshot capture, vision provider, observe-act-verify with pixels     | planned       |
 | 6     | Browser                 | Playwright service, persistent session, DOM-aware actions               | planned       |
-| 7     | Memory                  | Structured + semantic memory, scoring, people/projects, Memory UI       | planned       |
+| 7     | Memory                  | Structured + semantic memory, scoring, people/projects, Memory UI       | **first version** |
 | 8     | Voice                   | Local wake word, streaming STT/TTS, barge-in                            | **first version** (pulled ahead) |
 | 9     | Specialist agents       | Atlas, Forge, Archive fully online when missions justify them           | planned       |
 | 10    | Advanced                | War Room, MCP, calendar/email/GitHub, companion app, proactive engine   | planned       |
 | —     | Trading research        | Self-directed learning on NQ / XAUUSD with honest out-of-sample scoring | **first version** |
+
+## Phase 7 — Memory (first version) and the morning briefing
+
+- [x] Memories (preference, fact, routine, correction) in every request; remember / forget
+- [x] Memory panel: see, add, forget
+- [x] Planted memories need approval after reading files or research notes
+- [x] Morning briefing with today's NQ / gold levels and research notes; market_levels in the chat
+- [ ] Retrieval instead of the full list once memories outgrow the context
+- [ ] People, projects and decisions as structured memory
+- [ ] Briefing: calendar and news; spoken version
 
 ## Trading research (first version)
 

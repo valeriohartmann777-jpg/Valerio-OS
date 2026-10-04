@@ -201,6 +201,36 @@ _Last updated: 2026-10-04_
   volume profile, studies (real level, random level, trend, period limits,
   validation), loop with studies and focus, API; E2E edits the focus
 
+### Memory
+- Numbered memories (preference / fact / routine / correction) in SQLite,
+  in the context of every brain request; `remember` (dedupe, replace) and
+  `forget` tools; persona rules (only the user's own words, no secrets,
+  corrections become rules)
+- Planted memories: after a request read a file or research notes,
+  `remember` needs approval (`stores_instructions`; tested with a file that
+  tries it)
+- Memory panel on Home (list, add, forget), `/memory` API, `memory.changed`
+- Tests: store, restart, context in requests, the brain storing a
+  preference, the planting attack, API; E2E adds and forgets a memory
+
+### Morning briefing
+- Key levels per market from minute data (21 days cached + today live):
+  NQ previous regular session high/low/close + POC/VAH/VAL, overnight range;
+  gold previous trading day + profile, Asia range; previous week; intact
+  15-minute swings; round numbers; coinciding levels merged
+- Each level annotated with the best matching level study (side, market,
+  kind); German text with German number format; research summary line
+- Weekdays 08:00 (local), catch-up until 11:00 after a late start or sleep,
+  checked every minute; Settings → Morning briefing (on/off, time, send now);
+  system notification when it arrives in the background; spoken as a short
+  sentence only
+- `market_levels` tool: the same on request in the chat
+- Tests: levels against hand-computed values (NQ, gold), swings and merging,
+  research notes, text, schedule (catch-up, weekend, once per day), sending,
+  API, tool, voice summary; E2E toggles the briefing (20 steps total)
+- Not yet run with live data (blocked here) — the first briefing on the
+  MacBook is the real test
+
 ## IN PROGRESS
 - —
 

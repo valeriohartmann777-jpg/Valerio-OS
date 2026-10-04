@@ -1,4 +1,4 @@
-import type { ServerMessage } from "@jarvis/protocol";
+import type { JarvisEvent, ServerMessage } from "@jarvis/protocol";
 
 import type { Action } from "../store/reducer";
 import { api } from "./api";
@@ -44,6 +44,7 @@ export function connectEvents(dispatch: (action: Action) => void): () => void {
         void loadConversation(dispatch);
       } else if (data.kind === "event") {
         dispatch({ type: "event", event: data.data, now: Date.now() });
+        notifyBriefing(data.data);
       }
     };
 
@@ -67,4 +68,16 @@ export function connectEvents(dispatch: (action: Action) => void): () => void {
     window.clearInterval(pingTimer);
     socket?.close();
   };
+}
+
+/** A system notification when the morning briefing arrives while JARVIS is in the background. */
+function notifyBriefing(event: JarvisEvent): void {
+  const payload = event.payload as { kind?: string };
+  if (event.type !== "jarvis.message" || payload.kind !== "briefing") return;
+  if (!document.hidden || typeof Notification === "undefined") return;
+  try {
+    new Notification("JARVIS", { body: "Your morning briefing for NQ and gold is ready.", silent: false });
+  } catch {
+    /* notifications unavailable */
+  }
 }

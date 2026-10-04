@@ -40,6 +40,7 @@ class EventType(StrEnum):
     BRAIN_CHANGED = "brain.changed"
     VOICE_CHANGED = "voice.changed"
     LEARNING_CHANGED = "learning.changed"
+    MEMORY_CHANGED = "memory.changed"
     CONTEXT_UPDATED = "context.updated"
 
 

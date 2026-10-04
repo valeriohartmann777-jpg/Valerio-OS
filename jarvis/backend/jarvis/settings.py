@@ -177,6 +177,25 @@ class LearningSettings(BaseModel):
     gates: LearningGates = Field(default_factory=LearningGates)
 
 
+class BriefingInstrumentSettings(BaseModel):
+    round_step: float
+    major_step: float
+    merge_within: float
+    regular_session: bool = False
+    decimals: int = 2
+
+
+class BriefingSettings(BaseModel):
+    enabled: bool = True
+    time: str = "08:00"  # local time of this computer
+    weekdays: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])  # 0 = Monday
+    # Started later than ``time``? The briefing still comes until then.
+    catch_up_until: str = "11:00"
+    levels_each_side: int = 4
+    history_days: int = 21
+    instruments: dict[str, BriefingInstrumentSettings] = Field(default_factory=dict)
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -213,6 +232,7 @@ class Settings(BaseModel):
     files: FileSettings = Field(default_factory=FileSettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     learning: LearningSettings = Field(default_factory=LearningSettings)
+    briefing: BriefingSettings = Field(default_factory=BriefingSettings)
 
     @property
     def env_file(self) -> Path:
@@ -274,6 +294,7 @@ def load_settings(
     data["files"] = _read_yaml(config_dir / "files.yaml")
     data["voice"] = _read_yaml(config_dir / "voice.yaml")
     data["learning"] = _read_yaml(config_dir / "learning.yaml")
+    data["briefing"] = _read_yaml(config_dir / "briefing.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))
@@ -326,6 +347,8 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         voice["elevenlabs_api_key"] = value
     if env.get("JARVIS_MIC", "").strip() == "0":
         voice["microphone_allowed"] = False
+    if env.get("JARVIS_BRIEFING", "").strip().lower() == "off":  # tests, E2E
+        data.setdefault("briefing", {})["enabled"] = False
 
 
 _QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019"}

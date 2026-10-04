@@ -29,6 +29,14 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   missions, activity stream, command bar, mission detail, settings.
 - **Conversation**: everything you typed or said and every answer stays
   visible as a chat on Home — across restarts and updates.
+- **Memory**: JARVIS remembers what you tell it about yourself and how you
+  want it to work ("merk dir …", corrections) and applies it in every
+  conversation. See and edit it in the Memory panel on Home.
+- **Morning briefing**: every weekday at 08:00 today's key levels for NQ and
+  gold in the chat — previous day, overnight / Asia range, previous week,
+  volume profile, swing highs/lows, round numbers — with what JARVIS's own
+  research measured about each. Any time: "Gib mir das Briefing" or
+  "Wo sind die Levels im NQ?".
 - **Learning (trading research)**: JARVIS studies scalping and day trading on
   NQ and XAUUSD on its own — Claude writes strategies, JARVIS backtests them on
   minute data, and only results that hold up on data Claude never tuned on

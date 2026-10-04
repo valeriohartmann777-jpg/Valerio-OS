@@ -99,8 +99,14 @@ class Tool[Args: BaseModel](ABC):
     side_effects: ClassVar[bool] = False
     # Returns private data (file contents) — marks the request as exposed.
     reads_private_data: ClassVar[bool] = False
+    # Returns text that others wrote (notes from web research) — marks the request
+    # as exposed, like private data: what follows may have been planted.
+    returns_untrusted_text: ClassVar[bool] = False
     # Can carry data off the computer (a URL) — needs approval once exposed.
     sends_data_out: ClassVar[bool] = False
+    # Stores something that shapes future requests (a memory) — needs approval
+    # once exposed, so read content can't plant lasting instructions.
+    stores_instructions: ClassVar[bool] = False
 
     def describe_action(self, args: Args) -> ActionDescriptor:
         """Describe exactly what will happen. Override for target-dependent risk."""

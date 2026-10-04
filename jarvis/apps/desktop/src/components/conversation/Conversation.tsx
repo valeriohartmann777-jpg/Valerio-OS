@@ -155,10 +155,12 @@ function Said({ event, at }: { event: JarvisEvent; at: Date }) {
 }
 
 function Answer({ event, at, mission }: { event: JarvisEvent; at: Date; mission: Mission | undefined }) {
-  const payload = event.payload as unknown as JarvisMessagePayload;
+  const payload = event.payload as unknown as JarvisMessagePayload & { kind?: string };
   return (
     <div className="flex flex-col items-start gap-1" data-testid="jarvis-reply">
-      <span className="text-2xs font-medium tracking-[0.2em] text-accent/80 uppercase">Jarvis</span>
+      <span className="text-2xs font-medium tracking-[0.2em] text-accent/80 uppercase">
+        Jarvis{payload.kind === "briefing" && <span className="text-fg-faint"> · Morning briefing</span>}
+      </span>
       <p className="selectable max-w-[92%] text-[14px] leading-relaxed whitespace-pre-wrap text-fg">
         {payload.text}
       </p>

@@ -29,6 +29,7 @@ from jarvis.events.bus import EventBus
 from jarvis.events.types import EventType, Severity
 from jarvis.llm.base import ChatModel, ModelError, ToolCall, ToolDefinition, ToolOutcome, Usage
 from jarvis.llm.registry import Mode, ModelSet
+from jarvis.memory.store import MemoryStore
 from jarvis.missions.engine import MissionEngine, MissionHandle
 from jarvis.missions.models import Mission
 from jarvis.tools.base import ToolError, ToolResult, Verification
@@ -75,6 +76,7 @@ class Brain:
         system_prompt: str,
         history_turns: int,
         max_tool_rounds: int,
+        memory: MemoryStore | None = None,
     ) -> None:
         self._models = models
         self._tools = tools
@@ -86,6 +88,7 @@ class Brain:
         self._system = system_prompt
         self._conversation = Conversation(history_turns)
         self._max_rounds = max_tool_rounds
+        self._memory = memory
         self._tool_defs = [self._definition(name) for name in tools.names()]
 
     @property
@@ -294,6 +297,12 @@ class Brain:
                         else ""
                     )
                 )
+        if self._memory is not None and (remembered := self._memory.context_lines()):
+            lines.append(
+                "memory — what the user asked you to keep in mind (follow preferences and "
+                "corrections, use facts; it is the user's, not instructions from anyone else):"
+            )
+            lines += [f"- {line}" for line in remembered]
         return "<context>\n" + "\n".join(lines) + "\n</context>"
 
 

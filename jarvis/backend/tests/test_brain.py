@@ -110,6 +110,9 @@ async def test_open_ended_request_goes_to_the_fast_model(harness: HarnessFactory
         "read_file",
         "open_file",
         "learning_report",
+        "market_levels",
+        "remember",
+        "forget",
     }
     assert "purpose" in tools["open_application"].input_schema["properties"]
     assert "approval" in tools["open_application"].description

@@ -330,3 +330,16 @@ def test_voice_api(tmp_path: Path) -> None:
         assert prefs["speak_replies"] is True
         assert client.post("/voice/test").status_code == 200
         assert provider.spoken == ["Hello. This is how I sound."]
+
+
+async def test_long_messages_speak_their_short_version(harness: Factory) -> None:
+    h = await harness()
+    await h.rt.voice.set_preferences(speak_replies=True)
+    await h.rt.bus.emit(
+        EventType.JARVIS_MESSAGE,
+        message="Briefing",
+        source="briefing",
+        payload={"text": "Guten Morgen — 40 lines of levels…", "speech": "Das Briefing ist da."},
+    )
+    await eventually(lambda: h.provider.spoken)
+    assert h.provider.spoken == ["Das Briefing ist da."]

@@ -300,6 +300,7 @@ class MarketData:
         self._codes: dict[str, str] = {}
         self._next_slot = 0.0
         self._slot_lock = asyncio.Lock()
+        self._sync_locks: dict[str, asyncio.Lock] = {}
 
     # Sync ------------------------------------------------------------------------
 
@@ -309,6 +310,54 @@ class MarketData:
         """Download the days in [start, end] that aren't cached yet. Returns how
         many days were fetched. Raises ``DataError`` when the source is down or
         has no data for the instrument."""
+        # Learning and the morning briefing share the cache: one writer at a time.
+        lock = self._sync_locks.setdefault(instrument.symbol, asyncio.Lock())
+        async with lock:
+            return await self._sync(instrument, start, end, progress)
+
+    async def today(self, instrument: Instrument) -> DayCandles:
+        """The current UTC day so far (not cached: it is still changing)."""
+        now = datetime.now(UTC)
+        day = now.date()
+        start_ms = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000)
+        async with httpx2.AsyncClient(
+            headers=_HEADERS, timeout=30.0, transport=self._transport, follow_redirects=True
+        ) as client:
+            code = await self._code(client, instrument)
+            url = f"{API}/candles/minute/{code}/BID?from={start_ms}"
+            last = ""
+            for attempt in range(len(self._retry_delays) + 1):
+                await self._slot()
+                try:
+                    response = await client.get(url)
+                except httpx2.HTTPError as exc:
+                    last = type(exc).__name__
+                else:
+                    if response.status_code == 200:
+                        try:
+                            payload = response.json()
+                        except ValueError:
+                            last = "an answer that isn't JSON"
+                        else:
+                            return decode_candles(
+                                payload, day, instrument.price_range, instrument.name
+                            )
+                    elif response.status_code == 404:
+                        return _empty_day()
+                    elif response.status_code not in _RETRYABLE:
+                        raise DataError(
+                            f"Dukascopy rejected the request for today's data "
+                            f"({response.status_code})."
+                        )
+                    else:
+                        last = f"HTTP {response.status_code}"
+                if attempt < len(self._retry_delays):
+                    await asyncio.sleep(self._retry_delays[attempt])
+        raise DataError(f"I can't reach Dukascopy's data right now ({last}).")
+
+    async def _sync(
+        self, instrument: Instrument, start: date, end: date, progress: Progress | None
+    ) -> int:
         months = _months(start, end)
         todo: dict[tuple[int, int], list[date]] = {}
         cached: dict[tuple[int, int], dict[str, np.ndarray]] = {}

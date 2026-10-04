@@ -13,6 +13,7 @@ from jarvis import __version__
 from jarvis.agents.base import AgentRegistry
 from jarvis.agents.catalog import AGENT_SPECS
 from jarvis.agents.workers import OperatorAgent, SentinelAgent
+from jarvis.briefing.service import BriefingService
 from jarvis.build import build_id
 from jarvis.core.brain import Brain
 from jarvis.core.connector import BrainConnector, Verifier
@@ -29,6 +30,7 @@ from jarvis.learning.journal import LearningJournal
 from jarvis.learning.market import MarketData
 from jarvis.learning.service import LearningService, ResearchModel
 from jarvis.llm.registry import ModelSet, build_models
+from jarvis.memory.store import MemoryStore
 from jarvis.missions.engine import MissionEngine
 from jarvis.missions.planner import DeterministicPlanner
 from jarvis.missions.repository import MissionRepository
@@ -37,10 +39,12 @@ from jarvis.settings import Settings
 from jarvis.storage.audit import AuditLog
 from jarvis.storage.database import Database
 from jarvis.storage.preferences import Preferences
+from jarvis.tools.briefing import register_briefing_tools
 from jarvis.tools.executor import ToolExecutor
 from jarvis.tools.files import FileAccess, register_file_tools
 from jarvis.tools.learning import register_learning_tools
 from jarvis.tools.media import register_media_tools
+from jarvis.tools.memory import register_memory_tools
 from jarvis.tools.registry import ToolRegistry
 from jarvis.tools.system import create_backend, register_system_tools
 from jarvis.tools.system.apps import AppCatalog
@@ -100,8 +104,13 @@ class Runtime:
             verify_timeout=settings.runtime.launch_verify_timeout_seconds,
         )
         # Before the brain is built: it fixes its tool list then.
+        self.memory = MemoryStore(self.db, self.bus)
+        register_memory_tools(self.tools, self.memory)
         self.learning_journal = LearningJournal(self.db)
         register_learning_tools(self.tools, self.learning_journal, lambda: self.learning.status)
+        register_briefing_tools(self.tools, lambda: self.briefing)
+        self.market = market or MarketData(settings.data_dir / "market")
+        self.preferences = Preferences(settings.data_dir / "preferences.json")
         self.executor = ToolExecutor(
             self.tools,
             self.permissions,
@@ -148,6 +157,7 @@ class Runtime:
             ),
             history_turns=settings.models.history_turns,
             max_tool_rounds=settings.models.max_tool_rounds,
+            memory=self.memory,
         )
         self.connector = BrainConnector(
             settings=settings.models,
@@ -169,7 +179,6 @@ class Runtime:
             tools=self.tools,
         )
 
-        self.preferences = Preferences(settings.data_dir / "preferences.json")
         self.voice = VoiceService(
             settings=settings.voice,
             bus=self.bus,
@@ -188,9 +197,20 @@ class Runtime:
             settings=settings.learning,
             bus=self.bus,
             journal=self.learning_journal,
-            market=market or MarketData(settings.data_dir / "market"),
+            market=self.market,
             preferences=self.preferences,
             model_factory=research_model or self._research_model,
+        )
+
+        self.briefing = BriefingService(
+            settings=settings.briefing,
+            learning=settings.learning,
+            market=self.market,
+            journal=self.learning_journal,
+            bus=self.bus,
+            preferences=self.preferences,
+            # Follow-up questions about the briefing reach the brain with it in view.
+            on_sent=lambda text: self.brain.remember("(morning briefing requested)", text),
         )
 
     def _research_model(self) -> ResearchModel | None:
@@ -223,6 +243,7 @@ class Runtime:
     async def start(self) -> None:
         await self.db.connect()
         self.events.attach(self.bus)
+        await self.memory.load()
         interrupted = await self.mission_repository.fail_interrupted()
         if interrupted:
             log.warning("marked %d interrupted mission(s) as failed", interrupted)
@@ -254,8 +275,10 @@ class Runtime:
             self._key_check = asyncio.create_task(self.connector.check(), name="key-check")
         await self.voice.start()
         await self.learning.start()
+        await self.briefing.start()
 
     async def stop(self) -> None:
+        await self.briefing.stop()
         await self.learning.stop()
         await self.voice.stop()
         if self._key_check is not None:

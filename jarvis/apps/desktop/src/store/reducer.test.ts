@@ -112,6 +112,7 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       counts: {},
       data: {},
     },
+    memories: [],
     state: { state: "DORMANT", detail: "" },
     system_backend: "simulated",
     simulated: true,
@@ -207,6 +208,21 @@ describe("reducer", () => {
     const listening = { ...snapshot().voice, state: "listening" as const };
     state = apply(state, event("voice.changed", { voice: listening }, { severity: "debug" }));
     expect(state.voice?.state).toBe("listening");
+  });
+
+  it("follows the memory", () => {
+    let state = reduce(initialState, { type: "snapshot", snapshot: snapshot(), now: 0 });
+    expect(state.memories).toEqual([]);
+    const memory = {
+      number: 1,
+      kind: "preference" as const,
+      text: "Prefers du.",
+      created_at: "",
+      updated_at: "",
+      source: "conversation",
+    };
+    state = apply(state, event("memory.changed", { memories: [memory] }, { severity: "info" }));
+    expect(state.memories).toEqual([memory]);
   });
 
   it("follows the learning state", () => {

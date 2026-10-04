@@ -326,12 +326,38 @@ export interface LearningRound {
   error: string | null;
 }
 
+export interface BriefingStatus {
+  enabled: boolean;
+  /** HH:MM, this computer's local time. */
+  time: string;
+  /** 0 = Monday. */
+  weekdays: number[];
+  catch_up_until: string;
+  next_at: string | null;
+  /** Local date (YYYY-MM-DD) of the last briefing. */
+  last_sent: string | null;
+  last_error: string | null;
+}
+
+export type MemoryKind = "preference" | "fact" | "routine" | "correction";
+
+export interface MemoryItem {
+  number: number;
+  kind: MemoryKind;
+  text: string;
+  created_at: string;
+  updated_at: string;
+  /** "conversation" (JARVIS stored it) or "dashboard" (added by hand). */
+  source: string;
+}
+
 export interface Snapshot {
   version: string;
   build: string;
   brain: BrainStatus;
   voice: VoiceStatus;
   learning: LearningStatus;
+  memories: MemoryItem[];
   state: StateSnapshot;
   system_backend: string;
   simulated: boolean;

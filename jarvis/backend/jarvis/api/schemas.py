@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -71,6 +71,35 @@ class LearningView(BaseModel):
     data: dict[str, dict[str, Any]]
 
 
+class MemoryView(BaseModel):
+    number: int
+    kind: str
+    text: str
+    created_at: str
+    updated_at: str
+    source: str
+
+
+class MemoryCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+    kind: Literal["preference", "fact", "routine", "correction"] = "fact"
+
+
+class BriefingView(BaseModel):
+    enabled: bool
+    time: str
+    weekdays: list[int]
+    catch_up_until: str
+    next_at: str | None
+    last_sent: str | None
+    last_error: str | None
+
+
+class BriefingPreferences(BaseModel):
+    enabled: bool | None = None
+    time: str | None = Field(None, max_length=5)
+
+
 class LearningFocus(BaseModel):
     text: str = Field(max_length=4000)
 
@@ -90,6 +119,7 @@ class Snapshot(BaseModel):
     brain: BrainView
     voice: VoiceView
     learning: LearningView
+    memories: list[MemoryView]
     state: StateSnapshot
     system_backend: str
     simulated: bool

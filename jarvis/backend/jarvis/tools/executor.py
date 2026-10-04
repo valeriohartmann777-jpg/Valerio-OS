@@ -79,17 +79,21 @@ class ToolExecutor:
             return result
 
         action = tool.describe_action(args)
-        if tool.sends_data_out and ctx.exposed:
-            # Untrusted file content could have planted this request: whatever
-            # leaves the computer after private data was read needs a human.
+        if (tool.sends_data_out or tool.stores_instructions) and ctx.exposed:
+            # Untrusted content could have planted this request: whatever leaves
+            # the computer — or would steer future requests — needs a human.
             read = ", ".join(sorted(ctx.exposed)[:3]) + (" …" if len(ctx.exposed) > 3 else "")
+            why = (
+                "this address could carry some of it to the website"
+                if tool.sends_data_out
+                else "text I read could have asked for this"
+            )
             action = action.model_copy(
                 update={
                     "level": max(action.level, PermissionLevel.MODIFICATION),
                     "effects": [
                         *action.effects,
-                        f"Asked because I read private data in this request ({read}); "
-                        "this address could carry some of it to the website",
+                        f"Asked because I read content in this request ({read}); {why}",
                     ],
                 }
             )
@@ -141,7 +145,7 @@ class ToolExecutor:
                 target=action.target,
             )
         result.duration_ms = int((time.perf_counter() - started) * 1000)
-        if tool.reads_private_data and result.success:
+        if (tool.reads_private_data or tool.returns_untrusted_text) and result.success:
             ctx.exposed.add(result.target or tool_name)
         await self._finish(
             tool_name, raw_args, action.level, decision.approval_label, result, ctx, source

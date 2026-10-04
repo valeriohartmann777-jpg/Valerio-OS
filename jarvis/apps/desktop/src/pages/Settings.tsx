@@ -1,4 +1,4 @@
-import type { SettingsView } from "@jarvis/protocol";
+import type { BriefingStatus, SettingsView } from "@jarvis/protocol";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { UpdateSummary } from "../components/UpdateControls";
@@ -42,6 +42,8 @@ export function Settings() {
             <BrainSettings models={settings.models} />
 
             <VoiceSettings />
+
+            <BriefingSettings />
 
             <Group title="System">
               <Item label="Version">{settings.version}</Item>
@@ -354,6 +356,109 @@ function VoiceSettings() {
           </Item>
         </>
       )}
+    </Group>
+  );
+}
+
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function BriefingSettings() {
+  const [status, setStatus] = useState<BriefingStatus | null>(null);
+  const [time, setTime] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    api.briefing().then(
+      (s) => {
+        setStatus(s);
+        setTime(s.time);
+      },
+      () => setProblem("Briefing settings unavailable."),
+    );
+  }, []);
+  if (!status) return problem ? <p className="text-[13px] text-danger">{problem}</p> : null;
+
+  const update = async (prefs: { enabled?: boolean; time?: string }) => {
+    setProblem(null);
+    try {
+      const next = await api.briefingPreferences(prefs);
+      setStatus(next);
+      setTime(next.time);
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : "That didn't work.");
+    }
+  };
+
+  const sendNow = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await api.sendBriefing();
+      setSent(true);
+      setStatus(await api.briefing());
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : "That didn't work.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const days = status.weekdays.map((d) => DAY_NAMES[d]).join(", ");
+  return (
+    <Group title="Morning briefing">
+      <Item label="Briefing">
+        <Toggle
+          checked={status.enabled}
+          onChange={(value) => void update({ enabled: value })}
+          testid="briefing-toggle"
+        >
+          {status.enabled
+            ? `NQ and gold levels in the chat, ${days}`
+            : "Off — ask for it any time: “Gib mir das Briefing”"}
+        </Toggle>
+      </Item>
+      <Item label="Time">
+        <span className="flex items-center gap-3">
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            onBlur={() => time && time !== status.time && void update({ time })}
+            className="no-drag rounded-md border border-hairline bg-transparent px-2 py-0.5 font-mono text-[13px] text-fg focus:border-hairline-strong focus:outline-none"
+            data-testid="briefing-time"
+          />
+          <span className="text-xs text-fg-faint">
+            local time · comes until {status.catch_up_until} if JARVIS starts later
+          </span>
+        </span>
+      </Item>
+      <Item label="Next">
+        <span className="text-fg-muted" data-testid="briefing-next">
+          {status.next_at ? new Date(status.next_at).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+          {status.last_sent && <span className="text-fg-faint"> · last {status.last_sent}</span>}
+        </span>
+      </Item>
+      <Item label="Now">
+        <span className="flex items-center gap-3">
+          <button
+            type="button"
+            className="no-drag text-xs text-fg-muted hover:text-fg disabled:opacity-50"
+            disabled={busy}
+            onClick={() => void sendNow()}
+            data-testid="briefing-send"
+          >
+            {busy ? "Preparing…" : sent ? "Sent — see the chat on Home" : "Send the briefing now"}
+          </button>
+          {problem && <span className="truncate text-xs text-danger">{problem}</span>}
+          {status.last_error && !problem && (
+            <span className="truncate text-xs text-warning" title={status.last_error}>
+              Last time: {status.last_error}
+            </span>
+          )}
+        </span>
+      </Item>
     </Group>
   );
 }
