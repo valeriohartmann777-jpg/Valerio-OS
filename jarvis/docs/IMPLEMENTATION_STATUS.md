@@ -97,14 +97,14 @@ _Last updated: 2026-10-04_
   never as "no matches"
 - Tests: 189 pytest (web 16, files 18, windows 4 + macOS integration with real
   processes, media 8, brain-level prompt-injection test), 14-step E2E
-- Not yet run on the MacBook
+- 2026-10-04: running on the MacBook (build 1098535); the user reports the
+  test prompts (YouTube search, Downloads, invoice, volume, music, hide app)
+  working
 
 ## IN PROGRESS
 - —
 
 ## NEXT
-0. Live on the MacBook: the new tools (web, files, hide/quit, volume, music);
-   Spotify/Music control asks once for the Automation permission
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")
