@@ -99,6 +99,9 @@ class Runtime:
             self.catalog,
             verify_timeout=settings.runtime.launch_verify_timeout_seconds,
         )
+        # Before the brain is built: it fixes its tool list then.
+        self.learning_journal = LearningJournal(self.db)
+        register_learning_tools(self.tools, self.learning_journal, lambda: self.learning.status)
         self.executor = ToolExecutor(
             self.tools,
             self.permissions,
@@ -180,7 +183,6 @@ class Runtime:
             provider_factory=voice_provider or elevenlabs_provider,
         )
 
-        self.learning_journal = LearningJournal(self.db)
         self._research: tuple[str, ResearchModel] | None = None
         self.learning = LearningService(
             settings=settings.learning,
@@ -190,7 +192,6 @@ class Runtime:
             preferences=self.preferences,
             model_factory=research_model or self._research_model,
         )
-        register_learning_tools(self.tools, self.learning_journal, lambda: self.learning.status)
 
     def _research_model(self) -> ResearchModel | None:
         """Claude for learning, with the key the brain currently uses."""

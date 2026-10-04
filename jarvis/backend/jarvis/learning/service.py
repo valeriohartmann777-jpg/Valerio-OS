@@ -191,9 +191,9 @@ class LearningService:
         progress: float | None = None,
         next_round_at: datetime | None = None,
     ) -> None:
+        await self._refresh()
         self._state, self._detail, self._progress = state, detail, progress
         self._next_round_at = next_round_at.isoformat() if next_round_at else None
-        await self._refresh()
         await self._emit(message or detail or f"Learning: {state}", severity)
 
     async def _emit(self, message: str, severity: Severity = Severity.DEBUG) -> None:

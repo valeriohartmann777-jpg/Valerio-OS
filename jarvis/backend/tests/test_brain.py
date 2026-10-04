@@ -109,6 +109,7 @@ async def test_open_ended_request_goes_to_the_fast_model(harness: HarnessFactory
         "list_folder",
         "read_file",
         "open_file",
+        "learning_report",
     }
     assert "purpose" in tools["open_application"].input_schema["properties"]
     assert "approval" in tools["open_application"].description
@@ -341,3 +342,6 @@ async def test_every_tool_the_model_sees_is_one_the_operator_may_run(
 ) -> None:
     h = await harness([])
     assert set(h.rt.tools.names()) == set(h.rt.agents.spec("operator").available_tools)
+    # The brain fixes its tool list when it is built: every tool must exist by then.
+    assert [d.name for d in h.rt.brain._tool_defs] == h.rt.tools.names()
+    assert "learning_report" in h.rt.tools.names()

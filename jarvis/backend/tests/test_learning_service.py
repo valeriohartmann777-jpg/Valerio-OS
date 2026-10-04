@@ -271,14 +271,17 @@ async def test_learning_stops_itself_without_progress(harness: Harness) -> None:
         [finish("nothing"), finish("still nothing")], round_interval_minutes=0.0, stall_limit=2
     )
     await service.enable()
-    await eventually(state_is(service, LearningState.STALLED), seconds=10)
+
+    def warnings() -> list[str]:
+        events = harness.recorder.of(EventType.LEARNING_CHANGED)
+        return [e.message for e in events if e.severity == Severity.WARNING]
+
+    await eventually(warnings, seconds=10)
     status = service.status
+    assert status.state == LearningState.STALLED
     assert not status.enabled and status.stall_rounds == 2
     assert "stopped itself" in (status.detail or "")
-    warnings = [
-        e for e in harness.recorder.of(EventType.LEARNING_CHANGED) if e.severity == Severity.WARNING
-    ]
-    assert warnings and "No new validated finding in 2 rounds" in warnings[-1].message
+    assert "No new validated finding in 2 rounds" in warnings()[-1]
 
     # Starting it again grants fresh rounds.
     assert harness.model is not None
