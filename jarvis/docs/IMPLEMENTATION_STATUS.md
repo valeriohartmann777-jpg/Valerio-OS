@@ -26,13 +26,14 @@ _Last updated: 2026-10-03_
 - Response composer driven by `personality.yaml`
 - FastAPI REST + WebSocket `/events` (snapshot then live events), Origin guard
 - Structured JSON logging with `trace_id` / `mission_id`
-- Electron app: backend supervisor, `app://` protocol + CSP, single instance,
-  Windows title-bar overlay
+- Electron app: backend supervisor (replaces backends of older versions),
+  `app://` protocol + CSP, single instance with automatic takeover by a newly
+  started different version, Windows title-bar overlay
 - Dashboard: JARVIS Core, state line, active mission, approval card, context,
   memory placeholder (honest), agents, missions, activity stream (debug toggle),
   command bar (history, ⌘/Ctrl+K), mission detail, settings (read-only)
 - Tests: 70 pytest (bus, permissions, router, tools, missions, API/WS, settings,
-  protocol sync) · 9 Vitest (reducer, formatting) · 10-step Electron E2E
+  protocol sync) · 10 Vitest (reducer, formatting) · 14-step Electron E2E
 
 ### Verified in this environment (Linux container, simulated desktop)
 - `npm run test:e2e`: app launch → backend auto-start → ONLINE → “Open Notepad.”

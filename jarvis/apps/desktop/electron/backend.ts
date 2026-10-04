@@ -23,11 +23,12 @@ interface Health {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const short = (build: string | undefined) => (build ? build.slice(0, 7) : "pre-build-id");
+export const short = (build: string | undefined) => (build ? build.slice(0, 7) : "pre-build-id");
 
 export class BackendSupervisor {
   private child: ChildProcess | null = null;
-  private readonly build: string;
+  /** Code version of this app (git commit), also reported by the backend it starts. */
+  readonly build: string;
 
   constructor(
     private readonly url: string,
@@ -102,6 +103,21 @@ export class BackendSupervisor {
     }
   }
 
+  /** Stop the backend this app started and wait until it is gone (port free). */
+  async shutdown(): Promise<void> {
+    const child = this.child;
+    if (!child || child.exitCode !== null || child.signalCode !== null) return;
+    const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    this.stop();
+    await Promise.race([exited, sleep(5000)]);
+  }
+
+  /** Build of the backend answering on our URL; null when none answers. */
+  async runningBuild(): Promise<string | null> {
+    const running = await this.health();
+    return running ? (running.build ?? "pre-build-id") : null;
+  }
+
   private isOutdated(running: Health): boolean {
     if (this.build === "unknown") return false; // not a git checkout: can't tell
     if (running.build === undefined) return true; // predates build ids
@@ -152,6 +168,8 @@ export class BackendSupervisor {
 }
 
 function gitCommit(cwd: string): string {
+  const override = process.env.JARVIS_BUILD?.trim(); // tests; the backend honours it too
+  if (override) return override;
   try {
     const commit = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd,

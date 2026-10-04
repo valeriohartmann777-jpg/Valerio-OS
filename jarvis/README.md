@@ -79,7 +79,9 @@ npm run dev
 
 `npm run dev` starts Vite and Electron; Electron starts the Python backend from
 `backend\.venv` automatically (or reuses one already running on port 8765) and
-stops it when you quit.
+stops it when you quit. After `git pull`, just run `npm run dev` again: a
+running JARVIS of another version hands over to the new one by itself (the
+same version only brings its window to the front).
 
 Production-style run (built renderer served over `app://`):
 

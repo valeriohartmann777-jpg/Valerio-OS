@@ -84,6 +84,10 @@ try {
   };
 
   await step("an outdated backend from an earlier run is replaced", async () => {
+    // The window may briefly reach the old backend before the supervisor replaces it.
+    for (let i = 0; i < 120 && (await health())?.build === "0000000-outdated"; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
     await page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 30_000 });
     const current = await health();
     assert.notEqual(current?.build, "0000000-outdated");
@@ -214,6 +218,42 @@ await step("backend supervised by Electron is stopped on quit", async () => {
     () => false,
   );
   assert.equal(alive, false);
+});
+
+await step("starting a newer version takes over from the running one; the same version doesn't", async () => {
+  const launchArgs = [appDir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])];
+  const env = (build) => ({
+    ...process.env,
+    JARVIS_BUILD: build,
+    JARVIS_BACKEND_URL: backendUrl,
+    JARVIS_SYSTEM_BACKEND: "simulated",
+    JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-takeover-")),
+  });
+  const online = (page) =>
+    page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 60_000 });
+
+  const older = await electron.launch({ executablePath: electronBinary, args: launchArgs, env: env("1111111-older") });
+  await online(await older.firstWindow());
+  assert.equal((await health())?.build, "1111111-older");
+  const olderClosed = new Promise((resolve) => older.once("close", resolve));
+
+  const newer = await electron.launch({ executablePath: electronBinary, args: launchArgs, env: env("2222222-newer") });
+  try {
+    await olderClosed;
+    const page = await newer.firstWindow();
+    await online(page);
+    assert.equal((await health())?.build, "2222222-newer");
+    assert.ok((await page.getByTestId("build").innerText()).includes("2222222"));
+
+    // Same version again: exits at once, the running window stays.
+    const again = spawn(electronBinary, launchArgs, { env: env("2222222-newer"), stdio: "ignore" });
+    const code = await new Promise((resolve) => again.once("exit", resolve));
+    assert.equal(code, 0);
+    assert.equal((await health())?.build, "2222222-newer");
+    await page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor();
+  } finally {
+    await newer.close();
+  }
 });
 
 console.log(`\nAll ${steps.length} end-to-end checks passed. Screenshots: ${outDir}`);
