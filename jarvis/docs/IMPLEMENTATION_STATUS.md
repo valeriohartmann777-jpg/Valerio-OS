@@ -119,15 +119,16 @@ _Last updated: 2026-10-04_
   offline / no upstream);
   E2E: loader start + takeover, and a full update from a temporary remote
   through the UI including the restart (16 steps total)
-- Not yet run on the MacBook (`codesign`, `iconutil`, `sips` are macOS-only)
+- 2026-10-04: installed on the MacBook with `scripts/install-mac-app.sh`
+  (`codesign`, `iconutil`, `sips` ran fine); JARVIS.app runs and replaced the
+  terminal-started JARVIS. This commit is the first real in-app update.
 
 ## IN PROGRESS
 - —
 
 ## NEXT
 
-0. Install the Mac app on the MacBook (`./scripts/install-mac-app.sh`) and do
-   the first real in-app update
+0. Confirm the first real in-app update on the MacBook
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")
