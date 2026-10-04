@@ -53,6 +53,9 @@ _Last updated: 2026-10-04_
   windows, 562 processes). "Ich muss mir schnell was notieren" → Claude chose
   TextEdit → mission → Sentinel verified. Found: the dashboard itself showed as
   "Electron" (fixed: recognised via `JARVIS_UI_PID`, labelled JARVIS).
+- 2026-10-04, after the update: automatic takeover (new version started while
+  the old one ran → old one handed over), dashboard labelled JARVIS, and
+  `think:` → Claude Opus 5.5 all confirmed on the MacBook.
 
 ### Phase 3 — Model intelligence
 - `llm/`: provider-neutral `ChatModel`, `AnthropicChatModel` (SDK 1.11, async),
@@ -72,13 +75,13 @@ _Last updated: 2026-10-04_
   reason. Empty credit balance is reported as a billing problem.
   Tests: 17 connector/API tests, 3 provider key-check tests, E2E covers the
   refused-key path
-- Live API verified on the MacBook (see above); `think:` (Opus 5.5) still to try
+- Live API verified on the MacBook (see above), fast and think paths
 
 ## IN PROGRESS
 - —
 
 ## NEXT
-0. Live: try `think:` (Opus 5.5), multi-app requests and an approval via Claude
+0. Live: multi-app requests and an approval requested by Claude
 
 ### Phase 2 — real system control
 1. Exercise the dashboard on the MacBook (`open safari / finder / terminal`,
