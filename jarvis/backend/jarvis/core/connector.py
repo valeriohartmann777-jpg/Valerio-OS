@@ -37,11 +37,11 @@ _KEY_PROBLEMS = {"authentication", "permission", "model_not_found"}
 _QUOTES = "\"'\u201c\u201d\u2018\u2019"  # incl. smart quotes
 
 
-def normalize_key(raw: str) -> str:
+def normalize_key(raw: str, env_name: str = ENV_NAME) -> str:
     """Accept what people actually paste: ``ANTHROPIC_API_KEY=sk-…``, quotes, spaces."""
     key = raw.strip().removeprefix("export ").strip()
     name, sep, rest = key.partition("=")
-    if sep and name.strip().upper() == ENV_NAME:
+    if sep and name.strip().upper() == env_name:
         key = rest
     return key.strip().strip(_QUOTES).strip()
 

@@ -1,5 +1,6 @@
 import type {
   BrainStatus,
+  VoiceStatus,
   ChatAccepted,
   Mission,
   PermissionRequest,
@@ -70,4 +71,10 @@ export const api = {
   reject: (id: string) => post<PermissionRequest>(`/permissions/${id}/reject`, {}),
   settings: () => request<SettingsView>("/settings"),
   connectBrain: (apiKey: string) => post<BrainStatus>("/brain/key", { api_key: apiKey }),
+  connectVoice: (apiKey: string) => post<VoiceStatus>("/voice/key", { api_key: apiKey }),
+  voicePreferences: (prefs: { wake_word?: boolean; speak_replies?: boolean }) =>
+    post<VoiceStatus>("/voice/preferences", prefs),
+  voiceListen: () => post<VoiceStatus>("/voice/listen"),
+  voiceStop: () => post<VoiceStatus>("/voice/stop"),
+  voiceTest: () => post<VoiceStatus>("/voice/test"),
 };

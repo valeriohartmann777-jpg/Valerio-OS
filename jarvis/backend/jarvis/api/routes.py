@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+from dataclasses import asdict
 from typing import Annotated
 
 from fastapi import (
@@ -31,6 +32,8 @@ from jarvis.api.schemas import (
     SettingsView,
     Snapshot,
     SystemStatus,
+    VoicePreferences,
+    VoiceView,
 )
 from jarvis.events.types import Event, Severity
 from jarvis.llm.base import ModelError
@@ -41,6 +44,7 @@ from jarvis.permissions.service import ApprovalError, StrongConfirmationRequired
 from jarvis.runtime import Runtime
 from jarvis.storage.audit import AuditEntry
 from jarvis.tools.base import ToolSpec
+from jarvis.voice.elevenlabs import VoiceError
 
 router = APIRouter()
 
@@ -64,11 +68,22 @@ def brain_view(rt: Runtime) -> BrainView:
     )
 
 
+def voice_view(rt: Runtime) -> VoiceView:
+    return VoiceView.model_validate(asdict(rt.voice.status))
+
+
+def _voice_error(exc: VoiceError, status: int = 422) -> HTTPException:
+    return HTTPException(
+        status, {"code": exc.code, "message": exc.message, "suggestion": exc.suggestion}
+    )
+
+
 async def build_snapshot(rt: Runtime) -> Snapshot:
     return Snapshot(
         version=rt.version,
         build=rt.build,
         brain=brain_view(rt),
+        voice=voice_view(rt),
         state=rt.state.snapshot(),
         system_backend=rt.backend.name,
         simulated=rt.backend.simulated,
@@ -127,6 +142,52 @@ async def connect_brain(body: ApiKeyRequest, rt: RuntimeDep) -> BrainView:
             422, {"code": exc.code, "message": exc.message, "suggestion": exc.suggestion}
         ) from exc
     return brain_view(rt)
+
+
+@router.get("/voice")
+async def voice(rt: RuntimeDep) -> VoiceView:
+    return voice_view(rt)
+
+
+@router.post("/voice/key")
+async def connect_voice(body: ApiKeyRequest, rt: RuntimeDep) -> VoiceView:
+    """Verify an ElevenLabs key, store it in jarvis/.env and switch voice on."""
+    try:
+        await rt.voice.connect(body.api_key)
+    except VoiceError as exc:
+        raise _voice_error(exc) from exc
+    return voice_view(rt)
+
+
+@router.post("/voice/preferences")
+async def voice_preferences(body: VoicePreferences, rt: RuntimeDep) -> VoiceView:
+    await rt.voice.set_preferences(wake_word=body.wake_word, speak_replies=body.speak_replies)
+    return voice_view(rt)
+
+
+@router.post("/voice/listen", status_code=202)
+async def voice_listen(rt: RuntimeDep) -> VoiceView:
+    """Push-to-talk: record one spoken request now."""
+    try:
+        await rt.voice.listen()
+    except VoiceError as exc:
+        raise _voice_error(exc, 409) from exc
+    return voice_view(rt)
+
+
+@router.post("/voice/stop")
+async def voice_stop(rt: RuntimeDep) -> VoiceView:
+    rt.voice.stop_activity()
+    return voice_view(rt)
+
+
+@router.post("/voice/test")
+async def voice_test(rt: RuntimeDep) -> VoiceView:
+    try:
+        await rt.voice.say("Hello. This is how I sound.")
+    except VoiceError as exc:
+        raise _voice_error(exc, 409) from exc
+    return voice_view(rt)
 
 
 @router.get("/missions")

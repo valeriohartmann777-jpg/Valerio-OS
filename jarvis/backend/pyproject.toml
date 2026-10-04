@@ -16,6 +16,10 @@ dependencies = [
   "psutil>=6.0",
   "anthropic>=1.11",
   "pypdf>=5.0",
+  "httpx2",
+  "numpy>=1.26",
+  "onnxruntime>=1.18",
+  "sounddevice>=0.5",
   "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
 ]
 
@@ -57,5 +61,5 @@ plugins = ["pydantic.mypy"]
 warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
-module = ["aiosqlite.*", "Quartz", "Quartz.*", "AppKit", "AppKit.*"]
+module = ["aiosqlite.*", "Quartz", "Quartz.*", "AppKit", "AppKit.*", "onnxruntime", "onnxruntime.*", "sounddevice"]
 ignore_missing_imports = true

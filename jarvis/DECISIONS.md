@@ -160,6 +160,29 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-017 — Voice: local wake word, ElevenLabs for speech in and out
+
+- **Decision:** "Hey JARVIS" is detected on the computer with the
+  openWakeWord `hey_jarvis` model (ported inference on `onnxruntime`);
+  requests and replies go to ElevenLabs (Scribe v2, `eleven_multilingual_v2`,
+  voice "Daniel"). Audio is captured in the backend (`sounddevice`), not the
+  renderer.
+- **Reason:** The user chose quality over local-only. A cloud wake word would
+  stream the room's audio all day; a local one keeps everything before
+  "Hey JARVIS" on the machine. ElevenLabs gives one key for both directions,
+  the most natural voices and German support. Backend capture works while
+  the window is hidden and keeps the whole loop testable in Python.
+- **Alternatives:** the `openwakeword` package (pulls scipy, scikit-learn and
+  an unavailable TFLite runtime on Linux); Porcupine (needs another account
+  key); OpenAI Whisper/TTS (good, second choice); macOS `say` + on-device
+  dictation (private, robotic, no API for dictation).
+- **Consequences:** Needs an ElevenLabs key and credits (free tier ≈ 10 min of
+  speech per month). Replies are synthesized whole, then played (~1 s extra);
+  streaming comes later. The pre-trained wake-word model is CC BY-NC-SA —
+  personal use only. On macOS the app bundle had to gain a microphone usage
+  text (bundle version 2, self-reinstall; privacy permissions are asked again).
+- **Date:** 2026-10-04
+
 ## D-016 — Mac app = loader bundle around the checkout; updates = fast-forward + staged build + relaunch
 
 - **Decision:** `scripts/install-mac-app.sh` turns a copy of the Electron

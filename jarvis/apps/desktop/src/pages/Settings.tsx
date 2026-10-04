@@ -30,7 +30,7 @@ export function Settings() {
       <div className="mx-auto max-w-[820px] px-10 py-10">
         <h1 className="text-2xl font-light tracking-[-0.01em] text-fg">Settings</h1>
         <p className="mt-2 text-[13px] text-fg-muted">
-          Connect Claude below. Everything else is read-only in this phase: edit{" "}
+          Connect Claude and the voice below. Everything else is read-only in this phase: edit{" "}
           <code className="font-mono text-xs">config/*.yaml</code> and restart JARVIS to change it.
         </p>
 
@@ -40,6 +40,8 @@ export function Settings() {
         {settings && (
           <div className="mt-10 space-y-10">
             <BrainSettings models={settings.models} />
+
+            <VoiceSettings />
 
             <Group title="System">
               <Item label="Version">{settings.version}</Item>
@@ -130,6 +132,11 @@ function BrainSettings({ models }: { models: Record<string, string> }) {
         <span className="text-fg-faint">API key</span>
         {showForm ? (
           <KeyForm
+            connect={api.connectBrain}
+            label="Anthropic API key"
+            placeholder="sk-ant-…"
+            provider={{ name: "Anthropic", url: "https://console.anthropic.com/settings/keys", host: "console.anthropic.com" }}
+            testid="key"
             onDone={() => setReplacing(false)}
             onCancel={replacing ? () => setReplacing(false) : undefined}
           />
@@ -155,7 +162,17 @@ function BrainSettings({ models }: { models: Record<string, string> }) {
   );
 }
 
-function KeyForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () => void }) {
+interface KeyFormProps {
+  connect: (key: string) => Promise<unknown>;
+  label: string;
+  placeholder: string;
+  provider: { name: string; url: string; host: string };
+  testid: string;
+  onDone: () => void;
+  onCancel?: () => void;
+}
+
+function KeyForm({ connect, label, placeholder, provider, testid, onDone, onCancel }: KeyFormProps) {
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; suggestion: string | null } | null>(null);
@@ -166,7 +183,7 @@ function KeyForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () => vo
     setBusy(true);
     setError(null);
     try {
-      await api.connectBrain(key);
+      await connect(key);
       setKey("");
       onDone();
     } catch (err) {
@@ -181,24 +198,24 @@ function KeyForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () => vo
   }
 
   return (
-    <form onSubmit={submit} className="min-w-0 space-y-2.5" data-testid="key-form">
+    <form onSubmit={submit} className="min-w-0 space-y-2.5" data-testid={`${testid}-form`}>
       <div className="flex gap-2">
         <input
           type="password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          placeholder="sk-ant-…"
+          placeholder={placeholder}
           autoComplete="off"
           spellCheck={false}
-          aria-label="Anthropic API key"
-          data-testid="key-input"
+          aria-label={label}
+          data-testid={`${testid}-input`}
           className={cx(
             "no-drag h-8 min-w-0 flex-1 rounded-lg border bg-surface px-3 font-mono text-xs text-fg",
             "placeholder:text-fg-faint focus:border-accent/50 focus:outline-none",
             error ? "border-danger/40" : "border-hairline-strong",
           )}
         />
-        <Button type="submit" variant="primary" disabled={busy || !key.trim()} data-testid="key-connect">
+        <Button type="submit" variant="primary" disabled={busy || !key.trim()} data-testid={`${testid}-connect`}>
           {busy ? "Checking…" : "Connect"}
         </Button>
         {onCancel && (
@@ -208,7 +225,7 @@ function KeyForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () => vo
         )}
       </div>
       {error ? (
-        <p className="text-xs leading-relaxed text-danger" data-testid="key-error">
+        <p className="text-xs leading-relaxed text-danger" data-testid={`${testid}-error`}>
           {error.message}
           {error.suggestion && <span className="text-fg-muted"> {error.suggestion}</span>}
         </p>
@@ -216,18 +233,164 @@ function KeyForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () => vo
         <p className="text-xs leading-relaxed text-fg-faint">
           Create one at{" "}
           <a
-            href="https://console.anthropic.com/settings/keys"
+            href={provider.url}
             target="_blank"
             rel="noreferrer"
             className="no-drag text-fg-muted underline decoration-hairline-strong underline-offset-2 hover:text-fg"
           >
-            console.anthropic.com
+            {provider.host}
           </a>
-          . JARVIS checks it with Anthropic, then keeps it only in <code className="font-mono">jarvis/.env</code>{" "}
-          on this computer. No restart needed.
+          . JARVIS checks it with {provider.name}, then keeps it only in{" "}
+          <code className="font-mono">jarvis/.env</code> on this computer. No restart needed.
         </p>
       )}
     </form>
+  );
+}
+
+const VOICE_PHASE: Record<string, string> = {
+  off: "Off",
+  unavailable: "Unavailable",
+  ready: "Ready",
+  listening: "Listening…",
+  transcribing: "Understanding…",
+  speaking: "Speaking…",
+};
+
+function VoiceSettings() {
+  const voice = useJarvis((s) => s.voice);
+  const [replacing, setReplacing] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  if (!voice) return null;
+  const working = voice.state !== "off" && voice.state !== "unavailable";
+
+  const run = async (action: () => Promise<unknown>) => {
+    setProblem(null);
+    try {
+      await action();
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : "That didn't work.");
+    }
+  };
+
+  return (
+    <Group title="Voice">
+      <Item label="Status">
+        <span
+          className={cx("inline-flex items-center gap-2", !working && (voice.configured ? "text-warning" : "text-fg-muted"))}
+          data-testid="voice-status"
+        >
+          <StatusDot tone={working ? "success" : voice.configured ? "warning" : "faint"} />
+          {VOICE_PHASE[voice.state] ?? voice.state}
+          {working && <span className="text-fg-muted">· {voice.voice_name} (ElevenLabs)</span>}
+        </span>
+      </Item>
+      {voice.reason && voice.configured && (
+        <Item label="Note">
+          <span className="whitespace-normal text-fg-muted">{voice.reason}</span>
+        </Item>
+      )}
+      <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-4 py-3 text-[13px]">
+        <span className="text-fg-faint">API key</span>
+        {!voice.configured || replacing ? (
+          <KeyForm
+            connect={api.connectVoice}
+            label="ElevenLabs API key"
+            placeholder="sk_…"
+            provider={{ name: "ElevenLabs", url: "https://elevenlabs.io/app/settings/api-keys", host: "elevenlabs.io" }}
+            testid="voice-key"
+            onDone={() => setReplacing(false)}
+            onCancel={replacing ? () => setReplacing(false) : undefined}
+          />
+        ) : (
+          <span className="flex items-center gap-3">
+            <span className="font-mono text-xs text-fg-muted">…{voice.key_hint ?? ""}</span>
+            <button type="button" className="no-drag text-xs text-fg-faint hover:text-fg" onClick={() => setReplacing(true)}>
+              Replace
+            </button>
+          </span>
+        )}
+      </div>
+      {voice.configured && (
+        <>
+          <Item label="Hey JARVIS">
+            <Toggle
+              checked={voice.wake_word}
+              onChange={(value) => void run(() => api.voicePreferences({ wake_word: value }))}
+              testid="wake-word-toggle"
+            >
+              {voice.wake_word_active
+                ? "Listening — the wake word is recognised on this computer"
+                : voice.wake_word
+                  ? "Starting…"
+                  : "Off — use the microphone button"}
+            </Toggle>
+          </Item>
+          <Item label="Spoken replies">
+            <Toggle
+              checked={voice.speak_replies}
+              onChange={(value) => void run(() => api.voicePreferences({ speak_replies: value }))}
+              testid="speak-replies-toggle"
+            >
+              {voice.speak_replies ? "Also for typed commands" : "Only when you spoke"}
+            </Toggle>
+          </Item>
+          <Item label="Try it">
+            <span className="flex items-center gap-3">
+              <button
+                type="button"
+                className="no-drag text-xs text-fg-muted hover:text-fg disabled:opacity-50"
+                disabled={!working || testing}
+                onClick={() => {
+                  setTesting(true);
+                  void run(api.voiceTest).finally(() => setTesting(false));
+                }}
+              >
+                {testing ? "Speaking…" : "Play a sample"}
+              </button>
+              {problem && <span className="truncate text-xs text-danger">{problem}</span>}
+            </span>
+          </Item>
+        </>
+      )}
+    </Group>
+  );
+}
+
+function Toggle({
+  checked,
+  onChange,
+  testid,
+  children,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  testid: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="flex items-center gap-3">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        data-testid={testid}
+        className={cx(
+          "no-drag relative h-4 w-7 shrink-0 rounded-full transition-colors",
+          checked ? "bg-accent/80" : "bg-hairline-strong",
+        )}
+      >
+        <span
+          className={cx(
+            "absolute top-0.5 size-3 rounded-full bg-fg transition-transform",
+            checked ? "translate-x-3.5" : "translate-x-0.5",
+          )}
+        />
+      </button>
+      <span className="truncate text-fg-muted">{children}</span>
+    </span>
   );
 }
 

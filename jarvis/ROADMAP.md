@@ -6,15 +6,26 @@ docs that match reality.
 | Phase | Name                    | Outcome                                                                 | Status        |
 |-------|-------------------------|-------------------------------------------------------------------------|---------------|
 | 1     | Foundation              | Dashboard ↔ backend event system; command → route → tool → verify → UI   | **done**      |
-| 2     | Real system control     | Volume, window management, file reading, richer context (Win + macOS)   | next          |
+| 2     | Real system control     | Volume, window management, file reading, richer context (Win + macOS)   | **mostly done** |
 | 3     | Model intelligence      | Provider abstraction live, intent classification, tool calling, persona | **done**      |
 | 4     | Missions                | Model planning, multi-step delegation, redirect, per-mission state      | planned       |
 | 5     | Screen vision           | Screenshot capture, vision provider, observe-act-verify with pixels     | planned       |
 | 6     | Browser                 | Playwright service, persistent session, DOM-aware actions               | planned       |
 | 7     | Memory                  | Structured + semantic memory, scoring, people/projects, Memory UI       | planned       |
-| 8     | Voice                   | Local wake word, streaming STT/TTS, barge-in                            | planned       |
+| 8     | Voice                   | Local wake word, streaming STT/TTS, barge-in                            | **first version** (pulled ahead) |
 | 9     | Specialist agents       | Atlas, Forge, Archive fully online when missions justify them           | planned       |
 | 10    | Advanced                | War Room, MCP, calendar/email/GitHub, companion app, proactive engine   | planned       |
+
+## Phase 8 — Voice (first version, pulled ahead)
+
+- [x] "Hey JARVIS" detected locally (openWakeWord models via onnxruntime)
+- [x] Push-to-talk with the microphone button; request end by pause
+- [x] ElevenLabs Scribe v2 (speech → text), ElevenLabs voice (text → speech)
+- [x] Replies to spoken requests are spoken; optional for typed ones
+- [x] Key, wake word and spoken replies set from Settings → Voice
+- [ ] Streaming speech (start speaking before the whole reply is synthesized)
+- [ ] Barge-in: "Hey JARVIS" interrupts JARVIS while it speaks
+- [ ] Voice choice in Settings; local fallback voice without a key
 
 ## Phase 1 — Foundation (done)
 

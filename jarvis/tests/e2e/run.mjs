@@ -206,6 +206,21 @@ try {
     await page.getByRole("button", { name: "Home" }).click();
   });
 
+  await step("voice is set up from the dashboard; a bad ElevenLabs key is refused", async () => {
+    // Without a key the mic button leads to the setup instead of failing silently.
+    assert.equal(await page.getByTestId("mic-button").getAttribute("data-state"), "off");
+    await page.getByTestId("mic-button").click();
+    await page.getByTestId("voice-status").filter({ hasText: "Off" }).waitFor();
+    await page.getByTestId("voice-key-input").fill("nope");
+    await page.getByTestId("voice-key-connect").click();
+    await page.getByTestId("voice-key-error").filter({ hasText: "doesn't look like an ElevenLabs API key" }).waitFor();
+    await page.getByTestId("voice-key-form").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("10b-voice-setup");
+    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("voice-off").waitFor();
+  });
+
   await step("idle state returns", async () => {
     await page.waitForTimeout(22_000);
     await headline.filter({ hasText: "Everything is nominal." }).waitFor();

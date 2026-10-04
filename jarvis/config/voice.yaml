@@ -1,0 +1,21 @@
+# Voice: "Hey JARVIS", spoken requests and spoken replies.
+#
+# Speech recognition and the voice are ElevenLabs (paste the key under
+# Settings → Voice). The wake word is detected locally — audio only leaves
+# the computer after "Hey JARVIS" or a click on the microphone.
+
+provider: elevenlabs
+# Voice: "Daniel" (British, calm). Another library voice: copy its ID from
+# elevenlabs.io → Voices, e.g. "George" JBFqnCBsd6RMkjVDRZzb.
+voice_id: onwK4e9ZLuTAKqWW03F9
+voice_name: Daniel
+tts_model: eleven_multilingual_v2   # best quality; eleven_flash_v2_5 answers faster
+stt_model: scribe_v2
+
+# 0..1 — higher means fewer false wake-ups but more missed ones.
+wake_threshold: 0.5
+# A spoken request ends after this pause, or at the length limit.
+end_silence_seconds: 0.9
+max_request_seconds: 15
+# Longer replies are cut before they're spoken.
+max_spoken_chars: 800

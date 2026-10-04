@@ -13,6 +13,7 @@ import type {
   Mission,
   PermissionRequest,
   Snapshot,
+  VoiceStatus,
 } from "@jarvis/protocol";
 
 import type { UpdateStatus } from "../lib/updates";
@@ -33,6 +34,7 @@ export interface UIState {
   systemBackend: string | null;
   simulated: boolean;
   brain: BrainStatus | null;
+  voice: VoiceStatus | null;
   jarvis: { state: JarvisState; detail: string; since: number };
   context: EnvironmentContext | null;
   agents: AgentState[];
@@ -67,6 +69,7 @@ export const initialState: UIState = {
   systemBackend: null,
   simulated: false,
   brain: null,
+  voice: null,
   jarvis: { state: "DORMANT", detail: "", since: 0 },
   context: null,
   agents: [],
@@ -107,6 +110,7 @@ function applySnapshot(state: UIState, snapshot: Snapshot, now: number): UIState
     systemBackend: snapshot.system_backend,
     simulated: snapshot.simulated,
     brain: snapshot.brain,
+    voice: snapshot.voice,
     jarvis: { state: snapshot.state.state, detail: snapshot.state.detail, since: now },
     context: snapshot.context,
     agents: snapshot.agents,
@@ -160,6 +164,9 @@ function applyEvent(state: UIState, event: JarvisEvent, now: number): UIState {
       break;
     case "brain.changed":
       next.brain = payload.brain as BrainStatus;
+      break;
+    case "voice.changed":
+      next.voice = payload.voice as VoiceStatus;
       break;
     case "system.online":
       next.version = (payload.version as string | undefined) ?? state.version;

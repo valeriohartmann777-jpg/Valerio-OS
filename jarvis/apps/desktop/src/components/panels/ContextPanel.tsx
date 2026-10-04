@@ -37,7 +37,7 @@ export function ContextPanel() {
           )}
         </Row>
         <Row label="Voice">
-          <Faint>Not configured</Faint>
+          <VoiceRow />
         </Row>
       </dl>
 
@@ -80,4 +80,37 @@ function Metric({ label, value, detail }: { label: string; value: number; detail
 
 function Faint({ children }: { children: React.ReactNode }) {
   return <span className="text-fg-faint">{children}</span>;
+}
+
+function VoiceRow() {
+  const voice = useJarvis((s) => s.voice);
+  if (!voice) return <Faint>—</Faint>;
+  const open = () => dispatch({ type: "navigate", view: { name: "settings" } });
+  switch (voice.state) {
+    case "off":
+      return (
+        <button type="button" className="no-drag text-fg-faint hover:text-fg-muted" onClick={open} data-testid="voice-off">
+          Off — set up
+        </button>
+      );
+    case "unavailable":
+      return (
+        <button type="button" className="no-drag text-warning hover:underline" title={voice.reason ?? undefined} onClick={open}>
+          Unavailable
+        </button>
+      );
+    case "listening":
+      return <span className="text-accent">Listening…</span>;
+    case "transcribing":
+      return <span className="text-accent">Understanding…</span>;
+    case "speaking":
+      return <span className="text-accent">Speaking</span>;
+    default:
+      return (
+        <span title={voice.reason ?? undefined}>
+          {voice.voice_name}
+          <span className="text-fg-faint">{voice.wake_word_active ? " · “Hey JARVIS”" : " · click the mic"}</span>
+        </span>
+      );
+  }
 }

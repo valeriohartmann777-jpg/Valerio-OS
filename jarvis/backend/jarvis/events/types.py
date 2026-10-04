@@ -38,6 +38,7 @@ class EventType(StrEnum):
     PERMISSION_EXPIRED = "permission.expired"
     MODEL_COMPLETED = "model.completed"
     BRAIN_CHANGED = "brain.changed"
+    VOICE_CHANGED = "voice.changed"
     CONTEXT_UPDATED = "context.updated"
 
 

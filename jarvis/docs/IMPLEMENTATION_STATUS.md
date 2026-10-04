@@ -124,11 +124,29 @@ _Last updated: 2026-10-04_
   terminal-started JARVIS. The first real in-app update (to ff189f0) went
   through: Update → download, packages, build → restart on the new version.
 
+### Voice (Phase 8, first version)
+- Wake word "Hey JARVIS": openWakeWord inference ported to onnxruntime
+  (identical scores to upstream on the same audio), models downloaded once
+- Push-to-talk microphone button; energy endpointing with calibration and
+  pre-roll; chime on wake
+- ElevenLabs Scribe v2 (raw PCM) and TTS (`pcm_24000`, voice Daniel); key
+  connect + verify from Settings → Voice; quota/permission/key errors explained
+- Spoken replies for spoken requests (typed optional); no self-wake while
+  speaking; LISTENING / UNDERSTANDING / SPEAKING states; `voice.changed` events
+- Mac app: microphone usage text, bundle version 2, self-reinstall on start
+  (once); mic stays closed while the bundle can't use it
+- Tests: wake word with the real models, endpointing, ElevenLabs client
+  (mock transport), the whole voice loop with fakes (wake → mission → spoken
+  reply, push-to-talk, silence, errors, key connect, API), E2E setup step
+- Not yet run on the MacBook (needs an ElevenLabs key; mic/speaker are real only there)
+
 ## IN PROGRESS
 - —
 
 ## NEXT
 
+
+0. Voice on the MacBook: connect ElevenLabs, "Hey JARVIS", push-to-talk
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")

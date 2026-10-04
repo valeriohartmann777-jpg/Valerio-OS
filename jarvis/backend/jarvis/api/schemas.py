@@ -40,6 +40,22 @@ class BrainView(BaseModel):
     key_hint: str | None = None
 
 
+class VoiceView(BaseModel):
+    state: str
+    configured: bool
+    wake_word: bool
+    wake_word_active: bool
+    speak_replies: bool
+    voice_name: str
+    key_hint: str | None
+    reason: str | None
+
+
+class VoicePreferences(BaseModel):
+    wake_word: bool | None = None
+    speak_replies: bool | None = None
+
+
 class ApiKeyRequest(BaseModel):
     api_key: str = Field(max_length=500)
 
@@ -48,6 +64,7 @@ class Snapshot(BaseModel):
     version: str
     build: str
     brain: BrainView
+    voice: VoiceView
     state: StateSnapshot
     system_backend: str
     simulated: bool

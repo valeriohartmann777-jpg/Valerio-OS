@@ -85,6 +85,16 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       reason: null,
       key_hint: "AbCd",
     },
+    voice: {
+      state: "ready",
+      configured: true,
+      wake_word: true,
+      wake_word_active: true,
+      speak_replies: false,
+      voice_name: "Daniel",
+      key_hint: "WXYZ",
+      reason: null,
+    },
     state: { state: "DORMANT", detail: "" },
     system_backend: "simulated",
     simulated: true,
@@ -172,6 +182,14 @@ describe("reducer", () => {
     state = apply(state, event("brain.changed", { brain: online }, { severity: "important" }));
     expect(state.brain).toEqual(online);
     expect(visibleActivity(state).at(-1)?.type).toBe("brain.changed");
+  });
+
+  it("follows the voice state", () => {
+    let state = reduce(initialState, { type: "snapshot", snapshot: snapshot(), now: 0 });
+    expect(state.voice?.state).toBe("ready");
+    const listening = { ...snapshot().voice, state: "listening" as const };
+    state = apply(state, event("voice.changed", { voice: listening }, { severity: "debug" }));
+    expect(state.voice?.state).toBe("listening");
   });
 
   it("navigates and tracks connection", () => {

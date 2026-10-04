@@ -103,6 +103,23 @@ class FileSettings(BaseModel):
     max_read_chars: int = 30000
 
 
+class VoiceSettings(BaseModel):
+    provider: str = "elevenlabs"
+    voice_id: str = "onwK4e9ZLuTAKqWW03F9"
+    voice_name: str = "Daniel"
+    tts_model: str = "eleven_multilingual_v2"
+    stt_model: str = "scribe_v2"
+    wake_threshold: float = 0.5
+    end_silence_seconds: float = 0.9
+    max_request_seconds: float = 15.0
+    max_spoken_chars: int = 800
+    # The Mac app sets JARVIS_MIC=0 while its bundle lacks the microphone
+    # usage text: opening the mic then would get JARVIS killed by macOS.
+    microphone_allowed: bool = True
+    # Secret from the environment / .env only.
+    elevenlabs_api_key: SecretStr | None = None
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -137,11 +154,16 @@ class Settings(BaseModel):
     models: ModelSettings = Field(default_factory=ModelSettings)
     web: WebSettings = Field(default_factory=WebSettings)
     files: FileSettings = Field(default_factory=FileSettings)
+    voice: VoiceSettings = Field(default_factory=VoiceSettings)
 
     @property
     def env_file(self) -> Path:
         """Local secrets and overrides (git-ignored)."""
         return self.root_dir / ".env"
+
+    @property
+    def data_dir(self) -> Path:
+        return self.database_path.parent
 
     @property
     def database_path(self) -> Path:
@@ -192,6 +214,7 @@ def load_settings(
     data["models"] = _read_yaml(config_dir / "models.yaml")
     data["web"] = _read_yaml(config_dir / "web.yaml")
     data["files"] = _read_yaml(config_dir / "files.yaml")
+    data["voice"] = _read_yaml(config_dir / "voice.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))
@@ -239,6 +262,11 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         logging_["level"] = value
     if value := env.get("ANTHROPIC_API_KEY", "").strip():
         data.setdefault("models", {})["anthropic_api_key"] = value
+    voice = data.setdefault("voice", {})
+    if value := env.get("ELEVENLABS_API_KEY", "").strip():
+        voice["elevenlabs_api_key"] = value
+    if env.get("JARVIS_MIC", "").strip() == "0":
+        voice["microphone_allowed"] = False
 
 
 _QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019"}

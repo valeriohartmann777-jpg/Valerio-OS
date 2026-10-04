@@ -171,10 +171,29 @@ export interface BrainStatus {
   key_hint: string | null;
 }
 
+export type VoicePhase = "off" | "unavailable" | "ready" | "listening" | "transcribing" | "speaking";
+
+export interface VoiceStatus {
+  state: VoicePhase;
+  /** An ElevenLabs key is set. */
+  configured: boolean;
+  /** The user wants “Hey JARVIS” … */
+  wake_word: boolean;
+  /** … and it is listening right now. */
+  wake_word_active: boolean;
+  /** Speak replies to typed commands too. */
+  speak_replies: boolean;
+  voice_name: string;
+  key_hint: string | null;
+  /** Why voice is off/unavailable, or a wake-word problem. */
+  reason: string | null;
+}
+
 export interface Snapshot {
   version: string;
   build: string;
   brain: BrainStatus;
+  voice: VoiceStatus;
   state: StateSnapshot;
   system_backend: string;
   simulated: boolean;

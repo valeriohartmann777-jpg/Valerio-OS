@@ -2,6 +2,7 @@
  * Electron main process: window, secure app:// protocol, backend supervision.
  */
 
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -170,6 +171,60 @@ function onSecondInstance(additionalData: unknown): void {
 let updater: Updater | null = null;
 let updateStatus: UpdateStatus = { state: "off", reason: "" };
 
+/** The installed app bundle's Info.plist (app mode on macOS only). */
+function bundlePlist(): string {
+  const file = path.join(process.resourcesPath, "..", "Info.plist");
+  try {
+    const text = readFileSync(file, "utf8");
+    if (!text.startsWith("bplist")) return text;
+    // Binary plist: let macOS convert it.
+    const xml = spawnSync("plutil", ["-convert", "xml1", "-o", "-", file], { encoding: "utf8" });
+    return xml.status === 0 ? xml.stdout : "";
+  } catch {
+    return "";
+  }
+}
+
+function plistString(plist: string, key: string): string | null {
+  const match = new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`).exec(plist);
+  return match ? (match[1] ?? "") : null;
+}
+
+/** The bundle predates what this checkout's installer would build. */
+function bundleOutdated(): boolean {
+  if (MODE !== "app" || process.platform !== "darwin") return false;
+  try {
+    const expected = readFileSync(path.join(PROJECT_ROOT, "scripts", "mac-app", "VERSION"), "utf8").trim();
+    return plistString(bundlePlist(), "JARVISBundleVersion") !== expected;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * macOS kills a process that opens the microphone when the responsible app has
+ * no usage text — so voice may only use the mic once the bundle carries it.
+ */
+function microphoneAllowed(): boolean {
+  if (MODE !== "app" || process.platform !== "darwin") return true;
+  return plistString(bundlePlist(), "NSMicrophoneUsageDescription") !== null;
+}
+
+/** Rebuild the app bundle in place (new permission texts, new Electron) and restart. */
+function reinstallBundle(): boolean {
+  console.log("[jarvis] the JARVIS app bundle is older than this version — updating it");
+  const result = spawnSync("bash", ["scripts/install-mac-app.sh", "--skip-build", "--no-open"], {
+    cwd: PROJECT_ROOT,
+    stdio: "inherit",
+    timeout: 180_000,
+  });
+  if (result.status !== 0) {
+    console.error("[jarvis] updating the app bundle failed; voice stays off until it succeeds");
+    return false;
+  }
+  return true;
+}
+
 function electronChanged(): boolean {
   try {
     const manifest = path.join(PROJECT_ROOT, "node_modules", "electron", "package.json");
@@ -201,7 +256,7 @@ function startUpdater(): void {
         label: "Updating the app",
         command: "bash",
         args: ["scripts/install-mac-app.sh", "--skip-build", "--no-open"],
-        when: () => MODE === "app" && electronChanged(),
+        when: () => MODE === "app" && (electronChanged() || bundleOutdated()),
       },
     ],
   });
@@ -249,6 +304,14 @@ void (async () => {
   app.on("before-quit", () => supervisor.stop());
 
   await app.whenReady();
+  // One attempt per start: if the reinstalled bundle still looks old, don't loop.
+  if (bundleOutdated() && process.env.JARVIS_BUNDLE_REINSTALLED !== "1" && reinstallBundle()) {
+    process.env.JARVIS_BUNDLE_REINSTALLED = "1"; // inherited by the relaunched app
+    app.relaunch();
+    app.exit(0);
+    return;
+  }
+  process.env.JARVIS_MIC = microphoneAllowed() ? "1" : "0"; // inherited by the backend
   if (process.platform === "darwin" && MODE !== "app") app.dock?.setIcon(ICON);
   registerAppProtocol();
   registerUpdateIpc();

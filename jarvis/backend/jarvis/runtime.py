@@ -6,6 +6,8 @@ import asyncio
 import contextlib
 import logging
 import time
+from collections.abc import Callable
+from pathlib import Path
 
 from jarvis import __version__
 from jarvis.agents.base import AgentRegistry
@@ -31,6 +33,7 @@ from jarvis.permissions.service import PermissionService
 from jarvis.settings import Settings
 from jarvis.storage.audit import AuditLog
 from jarvis.storage.database import Database
+from jarvis.storage.preferences import Preferences
 from jarvis.tools.executor import ToolExecutor
 from jarvis.tools.files import FileAccess, register_file_tools
 from jarvis.tools.media import register_media_tools
@@ -39,6 +42,9 @@ from jarvis.tools.system import create_backend, register_system_tools
 from jarvis.tools.system.apps import AppCatalog
 from jarvis.tools.system.backend import SystemBackend
 from jarvis.tools.web import register_web_tools
+from jarvis.voice.audio import AudioDevice
+from jarvis.voice.service import ProviderFactory, VoiceService, elevenlabs_provider
+from jarvis.voice.wakeword import WakeDetector
 
 log = logging.getLogger("jarvis.runtime")
 
@@ -51,6 +57,9 @@ class Runtime:
         backend: SystemBackend | None = None,
         models: ModelSet | None = None,
         key_verifier: Verifier | None = None,
+        voice_audio: Callable[[], AudioDevice] | None = None,
+        voice_detector: Callable[[Path], WakeDetector] | None = None,
+        voice_provider: ProviderFactory | None = None,
     ) -> None:
         self.settings = settings
         self.started_at = time.time()
@@ -151,6 +160,20 @@ class Runtime:
             tools=self.tools,
         )
 
+        self.preferences = Preferences(settings.data_dir / "preferences.json")
+        self.voice = VoiceService(
+            settings=settings.voice,
+            bus=self.bus,
+            state=self.state,
+            submit=lambda text: self.core.submit(text, source="voice"),
+            preferences=self.preferences,
+            env_file=settings.env_file,
+            models_dir=settings.data_dir / "models",
+            audio_factory=voice_audio or _sounddevice,
+            detector_factory=voice_detector or _open_wake_word,
+            provider_factory=voice_provider or elevenlabs_provider,
+        )
+
     @property
     def uptime_seconds(self) -> float:
         return time.time() - self.started_at
@@ -187,8 +210,10 @@ class Runtime:
             )
         elif self._verify_key_on_start:
             self._key_check = asyncio.create_task(self.connector.check(), name="key-check")
+        await self.voice.start()
 
     async def stop(self) -> None:
+        await self.voice.stop()
         if self._key_check is not None:
             self._key_check.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -197,3 +222,15 @@ class Runtime:
         await self.missions.shutdown()
         await self.state.close()
         await self.db.close()
+
+
+def _sounddevice() -> AudioDevice:
+    from jarvis.voice.audio import SoundDeviceAudio
+
+    return SoundDeviceAudio()
+
+
+def _open_wake_word(models: Path) -> WakeDetector:
+    from jarvis.voice.wakeword import OpenWakeWord
+
+    return OpenWakeWord(models)

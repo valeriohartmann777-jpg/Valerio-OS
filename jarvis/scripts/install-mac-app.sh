@@ -76,6 +76,10 @@ set_plist NSAppleEventsUsageDescription "JARVIS controls Spotify or Music when y
 set_plist NSDesktopFolderUsageDescription "JARVIS finds, reads and opens files on your Desktop when you ask it to."
 set_plist NSDocumentsFolderUsageDescription "JARVIS finds, reads and opens your documents when you ask it to."
 set_plist NSDownloadsFolderUsageDescription "JARVIS finds, reads and opens your downloads when you ask it to."
+set_plist NSMicrophoneUsageDescription "JARVIS listens for its wake word and to what you ask it."
+# Bumped (scripts/mac-app/VERSION) whenever the bundle itself changes; the app
+# reinstalls itself on start when its bundle is older than this checkout.
+set_plist JARVISBundleVersion "$(tr -d '[:space:]' < scripts/mac-app/VERSION)"
 set_plist JARVISElectronVersion "$(node -p "require('./node_modules/electron/package.json').version")"
 set_plist JARVISCheckout "$ROOT"
 # Helper apps share the main app's identifier prefix (as electron-builder does).

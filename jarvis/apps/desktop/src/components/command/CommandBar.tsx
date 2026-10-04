@@ -1,7 +1,7 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { api } from "../../lib/api";
-import { useJarvis } from "../../store/store";
+import { dispatch, useJarvis } from "../../store/store";
 import { cx } from "../ui/primitives";
 
 const MAX_HISTORY = 50;
@@ -102,17 +102,76 @@ export function CommandBar() {
             <kbd className="hidden font-mono text-2xs text-fg-faint sm:block">↵</kbd>
           )}
         </div>
-        <button
-          type="button"
-          disabled
-          title="Voice arrives in Phase 8"
-          aria-label="Microphone (not yet available)"
-          className="grid size-11 place-items-center rounded-xl border border-hairline-strong text-fg-faint disabled:cursor-not-allowed"
-        >
-          <MicIcon />
-        </button>
+        <MicButton />
       </form>
     </div>
+  );
+}
+
+/** Push-to-talk: click to speak a request, click again to stop. */
+function MicButton() {
+  const voice = useJarvis((s) => s.voice);
+  const online = useJarvis((s) => s.connection === "online");
+  const [problem, setProblem] = useState<string | null>(null);
+  const phase = voice?.state;
+  const busy = phase === "listening" || phase === "speaking";
+  const usable = online && (phase === "ready" || busy);
+
+  const click = async () => {
+    setProblem(null);
+    if (!voice || phase === "off" || phase === "unavailable") {
+      dispatch({ type: "navigate", view: { name: "settings" } });
+      return;
+    }
+    try {
+      await (busy ? api.voiceStop() : api.voiceListen());
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : "The microphone isn't available.");
+    }
+  };
+
+  const title =
+    problem ??
+    (phase === "listening"
+      ? "Listening — click to stop"
+      : phase === "speaking"
+        ? "Speaking — click to stop"
+        : phase === "transcribing"
+          ? "Understanding…"
+          : phase === "ready"
+            ? voice?.wake_word_active
+              ? "Click to speak — or say “Hey JARVIS”"
+              : "Click to speak"
+            : (voice?.reason ?? "Set up voice in Settings"));
+
+  return (
+    <button
+      type="button"
+      onClick={() => void click()}
+      disabled={!online || phase === "transcribing"}
+      title={title}
+      aria-label="Microphone"
+      data-testid="mic-button"
+      data-state={phase ?? "none"}
+      className={cx(
+        "relative grid size-11 place-items-center rounded-xl border transition-colors duration-200",
+        "disabled:cursor-not-allowed disabled:opacity-60",
+        busy
+          ? "border-accent/60 bg-accent/10 text-accent"
+          : usable
+            ? "border-hairline-strong text-fg-muted hover:border-accent/40 hover:text-accent"
+            : "border-hairline-strong text-fg-faint",
+        problem && "border-danger/40 text-danger",
+      )}
+    >
+      {phase === "listening" && (
+        <span
+          className="absolute inset-0 rounded-xl border border-accent/50"
+          style={{ animation: "beacon 1.4s ease-in-out infinite" }}
+        />
+      )}
+      <MicIcon />
+    </button>
   );
 }
 

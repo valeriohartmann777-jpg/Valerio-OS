@@ -27,6 +27,7 @@ export const EVENT_TYPES = [
   "permission.expired",
   "model.completed",
   "brain.changed",
+  "voice.changed",
   "context.updated",
 ] as const;
 

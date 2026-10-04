@@ -55,6 +55,20 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
 On other hosts (Linux) the desktop is **simulated** (clearly badged in the UI);
 CPU/RAM/host metrics are always real.
 
+## Talk to JARVIS
+
+1. Create an account and an API key at <https://elevenlabs.io> (the free plan
+   is enough to try it).
+2. **Settings → Voice**: paste the key, **Connect**.
+3. Say **"Hey JARVIS"** (you'll hear a short chime), then your request — or
+   click the microphone next to the command bar. JARVIS answers out loud.
+
+"Hey JARVIS" is recognised on the computer; audio goes to ElevenLabs only
+after it (or after a click). The first time, macOS asks whether JARVIS may use
+the microphone. Settings → Voice turns the wake word off, makes JARVIS speak
+replies to typed commands too, and plays a sample. Voice and model are in
+`config/voice.yaml`.
+
 ## Connect Claude
 
 1. Create an API key at <https://console.anthropic.com> (Settings → API keys).
@@ -172,4 +186,5 @@ Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · Decisions: [DECISIONS.md](DE
 - `config/models.yaml` — Claude models, effort and limits
 - `config/files.yaml` — folders the file tools may see, never-read patterns
 - `config/web.yaml` — search engines for `search_web`
+- `config/voice.yaml` — voice, speech models, wake-word sensitivity
 - `.env` — overrides and the Anthropic API key (written by Settings → Brain); see `.env.example`

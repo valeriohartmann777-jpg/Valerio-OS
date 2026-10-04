@@ -312,6 +312,36 @@ pywinauto → keyboard/mouse fallback. Raw coordinate clicking is never primary.
 
 ---
 
+### Voice (`backend/jarvis/voice/`)
+
+```
+mic (sounddevice, 16 kHz, 80 ms frames)
+  └─ wake mode: OpenWakeWord ("hey jarvis", local)  ──score ≥ 0.5──┐
+  └─ push-to-talk (POST /voice/listen) ───────────────────────────┤
+                                                                   ▼
+        UtteranceRecorder (energy VAD, pre-roll, pause/length end) → PCM
+        → ElevenLabs Scribe v2 (raw PCM) → strip "Hey Jarvis" → core.submit(source="voice")
+        → jarvis.message for that trace → ElevenLabs TTS (pcm_24000) → speaker
+```
+
+- `wakeword.py` ports openWakeWord's streaming inference (melspectrogram →
+  speech embedding → `hey_jarvis` model) to `onnxruntime` only; checked
+  against the upstream package (identical scores). Models (~4 MB) are
+  downloaded once to `data/models`. The first model window after a reset
+  reports 0 (priming noise otherwise causes spikes).
+- The mic is open only while the wake word is on or a request is recorded.
+  While JARVIS speaks, wake detection pauses (no self-wake) and resets after.
+- States: `LISTENING` while recording, `UNDERSTANDING` while transcribing,
+  `SPEAKING` while playing; `voice.changed` events carry `VoiceStatus`.
+- `VoiceService` is built from injectable parts (audio device, detector,
+  provider) — the tests drive the whole loop with fakes.
+- macOS kills a process that opens the microphone when the responsible app
+  lacks `NSMicrophoneUsageDescription`. The app bundle carries it (bundle
+  version 2); Electron passes `JARVIS_MIC=0` while the installed bundle is
+  older, and reinstalls the bundle itself on start (once, no loops).
+
+---
+
 ## 9. Permissions
 
 | Level | Meaning          | Default policy    |
