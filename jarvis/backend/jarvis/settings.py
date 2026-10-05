@@ -45,6 +45,8 @@ class RuntimeSettings(BaseModel):
 class StorageSettings(BaseModel):
     database_path: Path = Path("data/jarvis.db")
     log_dir: Path = Path("data/logs")
+    # Activity older than this is deleted; the conversation is kept.
+    event_retention_days: int = 30
 
 
 class LoggingSettings(BaseModel):
@@ -234,6 +236,8 @@ class ModelSettings(BaseModel):
     speech: dict[str, str] = Field(default_factory=dict)
     refusal_fallback: bool = True
     history_turns: int = 12
+    # After a restart, exchanges from this many hours ago are still context.
+    history_restore_hours: float = 24.0
     max_tool_rounds: int = 8
     # Secrets come from the environment / .env only, never from YAML.
     anthropic_api_key: SecretStr | None = None

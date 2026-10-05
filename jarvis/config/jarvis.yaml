@@ -32,6 +32,7 @@ runtime:
 storage:
   database_path: data/jarvis.db
   log_dir: data/logs
+  event_retention_days: 30   # activity history; the conversation is kept for good
 
 logging:
   level: INFO

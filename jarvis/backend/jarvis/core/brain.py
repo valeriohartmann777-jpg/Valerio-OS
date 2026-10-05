@@ -110,6 +110,15 @@ class Brain:
         earlier turns are replayed as plain text, valid for any model."""
         self._models = models
 
+    def restore(self, exchanges: list[tuple[str, str]]) -> None:
+        """Load the conversation of the last session (after a restart or update)."""
+        for user_text, reply in exchanges:
+            self._conversation.add([user_text], reply)
+
+    @property
+    def history_size(self) -> int:
+        return len(self._conversation)
+
     def remember(self, user_text: str, reply: str) -> None:
         """Record an exchange handled without the model (rule path) as context."""
         self._conversation.add([user_text], reply)

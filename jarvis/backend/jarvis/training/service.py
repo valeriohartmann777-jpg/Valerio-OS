@@ -34,6 +34,7 @@ from jarvis.training.dataset import Dataset, TouchRules, build
 from jarvis.training.live import level_odds
 from jarvis.training.model import Periods, Trained, train
 from jarvis.training.store import Bundle, TrainingStore
+from jarvis.util import wait_wall
 
 log = logging.getLogger("jarvis.training")
 
@@ -314,8 +315,7 @@ class TrainingService:
                 elif self._state != TrainingState.OFF:
                     await self._set(TrainingState.OFF)
             self._wake.clear()
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(self._wake.wait(), timeout=seconds)
+            await wait_wall(self._wake, seconds)
 
     def _waiting_detail(self) -> str:
         if self._report is None:
@@ -354,7 +354,7 @@ class TrainingService:
                 problem = str(exc)  # train on what is cached, if it's enough
         lasts = []
         for item in self.markets:
-            found = self._market.coverage(item.instrument)
+            found = await asyncio.to_thread(self._market.coverage, item.instrument)
             if found is None:
                 self._failed_at = time.monotonic()
                 await self._set(

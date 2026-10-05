@@ -7,6 +7,7 @@ import contextlib
 import logging
 import time
 from collections.abc import Callable
+from datetime import timedelta
 from pathlib import Path
 
 from jarvis import __version__
@@ -53,6 +54,7 @@ from jarvis.tools.training import register_training_tools
 from jarvis.tools.web import register_web_tools
 from jarvis.training.service import TrainingService
 from jarvis.training.store import TrainingStore
+from jarvis.util import utcnow
 from jarvis.voice.audio import AudioDevice
 from jarvis.voice.service import ProviderFactory, VoiceService, elevenlabs_provider
 from jarvis.voice.wakeword import WakeDetector
@@ -176,6 +178,7 @@ class Runtime:
             verifier=key_verifier,
         )
         self._key_check: asyncio.Task[None] | None = None
+        self._housekeeping: asyncio.Task[None] | None = None
         self.core = JarvisCore(
             bus=self.bus,
             state=self.state,
@@ -264,6 +267,12 @@ class Runtime:
         await self.db.connect()
         self.events.attach(self.bus)
         await self.memory.load()
+        # The chat on screen is still the brain's context after a restart or update.
+        since = utcnow() - timedelta(hours=self.settings.models.history_restore_hours)
+        self.brain.restore(
+            await self.events.exchanges(since.isoformat(), self.settings.models.history_turns)
+        )
+        self._housekeeping = asyncio.create_task(self._housekeep(), name="housekeeping")
         interrupted = await self.mission_repository.fail_interrupted()
         if interrupted:
             log.warning("marked %d interrupted mission(s) as failed", interrupted)
@@ -298,7 +307,23 @@ class Runtime:
         await self.briefing.start()
         await self.training.start()
 
+    async def _housekeep(self) -> None:
+        """Once a day: drop old activity (the conversation stays)."""
+        while True:
+            days = self.settings.storage.event_retention_days
+            try:
+                removed = await self.events.prune((utcnow() - timedelta(days=days)).isoformat())
+                if removed:
+                    log.info("removed %d activity events older than %d days", removed, days)
+            except Exception:  # housekeeping must never take JARVIS down
+                log.exception("housekeeping failed")
+            await asyncio.sleep(24 * 3600)
+
     async def stop(self) -> None:
+        if self._housekeeping is not None:
+            self._housekeeping.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._housekeeping
         await self.training.stop()
         await self.briefing.stop()
         await self.learning.stop()

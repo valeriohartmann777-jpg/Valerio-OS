@@ -27,6 +27,11 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
 - **Desktop command center** (Electron + React): JARVIS Core visual with explicit
   states, active mission with live steps, approval requests, context, agents,
   missions, activity stream, command bar, mission detail, settings.
+- **Always on**: closing the window keeps JARVIS running in the menu bar —
+  learning, training and the morning briefing go on. The Mac app starts at
+  login (Settings → Always on). A crashed backend is restarted by itself, and
+  after a restart or update JARVIS still knows the last day's conversation.
+  Quit with ⌘Q or from the menu bar.
 - **Conversation**: everything you typed or said and every answer stays
   visible as a chat on Home — across restarts and updates.
 - **Memory**: JARVIS remembers what you tell it about yourself and how you

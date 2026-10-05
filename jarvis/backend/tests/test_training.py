@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
+import sys
 import time
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -589,3 +591,9 @@ def test_the_report_and_the_briefing_mention_the_model() -> None:
     assert summary["what_mattered"] == ["Touch number today"]
     assert summary["trained_on_data_until"] == "2026-10-02"
     assert _trained_model(None) is None
+
+
+def test_starting_jarvis_does_not_load_scikit_learn() -> None:
+    """It takes about a second; JARVIS starts far more often than it trains."""
+    code = "import sys, jarvis.runtime; sys.exit('sklearn' in sys.modules)"
+    assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0

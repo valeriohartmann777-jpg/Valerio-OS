@@ -7,6 +7,9 @@
  *   instead of the new app silently talking to old code.
  * - Otherwise the backend is started from backend/.venv and stopped again
  *   when JARVIS quits.
+ * - If the backend it started stops unexpectedly (a crash), it is started
+ *   again — after 1, 3, 10, 30, then every 60 seconds. JARVIS runs in the
+ *   background for days; it must not stay dead after one failure.
  */
 
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
@@ -23,10 +26,17 @@ interface Health {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const RESTART_DELAYS_MS = [1_000, 3_000, 10_000, 30_000, 60_000];
+/** A backend that ran this long before it stopped gets the quick retries again. */
+const STABLE_AFTER_MS = 120_000;
 export const short = (build: string | undefined) => (build ? build.slice(0, 7) : "pre-build-id");
 
 export class BackendSupervisor {
   private child: ChildProcess | null = null;
+  private stopping = false;
+  private restarts = 0;
+  private startedAt = 0;
+  private restartTimer: NodeJS.Timeout | null = null;
   /** Code version of this app (git commit), also reported by the backend it starts. */
   readonly build: string;
 
@@ -83,9 +93,11 @@ export class BackendSupervisor {
     });
     this.child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`[backend] ${chunk}`));
     this.child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(`[backend] ${chunk}`));
-    this.child.on("exit", (code) => {
-      console.log(`[jarvis] backend exited (${code ?? "signal"})`);
+    this.startedAt = Date.now();
+    this.child.on("exit", (code, signal) => {
+      console.log(`[jarvis] backend exited (${code ?? signal ?? "unknown"})`);
       this.child = null;
+      if (!this.stopping) this.scheduleRestart();
     });
 
     const deadline = Date.now() + 60_000; // first start compiles bytecode; slow machines need time
@@ -98,10 +110,24 @@ export class BackendSupervisor {
   }
 
   stop(): void {
+    this.stopping = true;
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.restartTimer = null;
     if (this.child && !this.child.killed) {
       this.child.kill();
       this.child = null;
     }
+  }
+
+  private scheduleRestart(): void {
+    if (Date.now() - this.startedAt > STABLE_AFTER_MS) this.restarts = 0;
+    const delay = RESTART_DELAYS_MS[Math.min(this.restarts, RESTART_DELAYS_MS.length - 1)] ?? 60_000;
+    this.restarts += 1;
+    console.log(`[jarvis] the backend stopped unexpectedly — starting it again in ${delay / 1000} s`);
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      if (!this.stopping) void this.ensureRunning();
+    }, delay);
   }
 
   /** Stop the backend this app started and wait until it is gone (port free). */

@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { UpdateSummary } from "../components/UpdateControls";
 import { Button, Empty, StatusDot, cx } from "../components/ui/primitives";
 import { ApiError, api } from "../lib/api";
-import { BACKEND_URL } from "../lib/config";
+import { APP_BRIDGE, BACKEND_URL, type BackgroundInfo } from "../lib/config";
 import { modelLabel } from "../lib/format";
 import { useJarvis } from "../store/store";
 
@@ -44,6 +44,8 @@ export function Settings() {
             <VoiceSettings />
 
             <BriefingSettings />
+
+            <BackgroundSettings />
 
             <Group title="System">
               <Item label="Version">{settings.version}</Item>
@@ -459,6 +461,56 @@ function BriefingSettings() {
           )}
         </span>
       </Item>
+    </Group>
+  );
+}
+
+function BackgroundSettings() {
+  const [info, setInfo] = useState<BackgroundInfo | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    APP_BRIDGE?.background().then(setInfo, () => setProblem("Unavailable."));
+  }, []);
+  const bridge = APP_BRIDGE;
+  if (!bridge || (!info && !problem)) return null;
+
+  const setLogin = async (enabled: boolean) => {
+    setProblem(null);
+    try {
+      const login = await bridge.setStartAtLogin(enabled);
+      setInfo((current) => (current ? { ...current, login } : current));
+      if (login.enabled !== enabled) setProblem("macOS didn't accept the change.");
+    } catch {
+      setProblem("That didn't work.");
+    }
+  };
+
+  const quitKey = navigator.platform.startsWith("Mac") ? "⌘Q" : "the tray menu";
+  return (
+    <Group title="Always on">
+      <Item label="Window closed">
+        <span className="text-fg-muted" data-testid="background-mode">
+          {info?.keepsRunning
+            ? `Keeps running in the menu bar — learning and training go on. Quit: ${quitKey}`
+            : "Closing the window quits JARVIS."}
+        </span>
+      </Item>
+      {info?.login.supported && (
+        <Item label="Start at login">
+          <Toggle checked={info.login.enabled} onChange={(value) => void setLogin(value)} testid="login-toggle">
+            {info.login.needsApproval
+              ? "Allow JARVIS in System Settings → General → Login Items"
+              : info.login.enabled
+                ? "Starts when you log in, in the menu bar"
+                : "Off — start JARVIS yourself"}
+          </Toggle>
+        </Item>
+      )}
+      {problem && (
+        <Item label="Problem">
+          <span className="text-danger">{problem}</span>
+        </Item>
+      )}
     </Group>
   );
 }

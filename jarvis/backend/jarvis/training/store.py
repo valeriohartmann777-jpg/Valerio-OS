@@ -15,8 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import sklearn
-
 from jarvis.storage.database import Database
 from jarvis.training.dataset import FEATURES
 from jarvis.training.model import Trained
@@ -128,6 +126,8 @@ class TrainingStore:
     # The model in use ------------------------------------------------------------------
 
     def save(self, bundle: Bundle) -> None:
+        import sklearn
+
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_name(f"{self._path.name}.tmp")
         payload = {
@@ -143,6 +143,8 @@ class TrainingStore:
     def load(self) -> Bundle | None:
         if not self._path.exists():
             return None
+        import sklearn  # also what unpickling the model needs
+
         try:
             with self._path.open("rb") as handle:
                 payload = pickle.load(handle)  # JARVIS's own file, see the module docstring

@@ -274,6 +274,27 @@ _Last updated: 2026-10-04_
 - Not yet run on real data (Dukascopy is blocked here) — the first run on the
   MacBook gives the real verdict
 
+### Always on (D-024)
+- Closing the window hides it; menu-bar icon (template image, tinted by
+  macOS) with Open JARVIS, Start at Login, Quit JARVIS; Dock click brings the
+  window back; a one-time notification says JARVIS keeps running
+- Start at login for the installed Mac app, switched on once by itself;
+  Settings → Always on shows the mode and toggles it (needs-approval state
+  from macOS 13+ shown)
+- App Nap prevented while running; background waits checked against the wall
+  clock (a Mac sleeping overnight no longer delays learning by hours)
+- The supervisor restarts a crashed backend (1, 3, 10, 30, 60 s backoff)
+- After a restart or update the brain reloads the last 24 hours of
+  exchanges (and the morning briefing) as context
+- Activity events older than 30 days are pruned daily; the conversation stays
+- Backend start: scikit-learn imported lazily (import time 1.2 s → 0.4 s)
+- Tests: restore across a real restart (the model sees the old exchanges),
+  pairing and pruning, wall-clock waits with a simulated sleep, no
+  scikit-learn at start; E2E: window close keeps JARVIS and its backend
+  running and it comes back, a SIGKILLed backend is restarted and the
+  dashboard reconnects, quitting still stops everything (22 steps)
+- Not testable here: the menu-bar icon and login item on a real Mac
+
 ## IN PROGRESS
 - —
 

@@ -395,7 +395,9 @@ Unanswered requests expire (default 5 min) and count as rejected.
 
 SQLite (`data/jarvis.db`) through `storage.Database` (aiosqlite) with
 versioned migrations. Tables: `missions` (JSON document + indexed columns),
-`events`, `audit_log`, `learning_*`, `memories`, `training_runs`. Repositories own all SQL, so a PostgreSQL backend only
+`events`, `audit_log`, `learning_*`, `memories`, `training_runs`. Activity
+events older than `storage.event_retention_days` (30) are deleted daily; the
+conversation (`command.received`, `jarvis.message`) is kept. Repositories own all SQL, so a PostgreSQL backend only
 touches `storage/` and the repositories. Semantic memory will sit behind a
 `VectorStore` protocol (planned, Phase 7) — never called directly elsewhere.
 
@@ -417,6 +419,18 @@ touches `storage/` and the repositories. Semantic memory will sit behind a
   on quit. `/health` reports the backend's git commit (`build`); a JARVIS
   backend running older code (e.g. left over from a previous run) is stopped
   and replaced instead of being reused. The top bar shows the build.
+- **Always on**: closing the window hides it — JARVIS keeps running in the
+  menu bar (tray on Windows), so learning, training and the briefing go on;
+  quit with ⌘Q or *Quit JARVIS* in the menu. The installed Mac app registers
+  itself to start at login once (Settings → Always on turns it off). App Nap
+  is prevented (`powerSaveBlocker`), and long waits in the backend are
+  checked against the wall clock (`util.wait_wall`): asyncio's monotonic
+  timers stand still while a Mac sleeps. Linux keeps quit-on-close
+  (`JARVIS_BACKGROUND=on` / `off` overrides).
+- **Crash recovery**: a backend the app started that exits unexpectedly is
+  started again after 1, 3, 10, 30, then every 60 s (quick retries again once
+  it ran two minutes). On restart the brain reloads the last day's exchanges
+  from the event store, so the chat on screen is still its context.
 - **Launch modes**: `dev` (`npm run dev`, Vite), `start` (`npm start`) and
   `app` (the installed `JARVIS.app`). All share one settings folder and so one
   single-instance lock; a newly started different build — or the app replacing

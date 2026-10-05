@@ -1,13 +1,28 @@
 /**
- * Electron main process: window, secure app:// protocol, backend supervision.
+ * Electron main process: window, secure app:// protocol, backend supervision,
+ * and running in the background (menu bar / tray, start at login).
  */
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { BrowserWindow, type IpcMainInvokeEvent, app, ipcMain, net, protocol, shell } from "electron";
+import {
+  BrowserWindow,
+  type IpcMainInvokeEvent,
+  Menu,
+  type MenuItemConstructorOptions,
+  Notification,
+  Tray,
+  app,
+  ipcMain,
+  nativeImage,
+  net,
+  powerSaveBlocker,
+  protocol,
+  shell,
+} from "electron";
 
 import { BackendSupervisor, short } from "./backend";
 import { type UpdateStatus, Updater } from "./updater";
@@ -18,11 +33,21 @@ const RENDERER_DIR = path.join(__dirname, "..", "dist");
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..");
 const APP_ORIGIN = "app://jarvis";
 const BACKGROUND = "#07080a";
-const ICON = path.join(__dirname, "..", "assets", "icon.png");
+const ASSETS = path.join(__dirname, "..", "assets");
+const ICON = path.join(ASSETS, "icon.png");
 
 /** dev: `npm run dev` · app: the installed JARVIS.app · start: `npm start`. */
 type LaunchMode = "dev" | "app" | "start";
 const MODE: LaunchMode = DEV_RENDERER_URL ? "dev" : process.env.JARVIS_APP === "1" ? "app" : "start";
+
+/**
+ * Closing the window keeps JARVIS running — learning, model training and the
+ * morning briefing go on; it lives in the menu bar (tray on Windows) until it
+ * is quit. Linux has no reliable tray, so there closing quits (unless
+ * JARVIS_BACKGROUND=on); JARVIS_BACKGROUND=off turns it off everywhere.
+ */
+const BACKGROUND_MODE =
+  process.env.JARVIS_BACKGROUND === "on" || (process.env.JARVIS_BACKGROUND !== "off" && process.platform !== "linux");
 
 // One settings folder — and so one single-instance lock — for every way JARVIS
 // starts (the Mac app's loader has a different package location).
@@ -43,6 +68,9 @@ const supervisor = new BackendSupervisor(
   DEV_RENDERER_URL ? [new URL(DEV_RENDERER_URL).origin] : [],
 );
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+/** Set once JARVIS is really quitting: then closing the window may close it. */
+let quitting = false;
 
 function contentSecurityPolicy(): string {
   const backend = new URL(BACKEND_URL);
@@ -102,7 +130,15 @@ async function createWindow(): Promise<void> {
     },
   });
 
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.once("ready-to-show", () => {
+    if (!startedHidden) mainWindow?.show();
+  });
+  mainWindow.on("close", (event) => {
+    if (quitting || !BACKGROUND_MODE) return;
+    event.preventDefault(); // keep running: hide instead
+    mainWindow?.hide();
+    backgroundHint();
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -116,6 +152,155 @@ async function createWindow(): Promise<void> {
   });
 
   await mainWindow.loadURL(DEV_RENDERER_URL ?? `${APP_ORIGIN}/index.html`);
+}
+
+// --- running in the background ------------------------------------------------------
+
+/**
+ * Started by macOS at login: stay in the menu bar instead of opening the window.
+ * Only older macOS reports this (wasOpenedAtLogin); on macOS 13+ the window
+ * simply opens at login.
+ */
+let startedHidden = false;
+
+interface BackgroundState {
+  loginOffered?: boolean; // start-at-login was switched on once (the user may turn it off)
+  hintShown?: boolean; // the "still running" notification was shown once
+}
+
+function backgroundFile(): string {
+  return path.join(app.getPath("userData"), "background.json");
+}
+
+function readBackgroundState(): BackgroundState {
+  try {
+    return JSON.parse(readFileSync(backgroundFile(), "utf8")) as BackgroundState;
+  } catch {
+    return {};
+  }
+}
+
+function writeBackgroundState(update: BackgroundState): void {
+  try {
+    writeFileSync(backgroundFile(), `${JSON.stringify({ ...readBackgroundState(), ...update })}\n`);
+  } catch {
+    // a missing note only means a hint is shown again
+  }
+}
+
+export interface LoginItem {
+  supported: boolean;
+  enabled: boolean;
+  /** macOS 13+: registered, but the user still has to allow it in System Settings. */
+  needsApproval: boolean;
+}
+
+/** Only the installed Mac app can start at login (a terminal JARVIS is a checkout). */
+function loginItemSupported(): boolean {
+  return MODE === "app" && process.platform === "darwin";
+}
+
+function loginItem(): LoginItem {
+  if (!loginItemSupported()) return { supported: false, enabled: false, needsApproval: false };
+  const settings = app.getLoginItemSettings() as { openAtLogin: boolean; status?: string };
+  return { supported: true, enabled: settings.openAtLogin, needsApproval: settings.status === "requires-approval" };
+}
+
+function setStartAtLogin(enabled: boolean): LoginItem {
+  if (loginItemSupported()) app.setLoginItemSettings({ openAtLogin: enabled });
+  refreshTray();
+  return loginItem();
+}
+
+function showWindow(): void {
+  if (!mainWindow) {
+    startedHidden = false;
+    void createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function quit(): void {
+  quitting = true;
+  app.quit();
+}
+
+/** Once: tell the user that closing the window didn't stop JARVIS. */
+function backgroundHint(): void {
+  if (readBackgroundState().hintShown || !Notification.isSupported()) return;
+  writeBackgroundState({ hintShown: true });
+  const where = process.platform === "darwin" ? "the menu bar" : "the tray";
+  const quitKey = process.platform === "darwin" ? "⌘Q" : "Quit in the tray menu";
+  new Notification({
+    title: "JARVIS keeps running",
+    body: `Learning, model training and the morning briefing go on. Open JARVIS from ${where}; quit with ${quitKey}.`,
+    silent: true,
+  }).show();
+}
+
+function createTray(): void {
+  try {
+    const image =
+      process.platform === "darwin"
+        ? nativeImage.createFromPath(path.join(ASSETS, "trayTemplate.png")) // + @2x, tinted by macOS
+        : nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 });
+    tray = new Tray(image);
+    tray.setToolTip("JARVIS");
+    if (process.platform !== "darwin") tray.on("click", showWindow);
+    refreshTray();
+  } catch (error) {
+    console.warn(`[jarvis] no tray icon: ${String(error)}`);
+  }
+}
+
+function refreshTray(): void {
+  if (!tray) return;
+  const login = loginItem();
+  const items: MenuItemConstructorOptions[] = [
+    { label: "JARVIS is running", enabled: false },
+    { label: "Open JARVIS", click: showWindow },
+    { type: "separator" },
+  ];
+  if (login.supported) {
+    items.push(
+      {
+        label: login.needsApproval ? "Start at Login (allow in System Settings)" : "Start at Login",
+        type: "checkbox",
+        checked: login.enabled,
+        click: (item) => setStartAtLogin(item.checked),
+      },
+      { type: "separator" },
+    );
+  }
+  items.push({ label: "Quit JARVIS", click: quit });
+  tray.setContextMenu(Menu.buildFromTemplate(items));
+}
+
+function startBackgroundMode(): void {
+  if (!BACKGROUND_MODE) return;
+  createTray();
+  // Hidden apps get "App Nap"-throttled on macOS; JARVIS has work to do in the background.
+  powerSaveBlocker.start("prevent-app-suspension");
+  app.on("activate", showWindow); // Dock icon clicked
+  if (loginItemSupported()) {
+    // Asked for an assistant that keeps running: on by default, once — Settings can turn it off.
+    if (!readBackgroundState().loginOffered) {
+      setStartAtLogin(true);
+      writeBackgroundState({ loginOffered: true });
+    }
+    startedHidden = (app.getLoginItemSettings() as { wasOpenedAtLogin?: boolean }).wasOpenedAtLogin === true;
+  }
+}
+
+function registerAppIpc(): void {
+  ipcMain.handle("jarvis:app:background", () => ({ keepsRunning: BACKGROUND_MODE, login: loginItem() }));
+  ipcMain.handle("jarvis:app:login", (event, enabled: unknown) => {
+    if (!trusted(event) || typeof enabled !== "boolean") return loginItem();
+    return setStartAtLogin(enabled);
+  });
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -161,9 +346,7 @@ function onSecondInstance(additionalData: unknown): void {
     void supervisor.shutdown().then(() => app.quit());
     return;
   }
-  if (!mainWindow) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.focus();
+  showWindow();
 }
 
 // --- updates ------------------------------------------------------------------------
@@ -300,8 +483,13 @@ void (async () => {
     return;
   }
   app.on("second-instance", (_event, _argv, _cwd, additionalData) => onSecondInstance(additionalData));
-  app.on("window-all-closed", () => app.quit());
-  app.on("before-quit", () => supervisor.stop());
+  app.on("window-all-closed", () => {
+    if (!BACKGROUND_MODE) app.quit();
+  });
+  app.on("before-quit", () => {
+    quitting = true;
+    supervisor.stop();
+  });
 
   await app.whenReady();
   // One attempt per start: if the reinstalled bundle still looks old, don't loop.
@@ -315,6 +503,8 @@ void (async () => {
   if (process.platform === "darwin" && MODE !== "app") app.dock?.setIcon(ICON);
   registerAppProtocol();
   registerUpdateIpc();
+  registerAppIpc();
+  startBackgroundMode();
   startUpdater();
   void supervisor.ensureRunning(); // the dashboard shows CONNECTING until it is up
   await createWindow();

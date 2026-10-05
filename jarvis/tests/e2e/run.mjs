@@ -82,6 +82,7 @@ const app = await electron.launch({
     JARVIS_SYSTEM_BACKEND: "simulated",
     JARVIS_DATA_DIR: mainDataDir,
     JARVIS_UPDATES: "off",
+    JARVIS_BACKGROUND: "on", // keep running when the window closes (default on macOS / Windows)
   },
 });
 
@@ -260,7 +261,7 @@ try {
     await page.getByTestId("training-calibration").waitFor();
     await page.getByTestId("training-toggle").filter({ hasText: "Daily: off" }).waitFor();
     await page.waitForTimeout(300);
-    await shot("10d-trained-model");
+    await shot("10e-trained-model");
     await page.getByRole("button", { name: "Home" }).click();
     await page.getByTestId("learning-row").filter({ hasText: "Off" }).waitFor();
   });
@@ -284,6 +285,34 @@ try {
     await page.getByTestId("briefing-toggle").click(); // back off: no real market data here
     await page.getByTestId("briefing-toggle").and(page.locator('[aria-checked="false"]')).waitFor();
     await page.getByRole("button", { name: "Home" }).click();
+  });
+
+  await step("closing the window keeps JARVIS running; it comes back from the menu bar", async () => {
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("background-mode").filter({ hasText: "keeps running" }).waitFor();
+    await page.getByTestId("background-mode").scrollIntoViewIfNeeded();
+    await shot("10f-always-on");
+    await page.getByRole("button", { name: "Home" }).click();
+    const visible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible());
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(await visible(), false, "the window should be hidden, not closed");
+    assert.equal((await health())?.status, "ok", "the backend should keep running");
+    await app.evaluate(({ app: electronApp }) => electronApp.emit("activate")); // Dock / menu bar
+    for (let i = 0; i < 20 && !(await visible()); i += 1) await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(await visible(), true);
+  });
+
+  await step("a crashed backend is started again", async () => {
+    const before = await health();
+    process.kill(before.pid, "SIGKILL");
+    let after = null;
+    for (let i = 0; i < 120 && !(after && after.pid !== before.pid); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      after = await health();
+    }
+    assert.ok(after && after.pid !== before.pid, "the backend did not come back");
+    await headline.filter({ hasText: "Everything is nominal." }).waitFor(); // the dashboard reconnected
   });
 
   await step("idle state returns", async () => {

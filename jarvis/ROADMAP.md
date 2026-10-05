@@ -37,7 +37,8 @@ docs that match reality.
 - [x] Own model trained locally on every key-level touch, retrained daily, judged walk-forward against a baseline; level_odds in the chat
 - [ ] Tick data and order flow (Bookmap) for real scalping research
 - [ ] Walk-forward re-validation of findings as the holdout grows
-- [ ] Live alerts when price reaches a level (needs JARVIS running in the background)
+- [x] JARVIS keeps running in the background (menu bar, start at login, crash recovery)
+- [ ] Live alerts when price reaches a level
 - [ ] NQ futures data instead of the CFD proxy
 
 ## Phase 8 — Voice (first version, pulled ahead)

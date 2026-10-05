@@ -42,7 +42,7 @@ from jarvis.learning.strategy import Strategy
 from jarvis.llm.base import ModelError, ModelReply, ToolDefinition, ToolOutcome, Usage
 from jarvis.settings import LearningSettings
 from jarvis.storage.preferences import Preferences
-from jarvis.util import utcnow
+from jarvis.util import utcnow, wait_wall
 
 log = logging.getLogger("jarvis.learning")
 
@@ -230,7 +230,7 @@ class LearningService:
         interrupted = await self._journal.interrupted()
         if interrupted:
             log.info("marked %d interrupted learning round(s)", interrupted)
-        self._refresh_coverage()
+        await self._refresh_coverage()
         await self._refresh()
         if self.enabled:
             self._spawn()
@@ -280,8 +280,7 @@ class LearningService:
 
     async def _wait(self, seconds: float) -> None:
         self._wake.clear()
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(self._wake.wait(), timeout=max(0.0, seconds))
+        await wait_wall(self._wake, seconds)  # on time after the Mac slept
 
     # Loop --------------------------------------------------------------------------------
 
@@ -407,12 +406,13 @@ class LearningService:
 
             await self._market.sync(self._instruments[name], start, end, progress)
         self._synced_at = time.monotonic()
-        self._refresh_coverage()
+        await self._refresh_coverage()
 
-    def _refresh_coverage(self) -> None:
+    async def _refresh_coverage(self) -> None:
+        """Reads every cached month: off the event loop."""
         coverage: dict[str, dict[str, Any]] = {}
         for name, instrument in self._instruments.items():
-            found = self._market.coverage(instrument)
+            found = await asyncio.to_thread(self._market.coverage, instrument)
             if found:
                 first, last, bars = found
                 coverage[name] = {

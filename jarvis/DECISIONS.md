@@ -160,6 +160,30 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-024 — JARVIS keeps running: menu bar, start at login, crash recovery
+
+- **Decision:** Closing the window hides it; JARVIS lives on in the menu bar
+  (tray on Windows) until it is quit. The Mac app turns on *start at login*
+  once by itself (off in Settings → Always on). The supervisor restarts a
+  crashed backend with backoff. After any restart the brain reloads the last
+  24 hours of conversation. Background waits use the wall clock. Activity
+  older than 30 days is pruned; the conversation stays. scikit-learn is
+  imported only when training or predicting.
+- **Reason:** The user wants an assistant that "keeps running and gets
+  smarter in the background". Before this, closing the window quit
+  everything — learning, training and the briefing stopped — and a crashed
+  backend stayed dead. After every update JARVIS forgot the conversation on
+  screen. A Mac sleeps at night: monotonic timers (asyncio's) stand still
+  then, so "wait until midnight" ended hours late. Importing scikit-learn at
+  start cost about a second per (re)start.
+- **Alternatives:** A separate background daemon (launchd agent) without the
+  window — cleaner separation, but a second install path and two processes
+  to update; the Electron app already supervises the backend.
+- **Consequences:** Quitting is explicit (⌘Q / menu). On macOS 13+ the
+  window opens at login (macOS no longer tells the app it was started at
+  login). Linux keeps quit-on-close (no reliable tray).
+- **Date:** 2026-10-05
+
 ## D-023 — A locally trained model, judged month by month against a baseline
 
 - **Decision:** JARVIS trains its own model of support and resistance with

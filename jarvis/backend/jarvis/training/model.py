@@ -28,14 +28,6 @@ from statistics import NormalDist
 from typing import Any, Literal
 
 import numpy as np
-from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.impute import SimpleImputer
-from sklearn.inspection import permutation_importance
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score
-from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn.preprocessing import SplineTransformer, StandardScaler
 
 from jarvis.training.dataset import BASELINE_FEATURES, FEATURE_LABELS, FEATURES, Dataset
 
@@ -55,8 +47,14 @@ class Candidate:
     make: Callable[[], Any]
 
 
+# scikit-learn is imported where it is used: importing it takes about a second,
+# and JARVIS starts far more often than it trains.
+
+
 def _boosting(**params: Any) -> Callable[[], Any]:
     def make() -> Any:
+        from sklearn.ensemble import HistGradientBoostingClassifier
+
         return HistGradientBoostingClassifier(
             early_stopping=False, random_state=0, l2_regularization=1.0, **params
         )
@@ -65,6 +63,11 @@ def _boosting(**params: Any) -> Callable[[], Any]:
 
 
 def _logistic() -> Any:
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
     return make_pipeline(
         SimpleImputer(strategy="median"),
         StandardScaler(),
@@ -89,7 +92,13 @@ CANDIDATES: tuple[Candidate, ...] = (
 )
 
 
-def make_baseline() -> Pipeline:
+def make_baseline() -> Any:
+    from sklearn.compose import ColumnTransformer
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline, make_pipeline
+    from sklearn.preprocessing import SplineTransformer
+
     columns = [FEATURES.index(name) for name in BASELINE_FEATURES]
     offset = FEATURES.index("offset")
     return Pipeline(
@@ -148,6 +157,8 @@ def clustered_t(values: np.ndarray, cluster: np.ndarray) -> float:
 def _auc(y: np.ndarray, p: np.ndarray) -> float | None:
     if len(np.unique(y)) < 2:
         return None
+    from sklearn.metrics import roc_auc_score
+
     return round(float(roc_auc_score(y, p)), 4)
 
 
@@ -390,6 +401,8 @@ def train(
 
 def _importance(estimator: Any, x: np.ndarray, y: np.ndarray) -> list[dict[str, Any]]:
     """How much worse the out-of-sample predictions get without each input."""
+    from sklearn.inspection import permutation_importance
+
     found = permutation_importance(
         estimator, x, y, scoring="neg_log_loss", n_repeats=3, random_state=0
     )

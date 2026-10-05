@@ -30,6 +30,7 @@ refusal_fallback: true
 
 # Earlier exchanges sent along as plain text (working memory, not long-term memory).
 history_turns: 12
+history_restore_hours: 24   # after a restart or update, JARVIS still knows the last day's chat
 
 # Upper bound of model ↔ tool round-trips in one turn.
 max_tool_rounds: 8
