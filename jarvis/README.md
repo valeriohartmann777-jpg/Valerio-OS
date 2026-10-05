@@ -42,6 +42,11 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   minute data, and only results that hold up on data Claude never tuned on
   count. $3/day limit; it stops itself when nothing new holds up. Learning
   page; ask "what have you learned?" in the chat.
+- **Its own trained model**: JARVIS trains a model of when support and
+  resistance hold — on every touch of the briefing's key levels since 2021,
+  locally and free, retrained after each trading day. It is judged on months
+  it never saw against a simple baseline; only if it beats that does JARVIS
+  use its odds ("Hält das Level im NQ gerade?").
 - **Backend** (FastAPI): event bus + WebSocket stream, state service, router,
   missions with pause/resume/stop, Operator + Sentinel agents, tool framework,
   permission levels 0–4 with approvals, SQLite persistence, audit log,
@@ -103,6 +108,25 @@ after it passed in-sample and out-of-sample; the holdout result (shown to you,
 never to Claude) says whether it also held on unseen data. After 20 rounds
 without a new validated finding learning stops itself — start it again to
 give it another 20.
+
+### The trained model
+
+Separately from the Claude research, JARVIS trains its own model on this
+computer — no API key, no costs. After each new trading day it rebuilds a
+data set of every touch of a key level (the morning briefing's levels, on
+5-minute bars: NQ 09:30–16:00, gold 03:00–13:30 New York time), describes the
+situation at the touch (kind of level, touch number, time, approach, trend,
+VWAP, volatility, volume, room to the next level …) and what happened next:
+held (price moved 1 ATR away) or broken (0.5 ATR through) within an hour.
+A gradient-boosting model learns from it in a minute or so.
+
+It is chosen on 2024 – Q1 2025 and then judged month by month on data it
+never trained on, against a baseline that knows only the kind of level and
+how the touching candle closed. The Learning page shows the verdict, how
+often levels held when it said X %, and what mattered most. Only a confirmed
+model's odds are used; otherwise JARVIS says how often such levels held in
+the past. Turn daily training on or off, or train now, on the Learning page;
+settings in `config/training.yaml`.
 
 ## Connect Claude
 
@@ -222,4 +246,7 @@ Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · Decisions: [DECISIONS.md](DE
 - `config/files.yaml` — folders the file tools may see, never-read patterns
 - `config/web.yaml` — search engines for `search_web`
 - `config/voice.yaml` — voice, speech models, wake-word sensitivity
+- `config/learning.yaml` — trading research: model, budget, periods, markets
+- `config/briefing.yaml` — morning briefing: time, levels
+- `config/training.yaml` — the trained support/resistance model
 - `.env` — overrides and the Anthropic API key (written by Settings → Brain); see `.env.example`

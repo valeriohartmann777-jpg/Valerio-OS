@@ -18,6 +18,7 @@ from jarvis.learning.service import LearningStatus
 from jarvis.permissions.models import PermissionLevel
 from jarvis.tools.base import Tool, ToolResult
 from jarvis.tools.registry import ToolRegistry
+from jarvis.training.service import TrainingStatus
 
 
 class NoArgs(BaseModel):
@@ -39,16 +40,23 @@ class LearningReportTool(Tool[NoArgs]):
         "What JARVIS has learned on its own about scalping and day trading NQ and XAUUSD: "
         "learning status and budget, knowledge notes, support/resistance level studies "
         "(how often levels held vs. random prices, in-sample), validated findings (with "
-        "their out-of-sample and holdout results) and recent rounds and tests."
+        "their out-of-sample and holdout results), recent rounds and tests, and JARVIS's own "
+        "trained support/resistance model with how it did on months it never saw."
     )
     permission_level = PermissionLevel.READ
     input_model = NoArgs
     # Notes and study names come from the research model, which reads the web.
     returns_untrusted_text = True
 
-    def __init__(self, journal: LearningJournal, status: Callable[[], LearningStatus]) -> None:
+    def __init__(
+        self,
+        journal: LearningJournal,
+        status: Callable[[], LearningStatus],
+        training: Callable[[], TrainingStatus | None] = lambda: None,
+    ) -> None:
         self._journal = journal
         self._status = status
+        self._training = training
 
     async def execute(self, args: NoArgs, ctx: TraceContext) -> ToolResult:
         status = self._status()
@@ -126,6 +134,7 @@ class LearningReportTool(Tool[NoArgs]):
                 {"round": r["number"], "status": r["status"], "summary": r["summary"]}
                 for r in rounds
             ],
+            "trained_model": _trained_model(self._training()),
         }
         return ToolResult(
             success=True,
@@ -137,7 +146,41 @@ class LearningReportTool(Tool[NoArgs]):
         )
 
 
+_COMPARISON = ("touches", "held_rate", "improvement", "t", "auc_model", "auc_baseline")
+
+
+def _trained_model(status: TrainingStatus | None) -> dict[str, Any] | None:
+    """The model JARVIS trains itself: verdict, how it did on unseen months, what mattered."""
+    if status is None:
+        return None
+    report = status.report
+    if report is None:
+        return {"state": status.state, "note": "not trained yet"}
+    holdout = report.get("holdout") or {}
+    return {
+        "state": status.state,
+        "verdict": report.get("status"),
+        "why": report.get("reason"),
+        "model": report.get("chosen"),
+        "trained_on_data_until": (status.model or {}).get("data_until"),
+        "decided_touches": (report.get("touches") or {}).get("decided"),
+        # improvement = share of the baseline's log loss saved; t from day-clustered errors
+        "out_of_sample": {k: (report.get("out_of_sample") or {}).get(k) for k in _COMPARISON},
+        "unseen_months": {k: holdout.get(k) for k in _COMPARISON},
+        "unseen_by_market": {
+            market: {k: result.get(k) for k in _COMPARISON}
+            for market, result in (report.get("holdout_by_market") or {}).items()
+        },
+        "usable_for": report.get("usable_for", []),
+        "what_mattered": [item["label"] for item in (report.get("importance") or [])[:5]],
+        "calibration_on_unseen_months": report.get("calibration"),
+    }
+
+
 def register_learning_tools(
-    registry: ToolRegistry, journal: LearningJournal, status: Callable[[], LearningStatus]
+    registry: ToolRegistry,
+    journal: LearningJournal,
+    status: Callable[[], LearningStatus],
+    training: Callable[[], TrainingStatus | None] = lambda: None,
 ) -> None:
-    registry.register(LearningReportTool(journal, status))
+    registry.register(LearningReportTool(journal, status, training))

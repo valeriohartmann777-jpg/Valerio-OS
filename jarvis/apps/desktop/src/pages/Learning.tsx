@@ -8,6 +8,7 @@ import type {
 } from "@jarvis/protocol";
 import { useEffect, useState } from "react";
 
+import { TrainedModel } from "../components/learning/TrainedModel";
 import { Button, Empty, Meter, Pill, StatusDot, type Tone, cx, textTone } from "../components/ui/primitives";
 import { ApiError, api } from "../lib/api";
 import { clock, holdoutVerdict, learningLabel, modelLabel, signed, usd } from "../lib/format";
@@ -34,6 +35,7 @@ const TEST_STATUS: Record<LearningTest["status"], { label: string; tone: Tone }>
 /** JARVIS's own trading research: status, budget, findings, notes and the log. */
 export function Learning() {
   const learning = useJarvis((s) => s.learning);
+  const training = useJarvis((s) => s.training);
   const [findings, setFindings] = useState<LearningTest[]>([]);
   const [tests, setTests] = useState<LearningTest[]>([]);
   const [notes, setNotes] = useState<LearningNote[]>([]);
@@ -127,6 +129,8 @@ export function Learning() {
             </div>
           )}
         </section>
+
+        {training && <TrainedModel training={training} />}
 
         <div className="mt-12 grid grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] gap-10">
           <section>

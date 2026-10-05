@@ -1,4 +1,11 @@
-import type { JarvisState, LearningPhase, MissionStatus, StepStatus } from "@jarvis/protocol";
+import type {
+  JarvisState,
+  LearningPhase,
+  MissionStatus,
+  StepStatus,
+  TrainingPhase,
+  TrainingVerdict,
+} from "@jarvis/protocol";
 
 export function clock(iso: string | number | Date): string {
   const date = new Date(iso);
@@ -133,4 +140,60 @@ export function holdoutVerdict(
     tone: "danger",
     explanation: "Lost money on the holdout — data JARVIS never saw. Probably no real edge.",
   };
+}
+
+const TRAINING_LABELS: Record<TrainingPhase, string> = {
+  off: "Off",
+  waiting: "Up to date",
+  preparing: "Getting data",
+  training: "Training",
+  error: "Problem",
+};
+
+export function trainingLabel(state: TrainingPhase): string {
+  return TRAINING_LABELS[state];
+}
+
+/** 0.0123 → "+1.2%" (a share as signed percent). */
+export function signedPercent(share: number, digits = 1): string {
+  return `${signed(share * 100, digits)}%`;
+}
+
+export interface ModelVerdict {
+  label: string;
+  tone: "success" | "warning" | "muted" | "faint";
+  explanation: string;
+}
+
+/** What months the model never saw say about JARVIS's trained model. */
+export function trainingVerdict(verdict: TrainingVerdict): ModelVerdict {
+  switch (verdict) {
+    case "confirmed":
+      return {
+        label: "Confirmed on unseen months",
+        tone: "success",
+        explanation:
+          "Predicts significantly better than the baseline on months it never trained on. JARVIS uses its odds.",
+      };
+    case "unconfirmed":
+      return {
+        label: "Not confirmed on unseen months",
+        tone: "warning",
+        explanation:
+          "Looked better when it was chosen, but not significantly better on months it never saw. JARVIS only gives the baseline's odds.",
+      };
+    case "no_edge":
+      return {
+        label: "No edge over the baseline",
+        tone: "muted",
+        explanation:
+          "Not better than the baseline (level kind + how the touching candle closed). Honest result: the extra context doesn't predict more.",
+      };
+    default:
+      return {
+        label: "Too little data",
+        tone: "faint",
+        explanation: "Not enough level touches yet to judge the model.",
+      };
+  }
 }

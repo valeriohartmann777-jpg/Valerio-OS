@@ -162,6 +162,23 @@ MIGRATIONS: list[list[str]] = [
         WHERE holdout IS NOT NULL
         """,
     ],
+    # 7: training runs of JARVIS's own support/resistance model
+    [
+        """
+        CREATE TABLE training_runs (
+            id          TEXT PRIMARY KEY,
+            number      INTEGER NOT NULL UNIQUE,
+            started_at  TEXT NOT NULL,
+            finished_at TEXT,
+            status      TEXT NOT NULL,
+            data_until  TEXT,
+            verdict     TEXT,
+            report      TEXT,
+            error       TEXT,
+            seconds     REAL
+        )
+        """,
+    ],
 ]
 
 

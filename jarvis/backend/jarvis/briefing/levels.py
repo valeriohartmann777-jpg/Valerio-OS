@@ -88,7 +88,11 @@ KIND_EXPRESSIONS: dict[str, tuple[str, ...]] = {
 }
 
 
-def key_levels(bars: Bars, instrument: str, rules: LevelRules, each_side: int = 4) -> LevelMap:
+def key_levels(
+    bars: Bars, instrument: str, rules: LevelRules, each_side: int = 4, *, round_steps: int = 1
+) -> LevelMap:
+    """Key levels as of the last bar. ``round_steps`` round numbers on each side
+    of the price (model training takes more than the briefing shows)."""
     if len(bars) == 0:
         raise ValueError("no bars")
     clock = local_clock(bars.t, NY)
@@ -145,7 +149,8 @@ def key_levels(bars: Bars, instrument: str, rules: LevelRules, each_side: int = 
         add(level, label, kind)
 
     below_round = np.floor(price / rules.round_step) * rules.round_step
-    for level in (below_round, below_round + rules.round_step):
+    for k in range(1 - round_steps, round_steps + 1):
+        level = below_round + k * rules.round_step
         major = abs(level / rules.major_step - round(level / rules.major_step)) < 1e-9
         add(level, f"Runde Zahl ({_plain(rules.major_step)}er)" if major else "Runde Zahl", "round")
 

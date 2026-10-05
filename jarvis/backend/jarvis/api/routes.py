@@ -39,6 +39,8 @@ from jarvis.api.schemas import (
     SettingsView,
     Snapshot,
     SystemStatus,
+    TrainingPreferences,
+    TrainingView,
     VoicePreferences,
     VoiceView,
 )
@@ -89,6 +91,10 @@ def learning_view(rt: Runtime) -> LearningView:
     return LearningView.model_validate(asdict(rt.learning.status))
 
 
+def training_view(rt: Runtime) -> TrainingView:
+    return TrainingView.model_validate(asdict(rt.training.status))
+
+
 def _voice_error(exc: VoiceError, status: int = 422) -> HTTPException:
     return HTTPException(
         status, {"code": exc.code, "message": exc.message, "suggestion": exc.suggestion}
@@ -102,6 +108,7 @@ async def build_snapshot(rt: Runtime) -> Snapshot:
         brain=brain_view(rt),
         voice=voice_view(rt),
         learning=learning_view(rt),
+        training=training_view(rt),
         memories=memory_views(rt),
         state=rt.state.snapshot(),
         system_backend=rt.backend.name,
@@ -249,6 +256,23 @@ async def forget_memory(number: int, rt: RuntimeDep) -> list[MemoryView]:
     except MemoryRefused as exc:
         raise HTTPException(404, {"code": "not_found", "message": str(exc)}) from exc
     return memory_views(rt)
+
+
+@router.get("/training")
+async def training(rt: RuntimeDep) -> TrainingView:
+    return training_view(rt)
+
+
+@router.post("/training/run")
+async def training_run(rt: RuntimeDep) -> TrainingView:
+    await rt.training.train_now()
+    return training_view(rt)
+
+
+@router.post("/training/preferences")
+async def training_preferences(body: TrainingPreferences, rt: RuntimeDep) -> TrainingView:
+    await rt.training.set_enabled(body.enabled)
+    return training_view(rt)
 
 
 @router.get("/learning")

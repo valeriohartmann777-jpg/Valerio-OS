@@ -95,6 +95,22 @@ class BriefingView(BaseModel):
     last_error: str | None
 
 
+class TrainingView(BaseModel):
+    state: str
+    enabled: bool
+    detail: str | None
+    progress: float | None
+    next_check_at: str | None
+    model: dict[str, Any] | None
+    report: dict[str, Any] | None
+    report_run: int | None
+    history: list[dict[str, Any]]
+
+
+class TrainingPreferences(BaseModel):
+    enabled: bool
+
+
 class BriefingPreferences(BaseModel):
     enabled: bool | None = None
     time: str | None = Field(None, max_length=5)
@@ -119,6 +135,7 @@ class Snapshot(BaseModel):
     brain: BrainView
     voice: VoiceView
     learning: LearningView
+    training: TrainingView
     memories: list[MemoryView]
     state: StateSnapshot
     system_backend: str

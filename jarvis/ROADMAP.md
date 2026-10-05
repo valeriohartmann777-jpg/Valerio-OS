@@ -34,8 +34,10 @@ docs that match reality.
 - [x] In-sample / out-of-sample (Bonferroni) / holdout scoring done by code
 - [x] Background loop with Claude: backtests, notes, web search; $3/day limit; stops itself after 20 rounds without a finding
 - [x] Learning page; "what have you learned?" in the chat (learning_report)
+- [x] Own model trained locally on every key-level touch, retrained daily, judged walk-forward against a baseline; level_odds in the chat
 - [ ] Tick data and order flow (Bookmap) for real scalping research
 - [ ] Walk-forward re-validation of findings as the holdout grows
+- [ ] Live alerts when price reaches a level (needs JARVIS running in the background)
 - [ ] NQ futures data instead of the CFD proxy
 
 ## Phase 8 — Voice (first version, pulled ahead)

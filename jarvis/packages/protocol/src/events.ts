@@ -30,6 +30,7 @@ export const EVENT_TYPES = [
   "voice.changed",
   "learning.changed",
   "memory.changed",
+  "training.changed",
   "context.updated",
 ] as const;
 

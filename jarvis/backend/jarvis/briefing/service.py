@@ -18,8 +18,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
-import numpy as np
-
 from jarvis.briefing.levels import KIND_EXPRESSIONS, KeyLevel, LevelMap, LevelRules, key_levels
 from jarvis.events.bus import EventBus
 from jarvis.events.types import EventType, Severity
@@ -92,6 +90,7 @@ class BriefingService:
         bus: EventBus,
         preferences: Preferences,
         on_sent: Callable[[str], None] | None = None,
+        model_line: Callable[[], str | None] = lambda: None,
         now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
         check_seconds: float = 60.0,
     ) -> None:
@@ -102,6 +101,7 @@ class BriefingService:
         self._bus = bus
         self._prefs = preferences
         self._on_sent = on_sent
+        self._model_line = model_line
         self._now = now
         self._check_seconds = check_seconds
         self._last_error: str | None = None
@@ -260,36 +260,21 @@ class BriefingService:
             return briefing.text
 
     async def _bars(self, instrument: Instrument) -> Bars:
-        today = datetime.now(UTC).date()
-        start = today - timedelta(days=self._settings.history_days)
-        end = today - timedelta(days=1)
-        await self._market.sync(instrument, start, end)
-        history = await asyncio.to_thread(self._market.load, instrument, start, end)
-        live = await self._market.today(instrument)
-        newer = live.t > (history.t[-1] if len(history) else 0)
-        bars = Bars(
-            np.concatenate([history.t, live.t[newer]]),
-            np.concatenate([history.open, live.o[newer]]),
-            np.concatenate([history.high, live.h[newer]]),
-            np.concatenate([history.low, live.low[newer]]),
-            np.concatenate([history.close, live.c[newer]]),
-            np.concatenate([history.volume, live.v[newer]]),
-        )
-        if len(bars) == 0:
-            raise DataError(f"No recent {instrument.name} data.")
-        return bars
+        return await self._market.recent(instrument, self._settings.history_days)
 
     async def _research_line(self) -> str:
         counts = await self._journal.counts()
         studies = [s for s in await self._journal.studies(limit=500) if s["ok"]]
         strong = sum(1 for s in studies if ((s["result"] or {}).get("edge_z") or 0) >= 2)
         validated, confirmed = counts.get("validated", 0), counts.get("confirmed", 0)
+        model = self._model_line()
         return (
             f"Forschung bisher: {len(studies)} Level-Studie{'' if len(studies) == 1 else 'n'}, "
             f"{strong} mit messbarem Vorteil, {validated} "
             f"{'validiertes Setup' if validated == 1 else 'validierte Setups'} "
             f"({confirmed} auch auf ungesehenen Daten signifikant). "
-            "Statistik aus der Vergangenheit, keine Handelsempfehlung."
+            + (f"{model} " if model else "")
+            + "Statistik aus der Vergangenheit, keine Handelsempfehlung."
         )
 
 

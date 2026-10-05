@@ -15,6 +15,7 @@ import type {
   Mission,
   PermissionRequest,
   Snapshot,
+  TrainingStatus,
   VoiceStatus,
 } from "@jarvis/protocol";
 
@@ -42,6 +43,8 @@ export interface UIState {
   brain: BrainStatus | null;
   voice: VoiceStatus | null;
   learning: LearningStatus | null;
+  /** JARVIS's own support/resistance model, trained locally. */
+  training: TrainingStatus | null;
   /** What JARVIS keeps in mind about the user (M1, M2, …). */
   memories: MemoryItem[];
   jarvis: { state: JarvisState; detail: string; since: number };
@@ -85,6 +88,7 @@ export const initialState: UIState = {
   brain: null,
   voice: null,
   learning: null,
+  training: null,
   memories: [],
   jarvis: { state: "DORMANT", detail: "", since: 0 },
   context: null,
@@ -140,6 +144,7 @@ function applySnapshot(state: UIState, snapshot: Snapshot, now: number): UIState
     brain: snapshot.brain,
     voice: snapshot.voice,
     learning: snapshot.learning ?? null,
+    training: snapshot.training ?? null,
     memories: snapshot.memories ?? [],
     jarvis: { state: snapshot.state.state, detail: snapshot.state.detail, since: now },
     context: snapshot.context,
@@ -204,6 +209,9 @@ function applyEvent(state: UIState, event: JarvisEvent, now: number): UIState {
       break;
     case "memory.changed":
       next.memories = payload.memories as MemoryItem[];
+      break;
+    case "training.changed":
+      next.training = payload.training as TrainingStatus;
       break;
     case "system.online":
       next.version = (payload.version as string | undefined) ?? state.version;

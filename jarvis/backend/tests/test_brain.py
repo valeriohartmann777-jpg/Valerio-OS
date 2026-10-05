@@ -111,6 +111,7 @@ async def test_open_ended_request_goes_to_the_fast_model(harness: HarnessFactory
         "open_file",
         "learning_report",
         "market_levels",
+        "level_odds",
         "remember",
         "forget",
     }

@@ -112,3 +112,47 @@ def weekdays(start: date, end: date) -> list[date]:
             out.append(day)
         day += timedelta(days=1)
     return out
+
+
+def futures_minutes(start: date, end: date) -> np.ndarray:
+    """UTC epoch seconds of every minute a futures market trades between the
+    New York days ``start`` and ``end``: Sunday 18:00 to Friday 17:00 with a
+    break from 17:00 to 18:00."""
+    stamps: list[np.ndarray] = []
+    day = start
+    while day <= end:
+        weekday = day.weekday()  # 0 = Monday
+        parts = []
+        if weekday < 5:  # 00:00-17:00
+            parts.append((0, 17 * 60))
+        if weekday in (6, 0, 1, 2, 3):  # Sunday-Thursday: 18:00-24:00
+            parts.append((18 * 60, 24 * 60))
+        for first, last in parts:
+            hour = 12 if first == 0 else 20
+            moment = datetime(day.year, day.month, day.day, hour, tzinfo=NY)
+            offset = moment.utcoffset()
+            midnight = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp())
+            shift = -int(offset.total_seconds()) if offset else 0
+            stamps.append(midnight + shift + 60 * np.arange(first, last, dtype=np.int64))
+        day += timedelta(days=1)
+    return np.concatenate(stamps) if stamps else np.empty(0, dtype=np.int64)
+
+
+def futures_bars(
+    start: date, end: date, price: float = 20000.0, *, noise: float = 1.0, seed: int = 7
+) -> Bars:
+    """A random walk of 1-minute bars over futures trading hours."""
+    rng = np.random.default_rng(seed)
+    t = futures_minutes(start, end)
+    close = price + np.cumsum(rng.normal(0.0, noise, len(t)))
+    opens = np.r_[price, close[:-1]]
+    wick_up = np.abs(rng.normal(0.0, noise * 0.3, len(t)))
+    wick_down = np.abs(rng.normal(0.0, noise * 0.3, len(t)))
+    return Bars(
+        t,
+        opens,
+        np.maximum(opens, close) + wick_up,
+        np.minimum(opens, close) - wick_down,
+        close,
+        rng.integers(50, 150, len(t)).astype(np.float64),
+    )

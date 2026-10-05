@@ -1,0 +1,33 @@
+# Model training: JARVIS trains its own model of how support and resistance
+# behave — locally on this Mac, free, in the background. No Claude, no budget.
+#
+# Every day with new market data it rebuilds the data set: each touch of a key
+# level (the same levels as the morning briefing: previous day, overnight /
+# Asia range, previous week, volume profile, swings, round numbers) on 5-minute
+# bars, the situation at the touch (time, approach, trend, volatility, touch
+# number, …) and what happened next (held or broken). A gradient-boosting
+# model learns P(the level holds) from it.
+#
+# Honesty: the model is chosen on 2024 – Q1 2025 data, then judged month by
+# month on data it was never trained on (from config/learning.yaml's
+# holdout_start), against a simple baseline that only knows the level's kind
+# and how the touching candle closed. Only if it beats that baseline
+# significantly does JARVIS use its probabilities.
+
+enabled: true
+timeframe_minutes: 5
+horizon_minutes: 60       # held / broken has to happen within this time
+tolerance_atr: 0.1        # touch zone around the level, in ATR(14) of the bars
+hold_atr: 1.0             # move away from the level that counts as "held"
+breach_atr: 0.5           # move through the level that counts as "broken"
+history_days: 16
+round_steps_each_side: 4
+check_minutes: 30
+threads: 2
+min_holdout_touches: 300
+
+# Touches are collected in these windows (New York time). The key levels are
+# taken at the window's start, as a trader would mark them.
+sessions:
+  NQ: {start: "09:30", end: "16:00"}      # regular session (15:30-22:00 in Germany)
+  XAUUSD: {start: "03:00", end: "13:30"}  # London + New York morning (09:00-19:30)

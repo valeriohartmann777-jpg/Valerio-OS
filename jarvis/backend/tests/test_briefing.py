@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -200,11 +201,19 @@ class Clock:
         return self.moment
 
 
-async def make_service(tmp_path: Path, clock: Clock) -> tuple[BriefingService, Recorder, list[str]]:
+@pytest.fixture
+async def db() -> AsyncIterator[Database]:
+    database = Database(":memory:")
+    await database.connect()
+    yield database
+    await database.close()  # an open connection outlives the test's event loop
+
+
+async def make_service(
+    tmp_path: Path, clock: Clock, db: Database
+) -> tuple[BriefingService, Recorder, list[str]]:
     settings = load_settings(environ={})
     bus = EventBus()
-    db = Database(":memory:")
-    await db.connect()
     sent: list[str] = []
     service = BriefingService(
         settings=settings.briefing,
@@ -219,9 +228,9 @@ async def make_service(tmp_path: Path, clock: Clock) -> tuple[BriefingService, R
     return service, Recorder(bus), sent
 
 
-async def test_the_schedule(tmp_path: Path) -> None:
+async def test_the_schedule(tmp_path: Path, db: Database) -> None:
     clock = Clock(datetime(2026, 10, 5, 7, 59, tzinfo=ZURICH))  # Monday
-    service, _, _ = await make_service(tmp_path, clock)
+    service, _, _ = await make_service(tmp_path, clock, db)
     assert not service.due()
     assert service.status.next_at == "2026-10-05T08:00:00+02:00"
     clock.moment = datetime(2026, 10, 5, 8, 0, tzinfo=ZURICH)
@@ -245,9 +254,9 @@ async def test_the_schedule(tmp_path: Path) -> None:
     assert not service.due() and service.status.next_at is None
 
 
-async def test_sending_posts_the_briefing_in_the_chat(tmp_path: Path) -> None:
+async def test_sending_posts_the_briefing_in_the_chat(tmp_path: Path, db: Database) -> None:
     clock = Clock(datetime(2026, 10, 5, 8, 0, tzinfo=ZURICH))
-    service, events, sent = await make_service(tmp_path, clock)
+    service, events, sent = await make_service(tmp_path, clock, db)
     text = await service.send()
     [message] = events.of(EventType.JARVIS_MESSAGE)
     assert message.payload["kind"] == "briefing" and message.payload["text"] == text
@@ -257,9 +266,9 @@ async def test_sending_posts_the_briefing_in_the_chat(tmp_path: Path) -> None:
     assert service.status.last_error is None
 
 
-async def test_the_loop_catches_up_after_a_late_start(tmp_path: Path) -> None:
+async def test_the_loop_catches_up_after_a_late_start(tmp_path: Path, db: Database) -> None:
     clock = Clock(datetime(2026, 10, 5, 9, 30, tzinfo=ZURICH))
-    service, events, _ = await make_service(tmp_path, clock)
+    service, events, _ = await make_service(tmp_path, clock, db)
     service._check_seconds = 0.01
     await service.start()
     try:

@@ -25,8 +25,10 @@ import { fileURLToPath } from "node:url";
 import { _electron as electron, chromium } from "playwright-core";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-// Every JARVIS started here inherits this: no morning briefing fetching real market data.
+// Every JARVIS started here inherits this: no morning briefing or model training
+// fetching real market data.
 process.env.JARVIS_BRIEFING = "off";
+process.env.JARVIS_TRAINING = "off";
 const appDir = path.join(root, "apps", "desktop");
 const outDir = path.resolve(process.argv[2] ?? path.join(root, "tests", "e2e", "output"));
 const backendUrl = "http://127.0.0.1:8799";
@@ -66,6 +68,11 @@ for (let i = 0; i < 120 && (await health())?.build !== "0000000-outdated"; i += 
 assert.equal((await health())?.build, "0000000-outdated", "stale backend did not start");
 
 const mainDataDir = mkdtempSync(path.join(tmpdir(), "jarvis-e2e-"));
+// One finished model-training run (synthetic prices) for the Learning page.
+execFileSync(python, [path.join(root, "tests", "e2e", "seed_training.py"), mainDataDir], {
+  cwd: path.join(root, "backend"),
+  stdio: "inherit",
+});
 const app = await electron.launch({
   executablePath: electronBinary,
   args: [appDir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])],
@@ -245,6 +252,15 @@ try {
     await shot("10c-learning");
     await page.getByTestId("learning-toggle").filter({ hasText: "Stop learning" }).click();
     await page.getByTestId("learning-state").filter({ hasText: "Off" }).waitFor();
+    // The trained model: judged on months it never saw — random prices teach it nothing.
+    await page.getByTestId("trained-model").scrollIntoViewIfNeeded();
+    await page.getByTestId("training-state").filter({ hasText: "Off" }).waitFor();
+    await page.getByTestId("training-verdict").filter({ hasText: /No edge over the baseline|Not confirmed/ }).waitFor();
+    await page.getByTestId("training-history").filter({ hasText: "Run 1" }).waitFor();
+    await page.getByTestId("training-calibration").waitFor();
+    await page.getByTestId("training-toggle").filter({ hasText: "Daily: off" }).waitFor();
+    await page.waitForTimeout(300);
+    await shot("10d-trained-model");
     await page.getByRole("button", { name: "Home" }).click();
     await page.getByTestId("learning-row").filter({ hasText: "Off" }).waitFor();
   });

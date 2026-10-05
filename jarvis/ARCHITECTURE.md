@@ -395,7 +395,7 @@ Unanswered requests expire (default 5 min) and count as rejected.
 
 SQLite (`data/jarvis.db`) through `storage.Database` (aiosqlite) with
 versioned migrations. Tables: `missions` (JSON document + indexed columns),
-`events`, `audit_log`. Repositories own all SQL, so a PostgreSQL backend only
+`events`, `audit_log`, `learning_*`, `memories`, `training_runs`. Repositories own all SQL, so a PostgreSQL backend only
 touches `storage/` and the repositories. Semantic memory will sit behind a
 `VectorStore` protocol (planned, Phase 7) — never called directly elsewhere.
 
@@ -508,6 +508,30 @@ service.py   loop: data → budget/stall checks → round → wait
   are checked every minute; settings in `config/briefing.yaml` and
   Settings → Morning briefing (`/briefing`). Tool `market_levels` gives the
   same on request.
+
+## 13d. Model training (`backend/jarvis/training/`)
+
+```
+dataset.py   touches of the key levels per session window → features + held/broken
+model.py     candidates, baseline, choose on out-of-sample, walk-forward holdout,
+             day-clustered t, calibration, permutation importance
+store.py     training_runs (migration 7) + the model file data/training/model.pkl
+service.py   background loop: new trading day? → sync data → train in a worker
+             thread (threadpoolctl limits CPU threads) → keep the model
+live.py      odds for the levels near the price now (level_odds tool)
+```
+
+- Levels come from `briefing.levels.key_levels` at the start of each session
+  window, computed only from bars before it; features use bars up to the
+  touching candle's close, labels only bars after it (a test checks that
+  rows don't change when later data is cut off).
+- Status and the latest report go out as `training.changed` events and in the
+  snapshot; API `/training`, `/training/run`, `/training/preferences`.
+- `learning_report` includes the model's verdict; the morning briefing adds
+  one line about it. `level_odds` scores a level the last candle touched as
+  it happened, or imagines the next candle touching it (averaged over past
+  candle shapes). The model's number only when it is confirmed for that
+  market (D-023).
 
 ---
 

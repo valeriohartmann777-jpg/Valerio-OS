@@ -447,7 +447,9 @@ async def test_stored_verdicts_are_recomputed(tmp_path: Path) -> None:
             "holdout, holdout_confirmed) VALUES (?, ?, '', 'x', 'validated', '', '{}', ?, 1)",
             (f"id{number}", number, holdout),
         )
-    await db.execute("DELETE FROM schema_version WHERE version = 6")  # as before the update
+    # As before the update: migrations 6 and later haven't run yet.
+    await db.execute("DELETE FROM schema_version WHERE version >= 6")
+    await db.execute("DROP TABLE training_runs")
     await db.close()
     await db.connect()  # the update's migration runs
     rows = await db.fetch_all(

@@ -14,6 +14,7 @@ import type {
   Mission,
   PermissionRequest,
   SettingsView,
+  TrainingStatus,
 } from "@jarvis/protocol";
 
 import { BACKEND_URL } from "./config";
@@ -98,6 +99,8 @@ export const api = {
   learningStudies: (limit = 30) => request<LearningStudy[]>(`/learning/studies?limit=${limit}`),
   setLearningFocus: (text: string) => post<LearningStatus>("/learning/focus", { text }),
   learningRounds: (limit = 20) => request<LearningRound[]>(`/learning/rounds?limit=${limit}`),
+  trainNow: () => post<TrainingStatus>("/training/run"),
+  setTraining: (enabled: boolean) => post<TrainingStatus>("/training/preferences", { enabled }),
   connectVoice: (apiKey: string) => post<VoiceStatus>("/voice/key", { api_key: apiKey }),
   voicePreferences: (prefs: { wake_word?: boolean; speak_replies?: boolean }) =>
     post<VoiceStatus>("/voice/preferences", prefs),

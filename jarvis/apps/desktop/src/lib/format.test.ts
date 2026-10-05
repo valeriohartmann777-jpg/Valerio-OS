@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { duration, holdoutVerdict, missionNumber, missionStatusLabel, modelLabel, stateLabel, uptime } from "./format";
+import {
+  duration,
+  holdoutVerdict,
+  missionNumber,
+  missionStatusLabel,
+  modelLabel,
+  signedPercent,
+  stateLabel,
+  trainingVerdict,
+  uptime,
+} from "./format";
 
 describe("format", () => {
   it("formats durations", () => {
@@ -37,5 +47,16 @@ describe("holdoutVerdict", () => {
     expect(weak?.tone).toBe("warning");
     expect(holdoutVerdict({ avg_r: -0.1, t_stat: -1.2 }, false)?.tone).toBe("danger");
     expect(holdoutVerdict(null, null)).toBeNull();
+  });
+});
+
+describe("trainingVerdict", () => {
+  it("only calls a model confirmed when unseen months confirm it", () => {
+    expect(trainingVerdict("confirmed").tone).toBe("success");
+    expect(trainingVerdict("unconfirmed").label).toBe("Not confirmed on unseen months");
+    expect(trainingVerdict("no_edge").label).toBe("No edge over the baseline");
+    expect(trainingVerdict("too_little_data").tone).toBe("faint");
+    expect(signedPercent(0.0123)).toBe("+1.2%");
+    expect(signedPercent(-0.004)).toBe("−0.4%");
   });
 });

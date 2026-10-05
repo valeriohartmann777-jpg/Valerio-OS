@@ -339,6 +339,91 @@ export interface BriefingStatus {
   last_error: string | null;
 }
 
+export type TrainingPhase = "off" | "waiting" | "preparing" | "training" | "error";
+
+/** Model vs. baseline on one period (log loss: lower is better). */
+export interface TrainingComparison {
+  touches: number;
+  sessions: number;
+  held_rate: number | null;
+  loss_model: number | null;
+  loss_baseline: number | null;
+  /** Share of the baseline's log loss the model saves (0.01 = 1 %). */
+  improvement: number | null;
+  /** Clustered by trading day. */
+  t: number;
+  auc_model: number | null;
+  auc_baseline: number | null;
+}
+
+export type TrainingVerdict = "confirmed" | "unconfirmed" | "no_edge" | "too_little_data";
+
+export interface TrainingReport {
+  status: TrainingVerdict;
+  reason: string;
+  touches: {
+    decided: number;
+    in_sample: number;
+    out_of_sample: number;
+    holdout: number;
+    skipped: Record<string, number>;
+    by_market: Record<string, number>;
+  };
+  baseline_features: string[];
+  candidates: { name: string; loss: number }[];
+  chosen: string | null;
+  out_of_sample: TrainingComparison | null;
+  holdout: TrainingComparison | null;
+  holdout_by_market: Record<string, TrainingComparison>;
+  holdout_months?: number;
+  calibration: {
+    from: number;
+    to: number;
+    touches: number;
+    predicted: number | null;
+    held: number | null;
+  }[];
+  importance: { feature: string; label: string; loss_increase: number }[];
+  usable_for: string[];
+  t_required_oos: number;
+  t_required_holdout: number;
+}
+
+export interface TrainingRun {
+  number: number;
+  started_at: string;
+  finished_at: string | null;
+  status: "running" | "done" | "failed" | "interrupted";
+  data_until: string | null;
+  verdict: TrainingVerdict | null;
+  touches: number | null;
+  holdout_touches: number | null;
+  holdout_improvement: number | null;
+  holdout_t: number | null;
+  error: string | null;
+  seconds: number | null;
+}
+
+export interface TrainingStatus {
+  state: TrainingPhase;
+  /** Retrains by itself when there is a new trading day. */
+  enabled: boolean;
+  detail: string | null;
+  progress: number | null;
+  next_check_at: string | null;
+  /** The model in use (the last one that trained). */
+  model: {
+    run: number;
+    data_until: string;
+    status: TrainingVerdict;
+    chosen: string | null;
+    usable_for: string[];
+  } | null;
+  report: TrainingReport | null;
+  report_run: number | null;
+  history: TrainingRun[];
+}
+
 export type MemoryKind = "preference" | "fact" | "routine" | "correction";
 
 export interface MemoryItem {
@@ -357,6 +442,7 @@ export interface Snapshot {
   brain: BrainStatus;
   voice: VoiceStatus;
   learning: LearningStatus;
+  training: TrainingStatus;
   memories: MemoryItem[];
   state: StateSnapshot;
   system_backend: string;

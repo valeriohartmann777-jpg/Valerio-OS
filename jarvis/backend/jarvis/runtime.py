@@ -49,7 +49,10 @@ from jarvis.tools.registry import ToolRegistry
 from jarvis.tools.system import create_backend, register_system_tools
 from jarvis.tools.system.apps import AppCatalog
 from jarvis.tools.system.backend import SystemBackend
+from jarvis.tools.training import register_training_tools
 from jarvis.tools.web import register_web_tools
+from jarvis.training.service import TrainingService
+from jarvis.training.store import TrainingStore
 from jarvis.voice.audio import AudioDevice
 from jarvis.voice.service import ProviderFactory, VoiceService, elevenlabs_provider
 from jarvis.voice.wakeword import WakeDetector
@@ -107,8 +110,14 @@ class Runtime:
         self.memory = MemoryStore(self.db, self.bus)
         register_memory_tools(self.tools, self.memory)
         self.learning_journal = LearningJournal(self.db)
-        register_learning_tools(self.tools, self.learning_journal, lambda: self.learning.status)
+        register_learning_tools(
+            self.tools,
+            self.learning_journal,
+            lambda: self.learning.status,
+            lambda: self.training.status,
+        )
         register_briefing_tools(self.tools, lambda: self.briefing)
+        register_training_tools(self.tools, lambda: self.training)
         self.market = market or MarketData(settings.data_dir / "market")
         self.preferences = Preferences(settings.data_dir / "preferences.json")
         self.executor = ToolExecutor(
@@ -211,6 +220,17 @@ class Runtime:
             preferences=self.preferences,
             # Follow-up questions about the briefing reach the brain with it in view.
             on_sent=lambda text: self.brain.remember("(morning briefing requested)", text),
+            model_line=lambda: self.training.briefing_line(),
+        )
+
+        self.training = TrainingService(
+            settings=settings.training,
+            learning=settings.learning,
+            briefing=settings.briefing,
+            market=self.market,
+            store=TrainingStore(self.db, settings.data_dir / "training"),
+            bus=self.bus,
+            preferences=self.preferences,
         )
 
     def _research_model(self) -> ResearchModel | None:
@@ -276,8 +296,10 @@ class Runtime:
         await self.voice.start()
         await self.learning.start()
         await self.briefing.start()
+        await self.training.start()
 
     async def stop(self) -> None:
+        await self.training.stop()
         await self.briefing.stop()
         await self.learning.stop()
         await self.voice.stop()

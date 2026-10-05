@@ -160,6 +160,41 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-023 — A locally trained model, judged month by month against a baseline
+
+- **Decision:** JARVIS trains its own model of support and resistance with
+  scikit-learn (gradient boosting; logistic regression as a candidate) on
+  every touch of the briefing's key levels, locally, after each new trading
+  day. Label: held (1 ATR away) vs. broken (0.5 ATR through) within 60
+  minutes after a 5-minute candle touches the level; touches broken within
+  the touching candle and undecided ones are left out. The model is chosen
+  among four candidates on the out-of-sample period (it must beat the
+  baseline there with a Bonferroni-corrected t), then judged walk-forward on
+  the holdout: each month is predicted by a model retrained only on data
+  before it. It counts as confirmed only with t ≥ 1.645, touches on the same
+  day clustered. Only then does `level_odds` give the model's probability;
+  otherwise only the baseline's.
+- **Reason:** The user asked for JARVIS to really train, not only take notes.
+  The honest question isn't "does it predict?" — any model that knows how the
+  touching candle closed predicts something — but "does the context add
+  anything?". So the baseline knows the level's kind and the candle's close,
+  and the model has to beat it on months it never saw. Clustering by day
+  matters: touches on one day move together; counting them as independent
+  inflates t (tested: ~5 % false confirmations clustered vs. > 15 % naive).
+  On random-walk prices the whole pipeline finds nothing (tested on 6 seeds
+  and in the E2E data).
+- **Alternatives:** A neural network (more variance, no gain on tabular data
+  of this size); online learning without a holdout (no honest verdict);
+  Claude as the model (costs per prediction, not reproducible).
+- **Consequences:** New dependency scikit-learn (installed by the update's
+  preflight). Training takes about 30 s – 2 min on a laptop with two threads;
+  the model file is ~200 KB in `data/training/`, reloaded only by the same
+  scikit-learn version. The holdout grows each day, so the verdict is
+  re-judged daily on more data — it can change, which is the point. Odds are
+  defined for the training windows only (NQ regular session, gold 03:00 –
+  13:30 New York).
+- **Date:** 2026-10-05
+
 ## D-022 — The holdout confirms only significant results
 
 - **Decision:** A validated finding counts as confirmed on the holdout only

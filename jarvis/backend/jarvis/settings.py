@@ -196,6 +196,27 @@ class BriefingSettings(BaseModel):
     instruments: dict[str, BriefingInstrumentSettings] = Field(default_factory=dict)
 
 
+class TrainingSessionSettings(BaseModel):
+    start: str  # New York time; key levels are taken at the start
+    end: str
+
+
+class TrainingSettings(BaseModel):
+    enabled: bool = True
+    timeframe_minutes: int = 5
+    horizon_minutes: int = 60
+    # Touch zone, "held" and "broken" distances in ATR(14) of the bars.
+    tolerance_atr: float = 0.1
+    hold_atr: float = 1.0
+    breach_atr: float = 0.5
+    history_days: int = 16  # minute data before the session for the key levels
+    round_steps_each_side: int = 4  # round numbers above and below the price
+    check_minutes: float = 30.0  # how often it looks for a new trading day
+    threads: int = 2  # CPU threads for training (keeps the Mac responsive)
+    min_holdout_touches: int = 300
+    sessions: dict[str, TrainingSessionSettings] = Field(default_factory=dict)
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -233,6 +254,7 @@ class Settings(BaseModel):
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     learning: LearningSettings = Field(default_factory=LearningSettings)
     briefing: BriefingSettings = Field(default_factory=BriefingSettings)
+    training: TrainingSettings = Field(default_factory=TrainingSettings)
 
     @property
     def env_file(self) -> Path:
@@ -295,6 +317,7 @@ def load_settings(
     data["voice"] = _read_yaml(config_dir / "voice.yaml")
     data["learning"] = _read_yaml(config_dir / "learning.yaml")
     data["briefing"] = _read_yaml(config_dir / "briefing.yaml")
+    data["training"] = _read_yaml(config_dir / "training.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))
@@ -349,6 +372,8 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         voice["microphone_allowed"] = False
     if env.get("JARVIS_BRIEFING", "").strip().lower() == "off":  # tests, E2E
         data.setdefault("briefing", {})["enabled"] = False
+    if env.get("JARVIS_TRAINING", "").strip().lower() == "off":  # tests, E2E
+        data.setdefault("training", {})["enabled"] = False
 
 
 _QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019"}

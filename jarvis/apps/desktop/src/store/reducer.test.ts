@@ -112,6 +112,17 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       counts: {},
       data: {},
     },
+    training: {
+      state: "off",
+      enabled: false,
+      detail: null,
+      progress: null,
+      next_check_at: null,
+      model: null,
+      report: null,
+      report_run: null,
+      history: [],
+    },
     memories: [],
     state: { state: "DORMANT", detail: "" },
     system_backend: "simulated",
@@ -232,6 +243,14 @@ describe("reducer", () => {
     state = apply(state, event("learning.changed", { learning: running }, { severity: "info" }));
     expect(state.learning?.round).toBe(3);
     expect(visibleActivity(state).at(-1)?.type).toBe("learning.changed");
+  });
+
+  it("follows the model training", () => {
+    let state = reduce(initialState, { type: "snapshot", snapshot: snapshot(), now: 0 });
+    expect(state.training?.state).toBe("off");
+    const training = { ...snapshot().training, state: "training" as const, progress: 0.5 };
+    state = apply(state, event("training.changed", { training }, { severity: "info" }));
+    expect(state.training?.progress).toBe(0.5);
   });
 
   it("keeps the conversation in order, merges history with live messages", () => {

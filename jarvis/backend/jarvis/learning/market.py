@@ -355,6 +355,26 @@ class MarketData:
                     await asyncio.sleep(self._retry_delays[attempt])
         raise DataError(f"I can't reach Dukascopy's data right now ({last}).")
 
+    async def recent(self, instrument: Instrument, days: int) -> Bars:
+        """Minute bars of the last ``days`` days including today so far."""
+        today = datetime.now(UTC).date()
+        start, end = today - timedelta(days=days), today - timedelta(days=1)
+        await self.sync(instrument, start, end)
+        history = await asyncio.to_thread(self.load, instrument, start, end)
+        live = await self.today(instrument)
+        newer = live.t > (history.t[-1] if len(history) else 0)
+        bars = Bars(
+            np.concatenate([history.t, live.t[newer]]),
+            np.concatenate([history.open, live.o[newer]]),
+            np.concatenate([history.high, live.h[newer]]),
+            np.concatenate([history.low, live.low[newer]]),
+            np.concatenate([history.close, live.c[newer]]),
+            np.concatenate([history.volume, live.v[newer]]),
+        )
+        if len(bars) == 0:
+            raise DataError(f"No recent {instrument.name} data.")
+        return bars
+
     async def _sync(
         self, instrument: Instrument, start: date, end: date, progress: Progress | None
     ) -> int:

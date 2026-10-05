@@ -244,6 +244,36 @@ _Last updated: 2026-10-04_
 - A market-data test that only ran when yesterday wasn't a Saturday counted
   requests in a stale copy of the list — fixed
 
+### Trained support/resistance model (D-023)
+- Data set: every touch of the briefing's key levels on 5-minute bars in the
+  session windows (NQ 09:30–16:00, gold 03:00–13:30 New York), levels taken
+  at the window's start from earlier bars only; 30 features at the touching
+  candle's close; label held / broken within 60 minutes; touches broken
+  within the candle or undecided are counted and left out
+- Model: four candidates (three gradient-boosting sizes, logistic
+  regression) chosen on out-of-sample vs. a baseline (level kind + how the
+  candle closed); walk-forward monthly on the holdout; day-clustered t;
+  calibration table and permutation importance; final model on all data
+- Service: checks every 30 minutes for a new trading day, downloads what's
+  missing, trains in a worker thread (2 CPU threads), keeps the model file
+  and every run (migration 7); "Train now" and "Daily on/off" on the
+  Learning page; `training.changed` events; API `/training*`
+- Uses: `level_odds` tool (odds near the price now; model only when
+  confirmed), `learning_report` (verdict, unseen-month numbers, what
+  mattered), one line in the morning briefing
+- Tests (22): touch detection and labels by hand, trading-day end, feature
+  signs, no look-ahead (rows identical when later data is cut off), market
+  merge, clustered t calibrated under the null (≈5 %, naive > 15 %),
+  walk-forward never trains on the month it predicts, a real pattern is
+  confirmed, no pattern isn't (random walks end to end, 6 more seeds by hand),
+  service (train, restart without retraining, train now, data errors,
+  on/off), live odds (session, a touched level, outside the session), API,
+  report and briefing line. E2E seeds a finished run and checks the card
+- Full size measured here: 5.75 years × 2 markets of minute bars → ~40,000
+  touches, 29 s, 360 MB peak, 170 KB model
+- Not yet run on real data (Dukascopy is blocked here) — the first run on the
+  MacBook gives the real verdict
+
 ## IN PROGRESS
 - —
 
@@ -252,6 +282,7 @@ _Last updated: 2026-10-04_
 
 0. Voice on the MacBook: connect ElevenLabs, "Hey JARVIS", push-to-talk
 0. Learning on the MacBook: first Dukascopy download, first rounds
+0. Trained model on the MacBook: first real verdict (Learning page)
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")
