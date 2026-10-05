@@ -7,7 +7,7 @@
 //|  No martingale, no lot increase, no unlimited grid.              |
 //+------------------------------------------------------------------+
 #property copyright   "Valerio OS"
-#property version     "1.00"
+#property version     "1.10"
 #property description "Dynamic trailing straddle basket EA for XAUUSD. No martingale, no grid."
 
 #include <Trade/Trade.mqh>
@@ -19,7 +19,8 @@ enum InitialDirectionMode
 {
    INITIAL_BUY,
    INITIAL_SELL,
-   INITIAL_ALTERNATING
+   INITIAL_ALTERNATING,
+   INITIAL_TREND          // direction from EMA trend filter; no trade while flat
 };
 
 enum EAState
@@ -41,17 +42,27 @@ input group "=== Core ==="
 input double               LotSize                    = 0.01;
 input int                  DistancePips               = 15;     // counter STOP distance
 input double               TargetProfitUSD            = 0.80;   // net basket target (account currency)
-input int                  MaxSpreadPips              = 30;     // blocks only NEW baskets
+input int                  MaxSpreadPips              = 5;      // blocks only NEW baskets (5 pips = 0.50 on gold)
 input int                  StopLossPips               = 100;    // broker-side SL per position
 input ulong                MagicNumber                = 888111;
-input InitialDirectionMode InitialDirection           = INITIAL_ALTERNATING;
+input InitialDirectionMode InitialDirection           = INITIAL_TREND;
 
 input group "=== Risk ==="
 input double MaxDailyLossUSD            = 20.0;   // realized day PnL + floating basket
 input double EmergencyBasketLossUSD     = 5.0;    // 0 = off
 input int    MaxPositionsPerBasket      = 2;      // hard cap, no extra grid layers
-input int    HedgeLockTimeoutSec        = 0;      // >0: close a fully hedged basket after N seconds
+input int    HedgeLockTimeoutSec        = 300;    // >0: close a fully hedged basket after N seconds (0 = wait for SL)
 input double CommissionPerLotPerSideUSD = 0.0;    // estimated exit commission for open positions
+
+input group "=== Entry filter ==="
+input ENUM_TIMEFRAMES TrendTimeframe   = PERIOD_M5;  // INITIAL_TREND: timeframe of the EMAs
+input int             TrendFastEMA     = 20;
+input int             TrendSlowEMA     = 50;
+input double          TrendMinGapPips  = 5.0;        // min EMA distance, below = flat market -> no entry
+input bool            UseSessionFilter = false;      // only start baskets inside the window (server time)
+input int             SessionStartHour = 8;
+input int             SessionEndHour   = 20;         // exclusive; start > end wraps over midnight
+input int             MinTestBaskets   = 100;        // OnTester: fewer baskets -> criterion 0
 
 input group "=== Execution ==="
 input int  MaxDeviationPoints  = 20;
@@ -158,6 +169,11 @@ bool     g_dailyDirty    = true;
 
 // edge-triggered log flags
 bool   g_spreadBlocked = false;
+bool   g_trendBlocked   = false;
+bool   g_sessionBlocked = false;
+int    g_trendDir       = 0;       // +1 up, -1 down, 0 flat (last evaluation)
+int    g_maFastHandle   = INVALID_HANDLE;
+int    g_maSlowHandle   = INVALID_HANDLE;
 bool   g_envBlocked    = false;
 string g_lastEnvReason = "";
 
@@ -1012,6 +1028,35 @@ void EnsureStopLoss()
 //+------------------------------------------------------------------+
 //| Basket lifecycle                                                 |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Entry filters (evaluated only while IDLE, not on every tick      |
+//| of an active basket)                                             |
+//+------------------------------------------------------------------+
+// +1 = fast EMA above slow EMA by at least TrendMinGapPips, -1 = below, 0 = flat or no data.
+// Uses the last CLOSED bar (shift 1) so the signal does not repaint inside the bar.
+int GetTrendDirection()
+{
+   double fast[1], slow[1];
+   if(CopyBuffer(g_maFastHandle, 0, 1, 1, fast) != 1 || CopyBuffer(g_maSlowHandle, 0, 1, 1, slow) != 1)
+      return 0;
+   double gap = fast[0] - slow[0];
+   double minGap = PipsToPrice(TrendMinGapPips);
+   if(gap >= minGap && gap > 0.0)
+      return 1;
+   if(gap <= -minGap && gap < 0.0)
+      return -1;
+   return 0;
+}
+
+bool IsInSessionWindow()
+{
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+   if(SessionStartHour < SessionEndHour)
+      return (dt.hour >= SessionStartHour && dt.hour < SessionEndHour);
+   return (dt.hour >= SessionStartHour || dt.hour < SessionEndHour);   // window wraps over midnight
+}
+
 bool CanStartNewBasket()
 {
    if(g_state != STATE_IDLE)
@@ -1039,6 +1084,36 @@ bool CanStartNewBasket()
       g_lastEnvReason = "";
    }
 
+   if(UseSessionFilter && !IsInSessionWindow())
+   {
+      if(!g_sessionBlocked)
+         Log("Outside session window - no new baskets");
+      g_sessionBlocked = true;
+      return false;
+   }
+   if(g_sessionBlocked)
+   {
+      Log("Session window open");
+      g_sessionBlocked = false;
+   }
+
+   if(InitialDirection == INITIAL_TREND)
+   {
+      g_trendDir = GetTrendDirection();
+      if(g_trendDir == 0)
+      {
+         if(!g_trendBlocked)
+            Log("Trend filter: market flat / no data - waiting");
+         g_trendBlocked = true;
+         return false;
+      }
+      if(g_trendBlocked)
+      {
+         Log(StringFormat("Trend filter: %s", g_trendDir > 0 ? "UP" : "DOWN"));
+         g_trendBlocked = false;
+      }
+   }
+
    if(!IsSpreadAcceptable())
    {
       if(!g_spreadBlocked)
@@ -1061,6 +1136,7 @@ bool StartNewBasket()
    {
       case INITIAL_BUY:  isBuy = true;  break;
       case INITIAL_SELL: isBuy = false; break;
+      case INITIAL_TREND: isBuy = (g_trendDir > 0); break;
       default:           isBuy = g_nextIsBuy; break;
    }
 
@@ -1365,6 +1441,8 @@ void UpdateStatusPanel()
       dir = "BUY";
    else if(InitialDirection == INITIAL_SELL)
       dir = "SELL";
+   else if(InitialDirection == INITIAL_TREND)
+      dir = (g_trendDir > 0) ? "TREND: UP" : (g_trendDir < 0) ? "TREND: DOWN" : "TREND: FLAT (waiting)";
    else
       dir = g_nextIsBuy ? "BUY (next, alternating)" : "SELL (next, alternating)";
 
@@ -1432,6 +1510,28 @@ int OnInit()
       MaxPositionsPerBasket < 1 || MaxTradeRetries < 0 || MinModifyIntervalMs < 0 || MinModifyStepPoints < 0)
    {
       LogAlways("Invalid input parameters");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
+   if(InitialDirection == INITIAL_TREND)
+   {
+      if(TrendFastEMA <= 0 || TrendSlowEMA <= TrendFastEMA || TrendMinGapPips < 0.0)
+      {
+         LogAlways("Invalid trend filter inputs (need 0 < TrendFastEMA < TrendSlowEMA)");
+         return INIT_PARAMETERS_INCORRECT;
+      }
+      g_maFastHandle = iMA(_Symbol, TrendTimeframe, TrendFastEMA, 0, MODE_EMA, PRICE_CLOSE);
+      g_maSlowHandle = iMA(_Symbol, TrendTimeframe, TrendSlowEMA, 0, MODE_EMA, PRICE_CLOSE);
+      if(g_maFastHandle == INVALID_HANDLE || g_maSlowHandle == INVALID_HANDLE)
+      {
+         LogAlways(StringFormat("Cannot create EMA handles, error %d", GetLastError()));
+         return INIT_FAILED;
+      }
+   }
+   if(UseSessionFilter && (SessionStartHour < 0 || SessionStartHour > 23 || SessionEndHour < 0 ||
+                           SessionEndHour > 24 || SessionStartHour == SessionEndHour))
+   {
+      LogAlways("Invalid session hours");
       return INIT_PARAMETERS_INCORRECT;
    }
 
@@ -1507,8 +1607,20 @@ void OnDeinit(const int reason)
    if(ClosePositionsOnDeinit)
       CloseAllEAPositions();
    PrintStats();
+   if(g_maFastHandle != INVALID_HANDLE) { IndicatorRelease(g_maFastHandle); g_maFastHandle = INVALID_HANDLE; }
+   if(g_maSlowHandle != INVALID_HANDLE) { IndicatorRelease(g_maSlowHandle); g_maSlowHandle = INVALID_HANDLE; }
    Comment("");
    LogAlways(StringFormat("EA deinitialized (reason %d)", reason));
+}
+
+// Optimizer criterion ("Custom max"): expectancy per basket scaled by sqrt(n) (t-stat-like),
+// so a few lucky baskets cannot win the optimization.
+double OnTester()
+{
+   if(g_statBaskets < MinTestBaskets)
+      return 0.0;
+   double net = g_statGrossWin + g_statGrossLoss;
+   return (net / g_statBaskets) * MathSqrt((double)g_statBaskets);
 }
 
 void OnTick()
