@@ -160,6 +160,19 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-022 — The holdout confirms only significant results
+
+- **Decision:** A validated finding counts as confirmed on the holdout only
+  if it is significant there too (t ≥ 1.645, one-sided 5 %), not merely in
+  the plus. Stored verdicts were recomputed (migration 6). The Learning page
+  shows three plain statuses: significant / positive but not significant /
+  failed — as text, not as a pill that looks like a button.
+- **Reason:** On the MacBook two findings were labelled "Confirmed on unseen
+  data" with holdout t = 0.8 and 1.4 (+0.05 R and +0.09 R per trade). A
+  strategy without any edge is "in the plus" about half the time; the label
+  invited trading noise. The user also took the pill for a button.
+- **Date:** 2026-10-05
+
 ## D-021 — Morning briefing: computed levels, deterministic text, checked every minute
 
 - **Decision:** On weekdays at 08:00 (configurable) JARVIS posts today's key

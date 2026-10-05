@@ -219,10 +219,10 @@ async def test_missing_days(tmp_path: Path) -> None:
         recent = Feed(missing={yesterday})
         data = market(tmp_path / "recent", recent)
         await data.sync(NQ, yesterday - timedelta(days=13), yesterday)
-        asked = recent.candle_requests().count
         path = f"/v1/candles/minute/USATECH.IDX-USD/BID/{yesterday.year}/{yesterday.month}/"
         await data.sync(NQ, yesterday - timedelta(days=13), yesterday)
-        assert asked(f"{path}{yesterday.day}") == 2  # not published yet: asked again
+        asked = recent.candle_requests().count(f"{path}{yesterday.day}")
+        assert asked == 2  # not published yet: asked again
 
 
 async def test_server_errors(tmp_path: Path) -> None:

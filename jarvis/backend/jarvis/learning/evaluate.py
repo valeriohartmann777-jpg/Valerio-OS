@@ -6,7 +6,9 @@
   every out-of-sample evaluation ever made (Bonferroni), so trying many ideas
   can't manufacture a finding.
 - **Holdout** (holdout_start → today): run only for validated strategies and
-  never shown to Claude — it confirms findings for you.
+  never shown to Claude. It confirms a finding only if it is significant there
+  as well (t ≥ 1.645); merely in the plus is reported as "positive, not
+  significant".
 """
 
 from __future__ import annotations
@@ -34,6 +36,10 @@ class Outcome:
     holdout_confirmed: bool | None = None
     t_required: float | None = None
     skipped_small_stop: int = 0
+
+
+# One-sided 5%: the holdout confirms a finding only if it is significant there too.
+HOLDOUT_T = NormalDist().inv_cdf(0.95)
 
 
 def t_required(evaluations: int, alpha: float) -> float:
@@ -100,7 +106,12 @@ def evaluate(
         )
 
     hold = summarize(period(holdout_start, last), _months(holdout_start, last))
-    confirmed = hold.trades >= max(1, min_oos // 2) and hold.avg_r > 0 and hold.profit_factor > 1.0
+    confirmed = (
+        hold.trades >= max(1, min_oos // 2)
+        and hold.avg_r > 0
+        and hold.profit_factor > 1.0
+        and hold.t_stat >= HOLDOUT_T  # in the plus alone happens by luck half the time
+    )
     return Outcome(
         "validated",
         "passed in-sample and out-of-sample",

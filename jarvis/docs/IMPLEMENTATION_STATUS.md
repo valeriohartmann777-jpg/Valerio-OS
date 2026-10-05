@@ -231,6 +231,19 @@ _Last updated: 2026-10-04_
 - Not yet run with live data (blocked here) — the first briefing on the
   MacBook is the real test
 
+### Fixes after the first real learning runs (2026-10-05)
+- The learning loop ran on the MacBook: 32 tests, 19 notes, 2 validated
+  findings (NQ 15m ORB + VWAP, T1 and T26)
+- Holdout confirmation now requires significance (D-022); T1 (holdout
+  t 0.8) and T26 (t 1.4) show as "positive on unseen data, not significant"
+- The verdict is a status line with an explanation on hover, not a
+  button-like pill
+- The desktop app's first check for an already running backend waits up to
+  2.5 s and retries: a single 800 ms request could time out while the app was
+  starting, and then a second backend failed on the busy port
+- A market-data test that only ran when yesterday wasn't a Saturday counted
+  requests in a stale copy of the list — fixed
+
 ## IN PROGRESS
 - —
 

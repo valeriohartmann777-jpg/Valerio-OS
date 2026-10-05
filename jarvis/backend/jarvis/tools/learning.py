@@ -83,6 +83,7 @@ class LearningReportTool(Tool[NoArgs]):
                     "in_sample": _brief(t["in_sample"]),
                     "out_of_sample": _brief(t["out_of_sample"]),
                     "holdout": _brief(t["holdout"]),
+                    # significant on the holdout too (t >= 1.645), not merely positive
                     "confirmed_on_holdout": t["holdout_confirmed"],
                 }
                 for t in validated

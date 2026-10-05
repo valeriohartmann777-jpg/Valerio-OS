@@ -151,6 +151,17 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # 6: the holdout confirms only significant results (t >= 1.645), not merely positive ones
+    [
+        """
+        UPDATE learning_tests SET holdout_confirmed = CASE
+            WHEN json_extract(holdout, '$.avg_r') > 0
+             AND json_extract(holdout, '$.profit_factor') > 1.0
+             AND json_extract(holdout, '$.t_stat') >= 1.6448536269514722
+            THEN holdout_confirmed ELSE 0 END
+        WHERE holdout IS NOT NULL
+        """,
+    ],
 ]
 
 

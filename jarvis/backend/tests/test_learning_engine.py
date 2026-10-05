@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -414,3 +416,42 @@ def test_a_real_pattern_is_validated_and_noise_is_not() -> None:
     outcome = evaluate(rule, noise, _settings(), oos_evaluations_before=0)
     assert outcome.status == "rejected"
     assert outcome.out_of_sample is None and outcome.holdout is None  # never computed
+
+
+def test_a_holdout_merely_in_the_plus_doesnt_confirm() -> None:
+    """The pattern exists until May, then the market turns random: the strategy
+    validates, but the holdout (June/July) must not call it confirmed."""
+    days = weekdays(date(2024, 1, 2), date(2024, 7, 31))
+    june = days.index(next(d for d in days if d >= date(2024, 6, 1)))
+
+    def fading(day: int, minute: int) -> float:
+        return 1.0 if day < june and 30 <= minute < 60 else 0.0
+
+    bars = session_bars(days, path=fading, noise=0.6)
+    rule = strategy(exit={"stop": "8", "target_r": 2.5})
+    outcome = evaluate(rule, bars, _settings(), oos_evaluations_before=0)
+    assert outcome.status == "validated"
+    assert outcome.holdout is not None and outcome.holdout.t_stat < 1.645
+    assert outcome.holdout_confirmed is False
+
+
+async def test_stored_verdicts_are_recomputed(tmp_path: Path) -> None:
+    from jarvis.storage.database import Database
+
+    db = Database(tmp_path / "jarvis.db")
+    await db.connect()
+    for number, t_stat in ((1, 0.8), (2, 2.4)):
+        holdout = json.dumps({"avg_r": 0.05, "profit_factor": 1.04, "t_stat": t_stat})
+        await db.execute(
+            "INSERT INTO learning_tests (id, number, created_at, name, status, reason, spec, "
+            "holdout, holdout_confirmed) VALUES (?, ?, '', 'x', 'validated', '', '{}', ?, 1)",
+            (f"id{number}", number, holdout),
+        )
+    await db.execute("DELETE FROM schema_version WHERE version = 6")  # as before the update
+    await db.close()
+    await db.connect()  # the update's migration runs
+    rows = await db.fetch_all(
+        "SELECT number, holdout_confirmed FROM learning_tests ORDER BY number"
+    )
+    assert [(r["number"], r["holdout_confirmed"]) for r in rows] == [(1, 0), (2, 1)]
+    await db.close()

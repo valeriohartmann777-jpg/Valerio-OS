@@ -8,9 +8,9 @@ import type {
 } from "@jarvis/protocol";
 import { useEffect, useState } from "react";
 
-import { Button, Empty, Meter, Pill, StatusDot, type Tone, cx } from "../components/ui/primitives";
+import { Button, Empty, Meter, Pill, StatusDot, type Tone, cx, textTone } from "../components/ui/primitives";
 import { ApiError, api } from "../lib/api";
-import { clock, learningLabel, modelLabel, signed, usd } from "../lib/format";
+import { clock, holdoutVerdict, learningLabel, modelLabel, signed, usd } from "../lib/format";
 import { dispatch, useJarvis } from "../store/store";
 
 const STATE_TONE: Record<LearningStatus["state"], Tone> = {
@@ -109,7 +109,11 @@ export function Learning() {
         {learning && <FocusEditor focus={learning.focus} />}
 
         <section className="mt-12">
-          <h2 className="label mb-3">Validated findings</h2>
+          <h2 className="label mb-1">Validated findings</h2>
+          <p className="mb-3 text-xs text-fg-faint">
+            Passed in-sample and out-of-sample. The last row is data JARVIS never saw: only a significant result there
+            confirms a finding. JARVIS doesn&apos;t trade — these are research results, not signals.
+          </p>
           {findings.length === 0 ? (
             <Empty>
               None yet. A finding counts only when it passes in-sample and then holds up out-of-sample — expect this
@@ -245,7 +249,7 @@ function StatusStrip({ learning }: { learning: LearningStatus }) {
           <Count label="Backtests" value={counts.tests} />
           <Count label="Passed in-sample" value={counts.in_sample_passed} />
           <Count label="Validated" value={counts.validated} strong />
-          <Count label="Confirmed" value={counts.confirmed} />
+          <Count label="Confirmed (unseen)" value={counts.confirmed} />
           <Count label="Level studies" value={counts.studies} />
           <Count label="Notes" value={counts.notes} />
         </dl>
@@ -356,7 +360,7 @@ function Count({ label, value, strong }: { label: string; value: number | undefi
 }
 
 function Finding({ test }: { test: LearningTest }) {
-  const confirmed = test.holdout_confirmed;
+  const verdict = holdoutVerdict(test.holdout, test.holdout_confirmed);
   return (
     <article className="rounded-xl border border-hairline bg-canvas-2 px-5 py-4">
       <header className="flex items-start justify-between gap-6">
@@ -369,10 +373,18 @@ function Finding({ test }: { test: LearningTest }) {
           <h3 className="mt-1 text-[15px] text-fg">{test.name}</h3>
           {test.spec.hypothesis && <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">{test.spec.hypothesis}</p>}
         </div>
-        {confirmed !== null && (
-          <Pill tone={confirmed ? "success" : "warning"}>
-            {confirmed ? "Confirmed on unseen data" : "Not confirmed on unseen data"}
-          </Pill>
+        {verdict && (
+          <span
+            className={cx(
+              "mt-1 inline-flex shrink-0 cursor-help items-center gap-1.5 text-xs whitespace-nowrap",
+              textTone(verdict.tone),
+            )}
+            title={verdict.explanation}
+            data-testid="holdout-verdict"
+          >
+            <StatusDot tone={verdict.tone} />
+            {verdict.label}
+          </span>
         )}
       </header>
       <table className="mt-4 w-full text-xs">

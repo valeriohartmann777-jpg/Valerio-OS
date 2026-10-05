@@ -39,7 +39,7 @@ export class BackendSupervisor {
   }
 
   async ensureRunning(): Promise<BackendMode> {
-    const running = await this.health();
+    const running = await this.probe();
     if (running && this.isOutdated(running)) {
       console.log(
         `[jarvis] the backend on ${this.url} runs older code (${short(running.build)}, this app is ${short(this.build)}) — replacing it`,
@@ -147,9 +147,23 @@ export class BackendSupervisor {
     return (await this.health()) !== null;
   }
 
-  private async health(): Promise<Health | null> {
+  /**
+   * Is a backend already running? Asked patiently: right at app start the main
+   * process is busy, and one short request can time out although a backend
+   * answers — then a second one would be started and fail on the busy port.
+   */
+  private async probe(): Promise<Health | null> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const running = await this.health(2500);
+      if (running) return running;
+      await sleep(200);
+    }
+    return null;
+  }
+
+  private async health(timeoutMs = 800): Promise<Health | null> {
     try {
-      const response = await fetch(`${this.url}/health`, { signal: AbortSignal.timeout(800) });
+      const response = await fetch(`${this.url}/health`, { signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) return null;
       const body = (await response.json()) as Health;
       return body.status === "ok" ? body : null;

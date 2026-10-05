@@ -283,11 +283,12 @@ class BriefingService:
         counts = await self._journal.counts()
         studies = [s for s in await self._journal.studies(limit=500) if s["ok"]]
         strong = sum(1 for s in studies if ((s["result"] or {}).get("edge_z") or 0) >= 2)
-        validated = counts.get("validated", 0)
+        validated, confirmed = counts.get("validated", 0), counts.get("confirmed", 0)
         return (
             f"Forschung bisher: {len(studies)} Level-Studie{'' if len(studies) == 1 else 'n'}, "
             f"{strong} mit messbarem Vorteil, {validated} "
-            f"{'bestätigtes Setup' if validated == 1 else 'bestätigte Setups'}. "
+            f"{'validiertes Setup' if validated == 1 else 'validierte Setups'} "
+            f"({confirmed} auch auf ungesehenen Daten signifikant). "
             "Statistik aus der Vergangenheit, keine Handelsempfehlung."
         )
 

@@ -99,3 +99,38 @@ export function usd(value: number): string {
 export function signed(value: number, digits = 2): string {
   return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(digits)}`;
 }
+
+export interface HoldoutVerdict {
+  label: string;
+  tone: "success" | "warning" | "danger";
+  explanation: string;
+}
+
+/** What the holdout (data the research model never saw) says about a validated finding. */
+export function holdoutVerdict(
+  holdout: { avg_r: number; t_stat: number } | null,
+  confirmed: boolean | null,
+): HoldoutVerdict | null {
+  if (!holdout || confirmed === null) return null;
+  const t = holdout.t_stat.toFixed(1);
+  if (confirmed) {
+    return {
+      label: `Significant on unseen data · t ${t}`,
+      tone: "success",
+      explanation: "Also significant on the holdout — data JARVIS never saw (t ≥ 1.6). A status, nothing to click.",
+    };
+  }
+  if (holdout.avg_r > 0) {
+    return {
+      label: `Positive on unseen data, not significant · t ${t}`,
+      tone: "warning",
+      explanation:
+        "In the plus on the holdout, but not significantly (t < 1.6) — a strategy without an edge does that half the time. Not confirmed.",
+    };
+  }
+  return {
+    label: `Failed on unseen data · t ${t}`,
+    tone: "danger",
+    explanation: "Lost money on the holdout — data JARVIS never saw. Probably no real edge.",
+  };
+}
