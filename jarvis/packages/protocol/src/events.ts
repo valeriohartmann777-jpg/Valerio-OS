@@ -31,6 +31,7 @@ export const EVENT_TYPES = [
   "learning.changed",
   "memory.changed",
   "training.changed",
+  "bots.changed",
   "context.updated",
 ] as const;
 

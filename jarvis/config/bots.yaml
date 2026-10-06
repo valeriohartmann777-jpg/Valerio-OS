@@ -1,0 +1,54 @@
+# Bot Lab: JARVIS backtests and improves your MetaTrader 5 Expert Advisors.
+#
+# It finds MetaTrader 5 for Mac and your MQL5 folder by itself, works in its
+# own copy of MetaTrader (the "test terminal" — your running MetaTrader and
+# its trades are never touched) and never changes your EA files: versions go
+# to Experts/JARVIS/<EA>/ only when you click "Copy to MetaTrader".
+#
+# Results are judged like the trading research: Claude iterates on the
+# in-sample years, a version counts only if it also holds out-of-sample, and
+# the holdout is shown only to you.
+
+enabled: true
+
+# Strategy tester defaults (each EA can override them on the Bots page).
+symbol: XAUUSD           # your broker's name for gold: XAUUSD, XAUUSD.m, GOLD, …
+period: M15              # the chart timeframe the EA runs on
+model: real_ticks        # real_ticks (most exact) | every_tick | ohlc_1m (fast) | open_prices
+deposit: 10000
+currency: USD
+leverage: 100
+
+data_start: 2021-01-01   # in-sample: from here …
+oos_start: 2024-07-01    # … out-of-sample from here …
+holdout_start: 2025-04-01  # … and the holdout (only for you) from here to yesterday
+test_timeout_minutes: 90
+
+target_monthly_usd: 10000
+own_drawdown_limit_pct: 20  # what you'd bear on your own account
+prop_firm:                  # typical challenge rules — adjust to your firm
+  account: 100000
+  daily_loss_pct: 5
+  max_loss_pct: 10
+
+research:                   # Claude improving the code (separate budget from learning)
+  model: claude-opus-5-5
+  effort: medium
+  max_tokens: 16000
+  daily_budget_usd: 3.0
+  round_interval_minutes: 20
+  stall_limit: 12           # rounds without a new validated version → stops
+  max_steps_per_round: 12
+  max_backtests_per_round: 4
+  oos_alpha: 0.05
+
+gates:
+  min_trades_in_sample: 60
+  min_trades_out_of_sample: 20
+  min_profit_factor: 1.1
+
+mt5:                        # found automatically; set only if JARVIS can't find MetaTrader
+  app: ""                   # e.g. /Applications/MetaTrader 5.app
+  wine: ""                  # the app's wine binary
+  prefix: ""                # ~/Library/Application Support/net.metaquotes.wine.metatrader5
+  data_dir: ""              # the MQL5 folder with your EAs

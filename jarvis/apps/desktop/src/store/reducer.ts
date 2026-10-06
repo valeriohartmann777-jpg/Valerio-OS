@@ -5,6 +5,7 @@
 
 import type {
   AgentState,
+  BotLabStatus,
   BrainStatus,
   EnvironmentContext,
   JarvisEvent,
@@ -25,6 +26,7 @@ export type View =
   | { name: "home" }
   | { name: "mission"; id: string }
   | { name: "learning" }
+  | { name: "bots" }
   | { name: "settings" };
 export type Connection = "connecting" | "online" | "offline";
 
@@ -45,6 +47,8 @@ export interface UIState {
   learning: LearningStatus | null;
   /** JARVIS's own support/resistance model, trained locally. */
   training: TrainingStatus | null;
+  /** The Bot Lab: the user's MetaTrader EAs. */
+  bots: BotLabStatus | null;
   /** What JARVIS keeps in mind about the user (M1, M2, …). */
   memories: MemoryItem[];
   jarvis: { state: JarvisState; detail: string; since: number };
@@ -89,6 +93,7 @@ export const initialState: UIState = {
   voice: null,
   learning: null,
   training: null,
+  bots: null,
   memories: [],
   jarvis: { state: "DORMANT", detail: "", since: 0 },
   context: null,
@@ -145,6 +150,7 @@ function applySnapshot(state: UIState, snapshot: Snapshot, now: number): UIState
     voice: snapshot.voice,
     learning: snapshot.learning ?? null,
     training: snapshot.training ?? null,
+    bots: snapshot.bots ?? null,
     memories: snapshot.memories ?? [],
     jarvis: { state: snapshot.state.state, detail: snapshot.state.detail, since: now },
     context: snapshot.context,
@@ -212,6 +218,9 @@ function applyEvent(state: UIState, event: JarvisEvent, now: number): UIState {
       break;
     case "training.changed":
       next.training = payload.training as TrainingStatus;
+      break;
+    case "bots.changed":
+      next.bots = payload.bots as BotLabStatus;
       break;
     case "system.online":
       next.version = (payload.version as string | undefined) ?? state.version;

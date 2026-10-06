@@ -14,6 +14,9 @@ from jarvis import __version__
 from jarvis.agents.base import AgentRegistry
 from jarvis.agents.catalog import AGENT_SPECS
 from jarvis.agents.workers import OperatorAgent, SentinelAgent
+from jarvis.bots.mt5 import Mt5Paths
+from jarvis.bots.service import BotLabService, Tester
+from jarvis.bots.store import BotStore
 from jarvis.briefing.service import BriefingService
 from jarvis.build import build_id
 from jarvis.core.brain import Brain
@@ -40,6 +43,7 @@ from jarvis.settings import Settings
 from jarvis.storage.audit import AuditLog
 from jarvis.storage.database import Database
 from jarvis.storage.preferences import Preferences
+from jarvis.tools.bots import register_bot_tools
 from jarvis.tools.briefing import register_briefing_tools
 from jarvis.tools.executor import ToolExecutor
 from jarvis.tools.files import FileAccess, register_file_tools
@@ -75,6 +79,8 @@ class Runtime:
         voice_provider: ProviderFactory | None = None,
         research_model: Callable[[], ResearchModel | None] | None = None,
         market: MarketData | None = None,
+        bot_model: Callable[[], ResearchModel | None] | None = None,
+        bot_tester: Callable[[Mt5Paths], Tester] | None = None,
     ) -> None:
         self.settings = settings
         self.started_at = time.time()
@@ -120,6 +126,7 @@ class Runtime:
         )
         register_briefing_tools(self.tools, lambda: self.briefing)
         register_training_tools(self.tools, lambda: self.training)
+        register_bot_tools(self.tools, lambda: self.bots)
         self.market = market or MarketData(settings.data_dir / "market")
         self.preferences = Preferences(settings.data_dir / "preferences.json")
         self.executor = ToolExecutor(
@@ -226,6 +233,17 @@ class Runtime:
             model_line=lambda: self.training.briefing_line(),
         )
 
+        self._bot_research: tuple[str, ResearchModel] | None = None
+        self.bots = BotLabService(
+            settings=settings.bots,
+            prices=settings.learning.prices,
+            store=BotStore(self.db),
+            bus=self.bus,
+            preferences=self.preferences,
+            model_factory=bot_model or self._bot_model,
+            tester_factory=bot_tester,
+        )
+
         self.training = TrainingService(
             settings=settings.training,
             learning=settings.learning,
@@ -258,6 +276,29 @@ class Runtime:
             )
             self._research = (key, model)
         return self._research[1]
+
+    def _bot_model(self) -> ResearchModel | None:
+        """Claude for the Bot Lab: the brain's key, the Bot Lab's model settings."""
+        secret = self.connector.settings.anthropic_api_key
+        if secret is None or not self.brain.available:
+            return None
+        key = secret.get_secret_value()
+        if self._bot_research is None or self._bot_research[0] != key:
+            import anthropic
+
+            from jarvis.llm.anthropic_provider import AnthropicChatModel
+
+            research = self.settings.bots.research
+            model = AnthropicChatModel(
+                client=anthropic.AsyncAnthropic(api_key=key),
+                model=research.model,
+                max_tokens=research.max_tokens,
+                effort=research.effort,
+                timeout_seconds=research.timeout_seconds,
+                refusal_fallback=self.settings.models.refusal_fallback,
+            )
+            self._bot_research = (key, model)
+        return self._bot_research[1]
 
     @property
     def uptime_seconds(self) -> float:
@@ -306,6 +347,7 @@ class Runtime:
         await self.learning.start()
         await self.briefing.start()
         await self.training.start()
+        await self.bots.start()
 
     async def _housekeep(self) -> None:
         """Once a day: drop old activity (the conversation stays)."""
@@ -324,6 +366,7 @@ class Runtime:
             self._housekeeping.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._housekeeping
+        await self.bots.stop()
         await self.training.stop()
         await self.briefing.stop()
         await self.learning.stop()

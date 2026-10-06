@@ -1,4 +1,7 @@
 import type {
+  BotDetail,
+  BotLabStatus,
+  BotSettings,
   BrainStatus,
   BriefingStatus,
   JarvisEvent,
@@ -100,6 +103,24 @@ export const api = {
   setLearningFocus: (text: string) => post<LearningStatus>("/learning/focus", { text }),
   learningRounds: (limit = 20) => request<LearningRound[]>(`/learning/rounds?limit=${limit}`),
   trainNow: () => post<TrainingStatus>("/training/run"),
+  bots: () => request<BotLabStatus>("/bots"),
+  refreshBots: () => post<BotLabStatus>("/bots/refresh"),
+  setUpBots: () => post<BotLabStatus>("/bots/setup"),
+  openTestTerminal: () => post<{ opened: boolean }>("/bots/test-terminal"),
+  bot: (name: string) => request<BotDetail>(`/bots/${encodeURIComponent(name)}`),
+  importBot: (name: string) => post<BotDetail>(`/bots/${encodeURIComponent(name)}/import`),
+  botSettings: (name: string, settings: Partial<BotSettings>) =>
+    post<BotSettings>(`/bots/${encodeURIComponent(name)}/settings`, settings),
+  botBacktest: (name: string, version: number, inputs: Record<string, string> = {}) =>
+    post<{ started: boolean }>(`/bots/${encodeURIComponent(name)}/backtest`, { version, inputs }),
+  botSource: (name: string, version: number) =>
+    request<{ number: number; source: string; diff: string }>(
+      `/bots/${encodeURIComponent(name)}/versions/${version}/source`,
+    ),
+  installBot: (name: string, version: number) =>
+    post<{ path: string; hint: string }>(`/bots/${encodeURIComponent(name)}/versions/${version}/install`),
+  improveBot: (name: string) => post<BotLabStatus>(`/bots/${encodeURIComponent(name)}/improve`),
+  stopImproving: () => post<BotLabStatus>("/bots/improve/stop"),
   setTraining: (enabled: boolean) => post<TrainingStatus>("/training/preferences", { enabled }),
   connectVoice: (apiKey: string) => post<VoiceStatus>("/voice/key", { api_key: apiKey }),
   voicePreferences: (prefs: { wake_word?: boolean; speak_replies?: boolean }) =>

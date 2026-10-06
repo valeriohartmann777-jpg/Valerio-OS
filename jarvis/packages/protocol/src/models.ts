@@ -424,6 +424,138 @@ export interface TrainingStatus {
   history: TrainingRun[];
 }
 
+export type BotLabPhase =
+  | "idle"
+  | "working"
+  | "improving"
+  | "waiting"
+  | "budget"
+  | "stalled"
+  | "needs_brain"
+  | "error";
+
+export interface BotLabStatus {
+  state: BotLabPhase;
+  detail: string | null;
+  /** JARVIS's own MetaTrader copy is set up. */
+  ready: boolean;
+  /** The user's MetaTrader is open (it is never touched). */
+  user_terminal_running: boolean;
+  checks: { key: string; ok: boolean; label: string; detail: string }[];
+  /** EAs with source in the user's MQL5 folder. */
+  experts: { name: string; path: string; file: string }[];
+  improving: string | null;
+  model: string;
+  budget_usd: number;
+  spent_today_usd: number;
+  next_round_at: string | null;
+  running: { bot: string; test: number; version: number; started_at: string }[];
+}
+
+export interface BotMonth {
+  month: string;
+  pnl: number;
+  pct: number | null;
+  trades: number;
+  start_balance: number;
+}
+
+export interface BotStats {
+  trades: number;
+  net: number;
+  profit_factor: number | null;
+  win_rate: number | null;
+  avg_trade: number | null;
+  return_pct: number;
+  t_stat: number;
+  max_drawdown_pct: number;
+  max_daily_loss_pct: number;
+  months: number;
+  avg_month_pct: number | null;
+  median_month_pct: number | null;
+  worst_month_pct: number | null;
+  positive_months: number;
+  monthly: BotMonth[];
+  prop?: { daily_loss_ok: boolean; max_loss_ok: boolean };
+}
+
+export interface BotTest {
+  number: number;
+  version: number;
+  inputs: Record<string, string>;
+  settings: BotSettings;
+  origin: "user" | "research";
+  created_at: string;
+  finished_at: string | null;
+  status: "running" | "done" | "failed";
+  error: string | null;
+  in_sample: BotStats | null;
+  out_of_sample: BotStats | null;
+  holdout: BotStats | null;
+  unseen: BotStats | null;
+  validated: boolean | null;
+  validation_reason: string | null;
+  holdout_confirmed: boolean | null;
+  seconds: number | null;
+}
+
+export interface BotVersion {
+  number: number;
+  parent: number | null;
+  created_at: string;
+  title: string;
+  hypothesis: string | null;
+  compiled: boolean;
+  errors: string[];
+  diff: { added: number; removed: number } | null;
+}
+
+export interface BotSettings {
+  symbol: string;
+  period: string;
+  model: string;
+  deposit: number;
+  currency?: string;
+  leverage: number;
+}
+
+export interface BotScaling {
+  account: number;
+  drawdown_limit_pct: number;
+  risk_scale: number;
+  monthly_pct: number;
+  monthly_usd: number;
+  account_for_target: number | null;
+  target: number;
+  expected_drawdown_pct: number;
+}
+
+export interface BotDetail {
+  name: string;
+  path: string;
+  settings: BotSettings;
+  inputs: { name: string; type: string; default: string; comment: string; optimizable: boolean }[];
+  versions: BotVersion[];
+  tests: BotTest[];
+  notes: { number: number; created_at: string; text: string }[];
+  rounds: {
+    number: number;
+    status: string;
+    summary: string | null;
+    error: string | null;
+    cost_usd: number;
+    started_at: string;
+  }[];
+  best_test: number | null;
+  projection: {
+    test: number;
+    basis: string;
+    prop_firm: BotScaling | null;
+    own_account: BotScaling | null;
+  } | null;
+  periods: { in_sample: string; out_of_sample: string; holdout: string };
+}
+
 export type MemoryKind = "preference" | "fact" | "routine" | "correction";
 
 export interface MemoryItem {
@@ -443,6 +575,7 @@ export interface Snapshot {
   voice: VoiceStatus;
   learning: LearningStatus;
   training: TrainingStatus;
+  bots: BotLabStatus;
   memories: MemoryItem[];
   state: StateSnapshot;
   system_backend: string;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -436,21 +437,33 @@ def test_a_holdout_merely_in_the_plus_doesnt_confirm() -> None:
 
 
 async def test_stored_verdicts_are_recomputed(tmp_path: Path) -> None:
-    from jarvis.storage.database import Database
+    from jarvis.storage.database import MIGRATIONS, Database
 
     db = Database(tmp_path / "jarvis.db")
     await db.connect()
-    for number, t_stat in ((1, 0.8), (2, 2.4)):
-        holdout = json.dumps({"avg_r": 0.05, "profit_factor": 1.04, "t_stat": t_stat})
-        await db.execute(
-            "INSERT INTO learning_tests (id, number, created_at, name, status, reason, spec, "
-            "holdout, holdout_confirmed) VALUES (?, ?, '', 'x', 'validated', '', '{}', ?, 1)",
-            (f"id{number}", number, holdout),
+    try:
+        for number, t_stat in ((1, 0.8), (2, 2.4)):
+            holdout = json.dumps({"avg_r": 0.05, "profit_factor": 1.04, "t_stat": t_stat})
+            await db.execute(
+                "INSERT INTO learning_tests (id, number, created_at, name, status, reason, spec, "
+                "holdout, holdout_confirmed) VALUES (?, ?, '', 'x', 'validated', '', '{}', ?, 1)",
+                (f"id{number}", number, holdout),
+            )
+        # As before the update: migrations 6 and later haven't run yet.
+        await db.execute("DELETE FROM schema_version WHERE version >= 6")
+        for statements in MIGRATIONS[6:]:
+            for statement in statements:
+                table = re.search(r"CREATE TABLE (\w+)", statement)
+                if table:
+                    await db.execute(f"DROP TABLE {table.group(1)}")
+        await db.close()
+        await db.connect()  # the update's migration runs
+        rows = await db.fetch_all(
+            "SELECT number, holdout_confirmed FROM learning_tests ORDER BY number"
         )
-    # As before the update: migrations 6 and later haven't run yet.
-    await db.execute("DELETE FROM schema_version WHERE version >= 6")
-    await db.execute("DROP TABLE training_runs")
-    await db.close()
+        assert [(r["number"], r["holdout_confirmed"]) for r in rows] == [(1, 0), (2, 1)]
+    finally:
+        await db.close()  # an open connection would keep the test process alive
     await db.connect()  # the update's migration runs
     rows = await db.fetch_all(
         "SELECT number, holdout_confirmed FROM learning_tests ORDER BY number"

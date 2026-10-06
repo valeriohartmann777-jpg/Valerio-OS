@@ -219,6 +219,61 @@ class TrainingSettings(BaseModel):
     sessions: dict[str, TrainingSessionSettings] = Field(default_factory=dict)
 
 
+class Mt5LocationSettings(BaseModel):
+    """Found automatically on a Mac; set only if JARVIS can't find MetaTrader."""
+
+    app: str = ""
+    wine: str = ""
+    prefix: str = ""
+    data_dir: str = ""  # the MQL5 folder with your EAs
+    env: dict[str, str] = Field(default_factory=dict)  # extra environment for Wine
+
+
+class BotResearchSettings(BaseModel):
+    model: str = "claude-opus-5-5"
+    effort: str | None = "medium"
+    max_tokens: int = 16000
+    timeout_seconds: float = 300.0
+    daily_budget_usd: float = 3.0
+    round_interval_minutes: float = 20.0
+    stall_limit: int = 12  # rounds without a new validated version
+    max_steps_per_round: int = 12
+    max_backtests_per_round: int = 4
+    oos_alpha: float = 0.05
+
+
+class BotGates(BaseModel):
+    min_trades_in_sample: int = 60
+    min_trades_out_of_sample: int = 20
+    min_profit_factor: float = 1.1
+
+
+class PropFirmSettings(BaseModel):
+    account: float = 100000.0
+    daily_loss_pct: float = 5.0
+    max_loss_pct: float = 10.0
+
+
+class BotsSettings(BaseModel):
+    enabled: bool = True
+    symbol: str = "XAUUSD"  # the broker's name for gold
+    period: str = "M15"
+    model: str = "real_ticks"  # real_ticks | every_tick | ohlc_1m | open_prices
+    deposit: float = 10000.0
+    currency: str = "USD"
+    leverage: int = 100
+    data_start: date = date(2021, 1, 1)
+    oos_start: date = date(2024, 7, 1)
+    holdout_start: date = date(2025, 4, 1)
+    test_timeout_minutes: float = 90.0
+    target_monthly_usd: float = 10000.0
+    own_drawdown_limit_pct: float = 20.0
+    mt5: Mt5LocationSettings = Field(default_factory=Mt5LocationSettings)
+    research: BotResearchSettings = Field(default_factory=BotResearchSettings)
+    gates: BotGates = Field(default_factory=BotGates)
+    prop_firm: PropFirmSettings = Field(default_factory=PropFirmSettings)
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -259,6 +314,7 @@ class Settings(BaseModel):
     learning: LearningSettings = Field(default_factory=LearningSettings)
     briefing: BriefingSettings = Field(default_factory=BriefingSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
+    bots: BotsSettings = Field(default_factory=BotsSettings)
 
     @property
     def env_file(self) -> Path:
@@ -322,6 +378,7 @@ def load_settings(
     data["learning"] = _read_yaml(config_dir / "learning.yaml")
     data["briefing"] = _read_yaml(config_dir / "briefing.yaml")
     data["training"] = _read_yaml(config_dir / "training.yaml")
+    data["bots"] = _read_yaml(config_dir / "bots.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))

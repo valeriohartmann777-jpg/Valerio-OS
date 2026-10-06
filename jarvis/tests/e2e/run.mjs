@@ -73,6 +73,15 @@ execFileSync(python, [path.join(root, "tests", "e2e", "seed_training.py"), mainD
   cwd: path.join(root, "backend"),
   stdio: "inherit",
 });
+// A fake "MetaTrader 5 for Mac" (its Wine plays MetaEditor and the strategy tester) and a
+// config folder that points the Bot Lab at it.
+const botConfig = execFileSync(
+  python,
+  [path.join(root, "tests", "e2e", "seed_mt5.py"), mkdtempSync(path.join(tmpdir(), "jarvis-e2e-mt5-"))],
+  { cwd: path.join(root, "backend") },
+)
+  .toString()
+  .trim();
 const app = await electron.launch({
   executablePath: electronBinary,
   args: [appDir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])],
@@ -83,6 +92,7 @@ const app = await electron.launch({
     JARVIS_DATA_DIR: mainDataDir,
     JARVIS_UPDATES: "off",
     JARVIS_BACKGROUND: "on", // keep running when the window closes (default on macOS / Windows)
+    JARVIS_CONFIG_DIR: botConfig,
   },
 });
 
@@ -264,6 +274,30 @@ try {
     await shot("10e-trained-model");
     await page.getByRole("button", { name: "Home" }).click();
     await page.getByTestId("learning-row").filter({ hasText: "Off" }).waitFor();
+  });
+
+  await step("Bot Lab: MetaTrader found, test terminal set up, an EA imported, backtested, copied", async () => {
+    await page.getByRole("button", { name: "Bots", exact: true }).click();
+    await page.getByTestId("bots-page").waitFor();
+    await page.getByTestId("bot-check-app").filter({ hasText: "✓" }).waitFor();
+    await page.getByTestId("bot-check-data").filter({ hasText: "1 EA(s)" }).waitFor();
+    await page.getByTestId("bot-setup-button").click();
+    await page.getByRole("button", { name: "Open test terminal" }).waitFor();
+    await page.getByRole("button", { name: "Import GoldScalper" }).click();
+    await page.getByTestId("bot-panel").waitFor();
+    await page.getByTestId("bot-backtest").click(); // compiled and run through the fake Wine
+    await page.getByTestId("bot-results").waitFor({ timeout: 60_000 });
+    await page.getByTestId("bot-months").waitFor();
+    await page.getByTestId("bot-account-needed").first().waitFor();
+    await page.waitForTimeout(300);
+    await shot("11-bots");
+    await page.getByTestId("bot-results").scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, 380);
+    await page.waitForTimeout(300);
+    await shot("11b-bot-results");
+    await page.getByTestId("bot-install-0").click();
+    await page.getByText("Copied to MetaTrader").waitFor();
+    await page.getByRole("button", { name: "Home" }).click();
   });
 
   await step("memory: added on Home, kept, forgotten; the morning briefing is set in Settings", async () => {

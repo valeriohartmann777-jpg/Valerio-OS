@@ -179,6 +179,81 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # 8: Bot Lab — the user's MetaTrader EAs, JARVIS's versions of them, backtests
+    [
+        """
+        CREATE TABLE bots (
+            name        TEXT PRIMARY KEY,
+            path        TEXT NOT NULL,
+            imported_at TEXT NOT NULL,
+            settings    TEXT NOT NULL,
+            stall_since TEXT
+        )
+        """,
+        """
+        CREATE TABLE bot_versions (
+            id          TEXT PRIMARY KEY,
+            bot         TEXT NOT NULL,
+            number      INTEGER NOT NULL,
+            parent      INTEGER,
+            created_at  TEXT NOT NULL,
+            title       TEXT NOT NULL,
+            hypothesis  TEXT,
+            source      TEXT NOT NULL,
+            compiled    INTEGER NOT NULL,
+            errors      TEXT,
+            diff        TEXT,
+            UNIQUE (bot, number)
+        )
+        """,
+        """
+        CREATE TABLE bot_tests (
+            id                TEXT PRIMARY KEY,
+            bot               TEXT NOT NULL,
+            number            INTEGER NOT NULL,
+            version           INTEGER NOT NULL,
+            inputs            TEXT NOT NULL,
+            settings          TEXT NOT NULL,
+            origin            TEXT NOT NULL,
+            created_at        TEXT NOT NULL,
+            finished_at       TEXT,
+            status            TEXT NOT NULL,
+            error             TEXT,
+            in_sample         TEXT,
+            out_of_sample     TEXT,
+            holdout           TEXT,
+            unseen            TEXT,
+            validated         INTEGER,
+            validation_reason TEXT,
+            holdout_confirmed INTEGER,
+            seconds           REAL,
+            UNIQUE (bot, number)
+        )
+        """,
+        """
+        CREATE TABLE bot_notes (
+            id          TEXT PRIMARY KEY,
+            bot         TEXT NOT NULL,
+            number      INTEGER NOT NULL,
+            created_at  TEXT NOT NULL,
+            text        TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE bot_rounds (
+            id          TEXT PRIMARY KEY,
+            bot         TEXT NOT NULL,
+            number      INTEGER NOT NULL,
+            day         TEXT NOT NULL,
+            started_at  TEXT NOT NULL,
+            finished_at TEXT,
+            status      TEXT NOT NULL,
+            cost_usd    REAL NOT NULL DEFAULT 0,
+            summary     TEXT,
+            error       TEXT
+        )
+        """,
+    ],
 ]
 
 

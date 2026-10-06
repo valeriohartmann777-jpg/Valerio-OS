@@ -52,6 +52,12 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   locally and free, retrained after each trading day. It is judged on months
   it never saw against a simple baseline; only if it beats that does JARVIS
   use its odds ("Hält das Level im NQ gerade?").
+- **Bot Lab**: JARVIS finds your MetaTrader 5 Expert Advisors on the Mac,
+  backtests them in its own copy of MetaTrader and improves them with
+  Claude — honestly: in-sample to iterate, out-of-sample to validate, a
+  holdout only you see, prop-firm limits checked, and what account a $10k
+  month would really need. Improved versions reach MetaTrader only when you
+  click "Copy to MetaTrader".
 - **Backend** (FastAPI): event bus + WebSocket stream, state service, router,
   missions with pause/resume/stop, Operator + Sentinel agents, tool framework,
   permission levels 0–4 with approvals, SQLite persistence, audit log,
@@ -113,6 +119,31 @@ after it passed in-sample and out-of-sample; the holdout result (shown to you,
 never to Claude) says whether it also held on unseen data. After 20 rounds
 without a new validated finding learning stops itself — start it again to
 give it another 20.
+
+### Your MetaTrader bots (Bot Lab)
+
+1. Install MetaTrader 5 for Mac and keep your EAs (with source, `.mq5`) in
+   its MQL5 folder. Open **Bots** in JARVIS: it finds MetaTrader, Wine and
+   your EAs by itself.
+2. **Set up test terminal** — JARVIS copies MetaTrader into its own folder
+   (`drive_c/JARVIS/MetaTrader 5`); your running MetaTrader and its trades
+   are never touched. Click **Open test terminal** once and log in to your
+   demo account, so the tester can download gold's history.
+3. Pick an EA → **Import** → set the symbol your broker uses for gold
+   (XAUUSD, XAUUSD.m, GOLD …) and the timeframe → **Backtest the original**.
+4. **Improve with Claude**: in rounds, Claude reads the code and the
+   in-sample results and writes new versions as small edits; JARVIS compiles
+   and backtests them. A version counts only if it holds out-of-sample (the
+   bar rises with every try); the holdout tells you whether it held on data
+   nobody tuned on. $3/day by default, separate from learning.
+5. A version you like: **Copy to MetaTrader** → it appears under
+   `Experts/JARVIS/<EA>/` next to your original. Compile it in MetaEditor and
+   run it on demo first, then the prop-firm challenge.
+
+$10k a month is not something to optimize a backtest for — it comes from
+account size × a real edge × risk. The Bots page shows what account a $10k
+month would need at prop-firm and own-account drawdown limits, from the
+months the EA wasn't tuned on. Settings: `config/bots.yaml`.
 
 ### The trained model
 
@@ -254,4 +285,5 @@ Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) · Decisions: [DECISIONS.md](DE
 - `config/learning.yaml` — trading research: model, budget, periods, markets
 - `config/briefing.yaml` — morning briefing: time, levels
 - `config/training.yaml` — the trained support/resistance model
+- `config/bots.yaml` — Bot Lab: tester defaults, periods, prop-firm limits, Claude budget
 - `.env` — overrides and the Anthropic API key (written by Settings → Brain); see `.env.example`

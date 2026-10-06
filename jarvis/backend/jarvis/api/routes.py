@@ -23,6 +23,9 @@ from jarvis.agents.base import AgentState
 from jarvis.api.schemas import (
     ApiKeyRequest,
     ApproveRequest,
+    BotBacktestRequest,
+    BotLabView,
+    BotSettingsUpdate,
     BrainView,
     BriefingPreferences,
     BriefingView,
@@ -44,6 +47,7 @@ from jarvis.api.schemas import (
     VoicePreferences,
     VoiceView,
 )
+from jarvis.bots.service import BotLabError
 from jarvis.briefing.service import BriefingError
 from jarvis.events.types import Event, Severity
 from jarvis.llm.base import ModelError
@@ -95,6 +99,15 @@ def training_view(rt: Runtime) -> TrainingView:
     return TrainingView.model_validate(asdict(rt.training.status))
 
 
+async def bots_view(rt: Runtime) -> BotLabView:
+    # Looks at running processes and folders: off the event loop.
+    return BotLabView.model_validate(asdict(await asyncio.to_thread(rt.bots.status)))
+
+
+def _bot_error(exc: BotLabError) -> HTTPException:
+    return HTTPException(422, {"code": "bot_lab", "message": str(exc)})
+
+
 def _voice_error(exc: VoiceError, status: int = 422) -> HTTPException:
     return HTTPException(
         status, {"code": exc.code, "message": exc.message, "suggestion": exc.suggestion}
@@ -109,6 +122,7 @@ async def build_snapshot(rt: Runtime) -> Snapshot:
         voice=voice_view(rt),
         learning=learning_view(rt),
         training=training_view(rt),
+        bots=await bots_view(rt),
         memories=memory_views(rt),
         state=rt.state.snapshot(),
         system_backend=rt.backend.name,
@@ -256,6 +270,100 @@ async def forget_memory(number: int, rt: RuntimeDep) -> list[MemoryView]:
     except MemoryRefused as exc:
         raise HTTPException(404, {"code": "not_found", "message": str(exc)}) from exc
     return memory_views(rt)
+
+
+@router.get("/bots")
+async def bots(rt: RuntimeDep) -> BotLabView:
+    return await bots_view(rt)
+
+
+@router.post("/bots/refresh")
+async def bots_refresh(rt: RuntimeDep) -> BotLabView:
+    await asyncio.to_thread(rt.bots.refresh_discovery)
+    return await bots_view(rt)
+
+
+@router.post("/bots/setup")
+async def bots_setup(rt: RuntimeDep) -> BotLabView:
+    try:
+        await rt.bots.set_up()
+    except BotLabError as exc:
+        raise _bot_error(exc) from exc
+    return await bots_view(rt)
+
+
+@router.post("/bots/test-terminal")
+async def bots_test_terminal(rt: RuntimeDep) -> dict[str, bool]:
+    try:
+        await rt.bots.open_test_terminal()
+    except BotLabError as exc:
+        raise _bot_error(exc) from exc
+    return {"opened": True}
+
+
+@router.post("/bots/improve/stop")
+async def bots_improve_stop(rt: RuntimeDep) -> BotLabView:
+    await rt.bots.stop_improving()
+    return await bots_view(rt)
+
+
+@router.get("/bots/{name}")
+async def bot_detail(name: str, rt: RuntimeDep) -> dict[str, Any]:
+    detail = await rt.bots.detail(name)
+    if detail is None:
+        raise HTTPException(404, {"code": "not_imported", "message": f"{name} isn't imported."})
+    return detail
+
+
+@router.post("/bots/{name}/import")
+async def bot_import(name: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.bots.import_bot(name)
+    except BotLabError as exc:
+        raise _bot_error(exc) from exc
+
+
+@router.post("/bots/{name}/settings")
+async def bot_settings(name: str, body: BotSettingsUpdate, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.bots.update_settings(name, body.model_dump(exclude_none=True))
+    except BotLabError as exc:
+        raise _bot_error(exc) from exc
+
+
+@router.post("/bots/{name}/backtest")
+async def bot_backtest(name: str, body: BotBacktestRequest, rt: RuntimeDep) -> dict[str, bool]:
+    if await rt.bots.detail(name) is None:
+        raise HTTPException(404, {"code": "not_imported", "message": f"{name} isn't imported."})
+    if not rt.bots.status().ready:
+        raise _bot_error(BotLabError("Set up the test terminal first."))
+    rt.bots.start_backtest(name, body.version, body.inputs)
+    return {"started": True}
+
+
+@router.get("/bots/{name}/versions/{number}/source")
+async def bot_source(name: str, number: int, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.bots.source(name, number)
+    except BotLabError as exc:
+        raise _bot_error(exc) from exc
+
+
+@router.post("/bots/{name}/versions/{number}/install")
+async def bot_install(name: str, number: int, rt: RuntimeDep) -> dict[str, str]:
+    try:
+        return await rt.bots.install(name, number)
+    except BotLabError as exc:
+        raise _bot_error(exc) from exc
+
+
+@router.post("/bots/{name}/improve")
+async def bot_improve(name: str, rt: RuntimeDep) -> BotLabView:
+    try:
+        await rt.bots.start_improving(name)
+    except BotLabError as exc:
+        raise _bot_error(exc) from exc
+    return await bots_view(rt)
 
 
 @router.get("/training")

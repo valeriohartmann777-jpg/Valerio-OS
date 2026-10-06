@@ -50,6 +50,9 @@ export function TopBar() {
         <NavItem active={view.name === "learning"} view={{ name: "learning" }}>
           Learning
         </NavItem>
+        <NavItem active={view.name === "bots"} view={{ name: "bots" }}>
+          Bots
+        </NavItem>
         <NavItem active={view.name === "settings"} view={{ name: "settings" }}>
           Settings
         </NavItem>

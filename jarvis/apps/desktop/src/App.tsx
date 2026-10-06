@@ -6,6 +6,7 @@ import { CommandBar } from "./components/command/CommandBar";
 import { connectEvents } from "./lib/socket";
 import { connectUpdates } from "./lib/updates";
 import { Home } from "./pages/Home";
+import { Bots } from "./pages/Bots";
 import { Learning } from "./pages/Learning";
 import { MissionDetail } from "./pages/MissionDetail";
 import { Settings } from "./pages/Settings";
@@ -33,6 +34,7 @@ export function App() {
           {view.name === "home" && <Home />}
           {view.name === "mission" && <MissionDetail id={view.id} />}
           {view.name === "learning" && <Learning />}
+          {view.name === "bots" && <Bots />}
           {view.name === "settings" && <Settings />}
         </motion.div>
       </AnimatePresence>

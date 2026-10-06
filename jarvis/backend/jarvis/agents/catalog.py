@@ -17,7 +17,7 @@ SYSTEM_TOOLS = [
 WEB_TOOLS = ["open_url", "search_web"]
 FILE_TOOLS = ["find_files", "list_folder", "read_file", "open_file"]
 MEDIA_TOOLS = ["get_volume", "set_volume", "media_control", "now_playing"]
-LEARNING_TOOLS = ["learning_report", "market_levels", "level_odds"]
+LEARNING_TOOLS = ["learning_report", "market_levels", "level_odds", "bot_report"]
 MEMORY_TOOLS = ["remember", "forget"]
 # Every tool the Operator may run; Sentinel verifies the same set.
 OPERATOR_TOOLS = [

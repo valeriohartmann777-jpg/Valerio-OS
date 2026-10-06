@@ -123,6 +123,20 @@ function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       report_run: null,
       history: [],
     },
+    bots: {
+      state: "idle",
+      detail: null,
+      ready: false,
+      user_terminal_running: false,
+      checks: [],
+      experts: [],
+      improving: null,
+      model: "claude-opus-5-5",
+      budget_usd: 3,
+      spent_today_usd: 0,
+      next_round_at: null,
+      running: [],
+    },
     memories: [],
     state: { state: "DORMANT", detail: "" },
     system_backend: "simulated",
@@ -251,6 +265,14 @@ describe("reducer", () => {
     const training = { ...snapshot().training, state: "training" as const, progress: 0.5 };
     state = apply(state, event("training.changed", { training }, { severity: "info" }));
     expect(state.training?.progress).toBe(0.5);
+  });
+
+  it("follows the Bot Lab", () => {
+    let state = reduce(initialState, { type: "snapshot", snapshot: snapshot(), now: 0 });
+    expect(state.bots?.state).toBe("idle");
+    const bots = { ...snapshot().bots, state: "improving" as const, improving: "GoldScalper" };
+    state = apply(state, event("bots.changed", { bots }, { severity: "info" }));
+    expect(state.bots?.improving).toBe("GoldScalper");
   });
 
   it("keeps the conversation in order, merges history with live messages", () => {

@@ -42,6 +42,7 @@ class EventType(StrEnum):
     LEARNING_CHANGED = "learning.changed"
     MEMORY_CHANGED = "memory.changed"
     TRAINING_CHANGED = "training.changed"
+    BOTS_CHANGED = "bots.changed"
     CONTEXT_UPDATED = "context.updated"
 
 

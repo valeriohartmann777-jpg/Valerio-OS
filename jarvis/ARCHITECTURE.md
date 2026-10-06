@@ -549,6 +549,28 @@ live.py      odds for the levels near the price now (level_odds tool)
 
 ---
 
+## 13e. Bot Lab (`backend/jarvis/bots/`)
+
+```
+mql.py      read/write MQL5 sources (UTF-16/UTF-8, CRLF), inputs, the OnTester deal
+            export, exact search/replace edits
+mt5.py      find MetaTrader 5 for Mac (app, Wine, prefix, MQL5 folders, Common\Files),
+            the test terminal (portable copy), MetaEditor /compile, tester /config runs
+stats.py    deals → trades → in-sample / out-of-sample / holdout / unseen statistics,
+            monthly table, prop-firm check, $10k scaling
+store.py    bots, bot_versions, bot_tests, bot_notes, bot_rounds (migration 8)
+prompt.py   what Claude reads and its tools (create_version, backtest, validate, …)
+service.py  import, backtests (one MetaTrader run at a time), validation gate,
+            install into the user's Experts/JARVIS/, the improvement rounds
+```
+
+- One run per backtest covers all periods; Claude gets only in-sample
+  numbers, `validate` answers pass/fail, the holdout is stored for the user.
+- Status goes out as `bots.changed`; API under `/bots`; `bot_report` lets the
+  brain answer "how are my bots doing?".
+- The E2E test seeds a fake MetaTrader install whose `wine64` is a script
+  playing MetaEditor and the tester, so the real process/path code runs.
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

@@ -295,6 +295,37 @@ _Last updated: 2026-10-04_
   dashboard reconnects, quitting still stops everything (22 steps)
 - Not testable here: the menu-bar icon and login item on a real Mac
 
+### Bot Lab: the user's MetaTrader 5 EAs (D-025)
+- Finds MetaTrader 5 for Mac (app, its Wine, the prefix
+  `net.metaquotes.wine.metatrader5`, MQL5 folders, Common\Files); lists EAs
+  with source (MetaQuotes' examples excluded); setup check on the Bots page
+- Test terminal: a portable copy of the program folder (without history)
+  plus the user's MQL5 folder and saved logins; "Open test terminal" to log
+  in once; the user's MetaTrader is detected and never touched
+- Versions: v0 = the original (re-imported if the file changes); new
+  versions are exact edits, compiled with the deal export appended (an own
+  OnTester keeps working); quoted includes go along; DLL imports, web
+  requests, sockets and file operations are refused
+- Backtests: tester .ini (symbol, timeframe, model, deposit, leverage,
+  inputs), one run over all periods, one MetaTrader run at a time, retry once
+  when the first run only downloaded history, hung test terminal killed
+  (only JARVIS's)
+- Statistics per period: trades, net, profit factor, win rate, compounded
+  return, per-trade t, max drawdown and worst day (closed balance), monthly
+  table; prop-firm check; $10k projection for prop firm and own account
+- Claude rounds: create_version / backtest / validate / write_note /
+  finish_round; in-sample numbers only; Bonferroni-rising out-of-sample bar;
+  $3/day; stops after 12 rounds without a validated version
+- "Copy to MetaTrader" writes `Experts/JARVIS/<EA>/<EA>_vN.mq5` (+ includes)
+- Tests (17): inputs, export hook, edits, encodings, refusals, includes, Mac
+  discovery, Windows paths, .ini, compile log, test-terminal copy, compile +
+  backtest through Wine (simulated, with the retry), deals → trades,
+  periods, drawdown, prop check, scaling, the lab (import, backtest, gate,
+  versions, install, Bonferroni), a scripted Claude round, API, bot_report.
+  E2E: fake MetaTrader install whose Wine plays MetaEditor and the tester —
+  set up, import, backtest, results, copy (23 steps)
+- Not yet run against the real MetaTrader on the MacBook
+
 ## IN PROGRESS
 - —
 
@@ -304,6 +335,7 @@ _Last updated: 2026-10-04_
 0. Voice on the MacBook: connect ElevenLabs, "Hey JARVIS", push-to-talk
 0. Learning on the MacBook: first Dukascopy download, first rounds
 0. Trained model on the MacBook: first real verdict (Learning page)
+0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")

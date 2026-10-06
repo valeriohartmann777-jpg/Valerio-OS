@@ -107,6 +107,34 @@ class TrainingView(BaseModel):
     history: list[dict[str, Any]]
 
 
+class BotLabView(BaseModel):
+    state: str
+    detail: str | None
+    ready: bool
+    user_terminal_running: bool
+    checks: list[dict[str, Any]]
+    experts: list[dict[str, Any]]
+    improving: str | None
+    model: str
+    budget_usd: float
+    spent_today_usd: float
+    next_round_at: str | None
+    running: list[dict[str, Any]]
+
+
+class BotSettingsUpdate(BaseModel):
+    symbol: str | None = Field(None, max_length=30)
+    period: str | None = Field(None, max_length=4)
+    model: str | None = Field(None, max_length=20)
+    deposit: float | None = Field(None, gt=0, le=100_000_000)
+    leverage: int | None = Field(None, gt=0, le=5000)
+
+
+class BotBacktestRequest(BaseModel):
+    version: int = Field(0, ge=0)
+    inputs: dict[str, str] = Field(default_factory=dict)
+
+
 class TrainingPreferences(BaseModel):
     enabled: bool
 
@@ -136,6 +164,7 @@ class Snapshot(BaseModel):
     voice: VoiceView
     learning: LearningView
     training: TrainingView
+    bots: BotLabView
     memories: list[MemoryView]
     state: StateSnapshot
     system_backend: str

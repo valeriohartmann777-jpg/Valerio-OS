@@ -35,6 +35,8 @@ docs that match reality.
 - [x] Background loop with Claude: backtests, notes, web search; $3/day limit; stops itself after 20 rounds without a finding
 - [x] Learning page; "what have you learned?" in the chat (learning_report)
 - [x] Own model trained locally on every key-level touch, retrained daily, judged walk-forward against a baseline; level_odds in the chat
+- [x] Bot Lab: the user's MT5 EAs backtested and improved by Claude, judged out-of-sample, prop-firm check, $10k projection
+- [ ] Bot Lab on the real MacBook MetaTrader (first run; adjust paths if needed)
 - [ ] Tick data and order flow (Bookmap) for real scalping research
 - [ ] Walk-forward re-validation of findings as the holdout grows
 - [x] JARVIS keeps running in the background (menu bar, start at login, crash recovery)

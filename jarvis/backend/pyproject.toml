@@ -55,6 +55,7 @@ ignore = ["RUF012"]
 # prompt prose reads better unwrapped
 "jarvis/core/persona.py" = ["E501"]
 "jarvis/learning/prompt.py" = ["E501"]
+"jarvis/bots/prompt.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

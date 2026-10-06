@@ -160,6 +160,38 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-025 — Bot Lab: improving the user's MT5 EAs without touching their trading
+
+- **Decision:** JARVIS works on the user's MetaTrader 5 EAs in its own
+  portable copy of MetaTrader inside the same Wine prefix (the "test
+  terminal"). Each version is compiled with MetaEditor's command line and
+  backtested with a tester configuration file (`ShutdownTerminal=1`). Results
+  come from an `OnTester` export appended to JARVIS's copy, which writes
+  every deal to Common\Files — not from parsing MetaTrader's report. Claude
+  improves the code with exact search/replace edits; a version counts only if
+  it passes out-of-sample (Bonferroni-rising bar, profit factor, trade count,
+  prop-firm loss limits); the holdout is shown only to the user. Versions
+  reach the user's MetaTrader only on their click, into `Experts/JARVIS/`.
+- **Reason:** The user wants their gold bots to approach $10k a month. A
+  dollar target can't be optimized honestly — it is account × edge × risk;
+  chasing it in backtests produces curve-fitting and oversized risk. So the
+  lab improves the edge on data it can be judged on, checks prop-firm rules
+  (the user's path: demo → prop firm → own account) and computes the account
+  a $10k month would need from the untuned months. The user's MetaTrader may
+  be trading, so it is never driven; the deal export avoids depending on the
+  report format; edits that add DLL imports, web requests, sockets or file
+  operations are refused.
+- **Alternatives:** MetaTrader's built-in genetic optimizer (fast, but it
+  optimizes parameters for the past — the opposite of what's needed); the
+  Python MetaTrader5 package (Windows only, and it drives the live
+  terminal); parsing the HTML report (format drifts between builds).
+- **Consequences:** Needs MetaTrader 5 for Mac, the EA's source, and a
+  logged-in test terminal (once). Not yet run against a real MetaTrader:
+  paths, Wine and command lines follow MetaQuotes' documentation and are
+  tested with a simulated install whose Wine plays MetaEditor and the
+  tester; everything is overridable in `config/bots.yaml`.
+- **Date:** 2026-10-06
+
 ## D-024 — JARVIS keeps running: menu bar, start at login, crash recovery
 
 - **Decision:** Closing the window hides it; JARVIS lives on in the menu bar
