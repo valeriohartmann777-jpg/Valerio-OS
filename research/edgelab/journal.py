@@ -82,6 +82,36 @@ def record_result(exp_id: str, *, actual: str, interpretation: str, decision: st
     path.write_text(text, encoding="utf-8")
 
 
+def note(title: str, text: str, path: Path = JOURNAL) -> None:
+    """Append a dated free-text note (protocol clarification, data finding, re-run reason).
+
+    Notes never count as pre-registrations and never carry results."""
+    if not title.strip() or "\n" in title:
+        raise ValueError("note title must be one non-empty line")
+    block = f"\n### NOTE {_now()} — {title.strip()}\n\n{text.strip()}\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(block)
+
+
+def has_note(title_prefix: str, path: Path = JOURNAL) -> bool:
+    """True if a note whose title starts with ``title_prefix`` exists."""
+    if not path.exists():
+        return False
+    pat = re.compile(r"^### NOTE \S+ — " + re.escape(title_prefix), flags=re.M)
+    return bool(pat.search(path.read_text(encoding="utf-8")))
+
+
+def has_result(exp_id: str, path: Path = JOURNAL) -> bool:
+    """True if at least one result was recorded under the entry ``exp_id``."""
+    if not is_preregistered(exp_id, path):
+        return False
+    text = path.read_text(encoding="utf-8")
+    start = re.search(rf"^{re.escape(_header(exp_id))}", text, flags=re.M).start()
+    end = text.index(f"<!-- results:{exp_id} -->", start)
+    return "**Result recorded (UTC):**" in text[start:end]
+
+
 def entries(path: Path = JOURNAL) -> list[str]:
     """IDs of all journal entries in order."""
     if not path.exists():

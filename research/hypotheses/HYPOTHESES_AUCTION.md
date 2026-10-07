@@ -22,9 +22,10 @@ Common definitions and decision rules: `RESEARCH_PROTOCOL.md`. Machine-readable 
 * **Controls.** *Time-matched*: 5 bars at the same minute of day on other trading dates
   of the same split, same direction. *Shifted-reference*: the reference levels of a
   randomly drawn other trading date, shifted so that their offset from the current
-  day's RTH open is preserved (5 draws per day); the identical detector is rerun on
-  them. This is the randomized-level test: it keeps the geometry and breaks the link
-  to the actual auction.
+  day's RTH open is preserved (5 draws per day; offset scaled by the ratio of daily
+  ATRs, RESEARCH_PROTOCOL.md 13.5); the identical detector is rerun on them. This is
+  the randomized-level test: it keeps the geometry and breaks the link to the actual
+  auction.
 * **Primary test** per hypothesis: one metric, one horizon, one control, registered
   in the multiple-testing registry. Everything else is descriptive.
 

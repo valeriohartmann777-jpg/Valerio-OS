@@ -161,3 +161,60 @@ evidence for. Every score gets a one-line justification.
   failures, so the multiple-testing burden is visible.
 * Synthetic data never appears in a result. Proxy (BTCUSDT) results are labelled PROXY
   everywhere.
+
+## 13. Pre-data clarifications (2026-10-07)
+
+Written while the detectors were implemented, **before any market data existed in this
+project**. They make the rules above operational; none was chosen after seeing a result.
+The same text is the journal note "PRE-DATA CLARIFICATIONS".
+
+1. **Timeframe and horizons.** Event studies use 5-minute bars built from 1-minute data
+   (anchored 18:00 ET). Horizons are 1, 3, 6, 12, 24, 48 bars (5 min to 4 h). `r{h}` is the
+   signed return from the next bar's open to the close of bar t+h in units of the event
+   bar's 5-minute ATR(14); `reod` runs to the close of the bar ending 15:55.
+2. **Event days (2.2).** Day k qualifies when it lies in the research period, k and k−1
+   both have full RTH (first bar 09:30, last bar within one bar of 16:00) and no early
+   close, neither is roll-excluded, k−1 is at most 5 calendar days before k, and the RTH
+   open and daily ATR are known.
+3. **Rolls (2.3).** With a contract column: the trading date of every contract change.
+   Without one (unadjusted or unknown adjustment): the conventional roll date (third
+   Friday minus 8 days) and the session after it. Difference or ratio adjusted: none.
+4. **DEV only (3.2).** The event-study runner does not load any bar after the last DEV
+   trading date.
+5. **Shifted reference.** The partner day is a random other event day (5 draws per day).
+   Its levels are re-anchored to today's RTH open (A006: the 10:30 price) with the offset
+   scaled by ATR_d(today) / ATR_d(partner), so the distance distribution matches in
+   volatility units. For the nearest pivot zone, an adaptive level that follows today's
+   price, the control is the displaced zone set: per draw and date the whole zone set is
+   moved by ±U(0.5, 1.5) × the 5-minute ATR at the open, and the nearest displaced zone
+   above/below today's price is used. Another day's nearest zones would sit far from
+   today's path and be reached only after large moves; a software check on synthetic
+   data (not evidence) showed 2–7× fewer control events per draw with that design and
+   equal counts with the displaced set.
+6. **Time-matched controls.** The same 5-minute bar (exact minute) on 5 randomly drawn
+   other event days of the period, same direction.
+7. **p-values and CIs.** Two-sided percentile bootstrap, p = 2·min(P*(T ≤ 0), P*(T ≥ 0)),
+   10,000 resamples of whole trading dates (multinomial date weights); 95% percentile CI.
+8. **Gates.** G5: the oriented effect is positive in both halves, split at the median
+   trading date of the study's observations. G6: when the pre-registered twin is the
+   primary control, G6 equals G1; when no twin was pre-registered, G6 is not applicable
+   and does not block. Study types: E (event effect, G1–G6), I (incremental comparison,
+   never a candidate, G1 G2 G4 G5) and M (mechanism / magnitude / filter, never a
+   candidate, G1 G2 G4 G5); for I and M, G4 counts the smallest group. G3 for A003 uses
+   the R-multiple test against the cost in R (cost / stop distance), for A014 half the
+   coefficient (the per-trade gain of a long-after-up / short-after-down rule).
+9. **Registry.** The G6 twin test and the G3 economic test are registered with the
+   primary test and count in Benjamini–Hochberg. Descriptive tables (other horizons,
+   conditions, CIs at 2,000 resamples) never decide anything; a number used later for a
+   decision is registered first.
+10. **Family fallback and cap.** Effects of different studies have different units (ATR,
+    ATR_d, R, probability), so "highest lower CI bound" is applied unit-free: the lower
+    95% bound of the net-of-cost effect in standard errors, (effect − hurdle) / se − 1.96,
+    ties by pre-data rank. A hypothesis yields at most one candidate (its best variant
+    by that score); at most five candidates per family.
+11. **Costs.** The cost hurdle of the crypto proxy also includes the taker fee on both
+    sides (basis points × price).
+12. **Re-runs.** A study that already ran on a dataset runs again only with a written
+    reason (journal note); its tests are registered again and count.
+13. **Data-quality gate (2.1).** The runner refuses to start until the journal holds a
+    note titled "DATA_QUALITY <dataset id>" with the findings of the quality report.

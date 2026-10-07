@@ -81,6 +81,15 @@ class SplitLedger:
         rec = self._load().get(f"{instrument}:{dataset_sha[:16]}")
         return {k: tuple(v) for k, v in rec["split"].items()} if rec else None
 
+    def first_for_market(self, instrument: str) -> dict[str, tuple[str, str]] | None:
+        """Earliest split registered for ``instrument`` (any dataset): the calendar that every
+        other market reuses (RESEARCH_PROTOCOL.md 2.5)."""
+        recs = [v for k, v in self._load().items() if k.split(":", 1)[0] == instrument]
+        if not recs:
+            return None
+        first = min(recs, key=lambda v: v["registered_utc"])
+        return {k: tuple(v) for k, v in first["split"].items()}
+
 
 class TestSetGuard:
     """One-shot access to the TEST period per frozen candidate."""

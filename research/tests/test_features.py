@@ -14,7 +14,7 @@ from edgelab.features.levels import (
     developing_extremes, equal_levels, opening_range, prior_week_levels, session_levels,
 )
 from edgelab.features.profile import (
-    build_profile, developing_value, poc_index, profile_levels, session_profiles, tpo_profile, value_area,
+    build_profile, developing_value, poc_index, session_profiles, tpo_profile, value_area,
 )
 from edgelab.features.sr import level_touches, pivot_zones
 from edgelab.features.structure import structure_breaks, structure_trend
@@ -22,7 +22,6 @@ from edgelab.features.swings import find_pivots, swing_state, zigzag_pivots
 from edgelab.features.volatility import atr, efficiency_ratio, true_range
 from edgelab.features.vwap import event_anchored_vwap, session_vwap
 from edgelab.resample import resample_bars, session_bars
-from edgelab.sessions import label_sessions
 from edgelab.timing import attach_asof
 
 TZ = "America/New_York"

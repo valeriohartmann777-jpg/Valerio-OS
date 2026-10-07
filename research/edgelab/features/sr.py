@@ -39,12 +39,18 @@ def pivot_zones(
     *,
     merge_tol_atr: float = 0.25,
     max_age_bars: int | None = None,
+    query_offsets: np.ndarray | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Causal zone tracker.
 
     Returns ``(state, zones)``. ``state`` (per bar) has the nearest zone above and below
     the close: centre, number of pivots, age in bars and bars since the last pivot.
     ``zones`` lists every zone with its final statistics (descriptive).
+
+    ``query_offsets`` (shape ``(R, n)``, NaN = skip) adds the randomized-level control:
+    for draw ``r`` the whole zone set is displaced by ``delta = query_offsets[r, i]`` and
+    ``res_center_q{r}`` / ``sup_center_q{r}`` are the nearest DISPLACED zone centres above /
+    below the close (nearest real zone to ``close - delta``, plus ``delta``).
     """
     c = bars["close"].to_numpy(float)
     a = atr_series.to_numpy(float)
@@ -56,6 +62,13 @@ def pivot_zones(
     centers: list[float] = []
     cols = {k: np.full(n, np.nan) for k in (
         "res_center", "res_n", "res_age", "res_since", "sup_center", "sup_n", "sup_age", "sup_since")}
+    qo = None if query_offsets is None else np.atleast_2d(np.asarray(query_offsets, float))
+    if qo is not None:
+        if qo.shape[1] != n:
+            raise ValueError("query_offsets must have one column per bar")
+        for r in range(qo.shape[0]):
+            cols[f"res_center_q{r}"] = np.full(n, np.nan)
+            cols[f"sup_center_q{r}"] = np.full(n, np.nan)
     next_id = 0
     for i in range(n):
         for price, ppos in by_conf.get(i, ()):
@@ -99,6 +112,16 @@ def pivot_zones(
             z = zones[k - 1]
             cols["sup_center"][i], cols["sup_n"][i] = z.center, z.n_pivots
             cols["sup_age"][i], cols["sup_since"][i] = i - z.first_pos, i - z.last_pos
+        if qo is not None:
+            for r in range(qo.shape[0]):
+                dlt = qo[r, i]
+                if not np.isfinite(dlt):
+                    continue
+                kq = bisect.bisect_right(centers, c[i] - dlt)
+                if kq < len(zones):
+                    cols[f"res_center_q{r}"][i] = centers[kq] + dlt
+                if kq - 1 >= 0:
+                    cols[f"sup_center_q{r}"][i] = centers[kq - 1] + dlt
     state = pd.DataFrame(cols, index=bars.index)
     zlist = pd.DataFrame(
         [{"zid": z.zid, "center": z.center, "lo": z.lo, "hi": z.hi, "n_pivots": z.n_pivots, "first_pos": z.first_pos, "last_pos": z.last_pos} for z in zones]

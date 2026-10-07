@@ -142,7 +142,10 @@ def test_registry_and_run_dir(tmp_path):
         assert (d / f).exists()
     reg = load_registry(tmp_path)
     assert reg["experiment_id"].tolist() == ["A001"] and reg["parameter_hash"].iloc[0] == param_hash({"x": 1})
-    assert next_experiment_id("A", tmp_path) == "A002"
+    assert next_experiment_id("A", tmp_path, journal_path=tmp_path / "J.md") == "A002"
+    journal.preregister("A007", "event study", hypothesis="h", reason="r", rules="x", parameters="{}", dataset="d",
+                        expected="e", path=tmp_path / "J.md")
+    assert next_experiment_id("A", tmp_path, journal_path=tmp_path / "J.md") == "A008"  # journal IDs are taken too
     assert json.loads((d / "metrics.json").read_text())["trades"] == 3
 
 

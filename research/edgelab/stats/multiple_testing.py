@@ -82,7 +82,7 @@ class TestRegistry:
         df["p_bh_global"], df["sig_bh_global"] = benjamini_hochberg(p, q)
         df["p_bh_family"] = np.nan
         df["sig_bh_family"] = False
-        for fam, idx in df.groupby("family").groups.items():
+        for _fam, idx in df.groupby("family").groups.items():
             adj, rej = benjamini_hochberg(p[np.asarray(list(idx))], q)
             df.loc[idx, "p_bh_family"] = adj
             df.loc[idx, "sig_bh_family"] = rej

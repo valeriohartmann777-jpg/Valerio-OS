@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
-import pytest
 
 from edgelab.config import load_session_template
 from edgelab.data.loader import infer_bar_minutes, load_bars

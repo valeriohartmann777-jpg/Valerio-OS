@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Callable
 
 import numpy as np
+import pandas as pd
 
 UNCERTAIN = "Evidence of positive expectancy remains statistically uncertain."
 
@@ -89,3 +90,117 @@ def expectancy_verdict(ci: dict[str, float]) -> str:
     if ci["lo"] > 0:
         return "95% CI of expectancy excludes zero (positive)."
     return "95% CI of expectancy excludes zero (negative)."
+
+
+def _date_codes(dates: np.ndarray) -> tuple[np.ndarray, int]:
+    codes, uniq = pd.factorize(pd.Series(np.asarray(dates)), sort=True)
+    if (codes < 0).any():
+        raise ValueError("cluster keys must not be missing")
+    return codes.astype(np.int64), len(uniq)
+
+
+def date_bootstrap(
+    dates: np.ndarray,
+    moments: dict[str, np.ndarray],
+    stat: Callable[[dict[str, np.ndarray]], np.ndarray],
+    *,
+    n_boot: int = 10_000,
+    ci: float = 0.95,
+    seed: int = 0,
+    chunk: int = 500,
+) -> dict[str, float]:
+    """Cluster bootstrap over trading dates for any statistic of ADDITIVE moments.
+
+    ``moments`` holds per-observation additive quantities (e.g. ``value * is_event`` and
+    ``is_event``). They are summed per date; each replicate draws D dates with replacement
+    (multinomial weights) and evaluates ``stat`` on the weighted totals. Means, differences
+    of means, differences of differences, stratified differences, within-stratum slopes and
+    OLS coefficients are all smooth functions of such totals, so one routine covers every
+    primary test of the event-study protocol. ``stat`` must accept arrays (vectorised) and
+    scalars alike.
+
+    Returns point, lo, hi (percentile CI), se, the two-sided percentile p-value
+    ``2 * min(P(T* <= 0), P(T* >= 0))``, the number of dates and of finite replicates.
+    """
+    codes, n_dates = _date_codes(dates)
+    keys = list(moments)
+    if n_dates == 0:
+        return {"point": np.nan, "lo": np.nan, "hi": np.nan, "se": np.nan, "p_value": np.nan, "n_dates": 0, "n_boot_finite": 0}
+    per_date = np.column_stack(
+        [np.bincount(codes, weights=np.asarray(moments[k], float), minlength=n_dates) for k in keys]
+    )
+    totals = per_date.sum(axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        point = float(np.asarray(stat({k: totals[j] for j, k in enumerate(keys)}), float))
+    rng = np.random.default_rng(seed)
+    probs = np.full(n_dates, 1.0 / n_dates)
+    dist = []
+    for start in range(0, n_boot, chunk):
+        m = min(chunk, n_boot - start)
+        w = rng.multinomial(n_dates, probs, size=m).astype(float)
+        t = w @ per_date
+        with np.errstate(invalid="ignore", divide="ignore"):
+            dist.append(np.asarray(stat({k: t[:, j] for j, k in enumerate(keys)}), float).reshape(-1))
+    d = np.concatenate(dist)
+    d = d[np.isfinite(d)]
+    if len(d) < 2 or not np.isfinite(point):
+        return {"point": point, "lo": np.nan, "hi": np.nan, "se": np.nan, "p_value": np.nan, "n_dates": n_dates, "n_boot_finite": int(len(d))}
+    alpha = (1 - ci) / 2
+    lo, hi = np.quantile(d, [alpha, 1 - alpha])
+    p = min(1.0, 2.0 * min((d <= 0).mean(), (d >= 0).mean()))
+    return {
+        "point": point,
+        "lo": float(lo),
+        "hi": float(hi),
+        "se": float(d.std(ddof=1)),
+        "p_value": float(p),
+        "n_dates": n_dates,
+        "n_boot_finite": int(len(d)),
+    }
+
+
+def _weighted_median(values_sorted: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """Row-wise weighted median; ``weights`` is (m, n) aligned with ascending ``values_sorted``."""
+    cw = np.cumsum(weights, axis=1)
+    half = cw[:, -1:] / 2.0
+    idx = (cw >= half).argmax(axis=1)
+    out = values_sorted[idx]
+    out[cw[:, -1] <= 0] = np.nan
+    return out
+
+
+def date_bootstrap_median_diff(
+    dates: np.ndarray,
+    values: np.ndarray,
+    is_a: np.ndarray,
+    *,
+    n_boot: int = 10_000,
+    ci: float = 0.95,
+    seed: int = 0,
+    chunk: int = 200,
+) -> dict[str, float]:
+    """Date-cluster bootstrap of median(a) - median(not a). Medians are not additive, so
+    each replicate re-weights observations by their date's multinomial count."""
+    v = np.asarray(values, float)
+    a = np.asarray(is_a, bool)
+    codes, n_dates = _date_codes(dates)
+    if n_dates == 0 or a.sum() == 0 or (~a).sum() == 0:
+        return {"point": np.nan, "lo": np.nan, "hi": np.nan, "se": np.nan, "p_value": np.nan, "n_dates": n_dates, "n_boot_finite": 0}
+    oa, ob = np.argsort(v[a], kind="stable"), np.argsort(v[~a], kind="stable")
+    va, vb = v[a][oa], v[~a][ob]
+    ca, cb = codes[a][oa], codes[~a][ob]
+    point = float(np.median(va) - np.median(vb))
+    rng = np.random.default_rng(seed)
+    probs = np.full(n_dates, 1.0 / n_dates)
+    dist = []
+    for start in range(0, n_boot, chunk):
+        m = min(chunk, n_boot - start)
+        w = rng.multinomial(n_dates, probs, size=m).astype(float)
+        dist.append(_weighted_median(va, w[:, ca]) - _weighted_median(vb, w[:, cb]))
+    d = np.concatenate(dist)
+    d = d[np.isfinite(d)]
+    alpha = (1 - ci) / 2
+    lo, hi = np.quantile(d, [alpha, 1 - alpha]) if len(d) > 1 else (np.nan, np.nan)
+    p = min(1.0, 2.0 * min((d <= 0).mean(), (d >= 0).mean())) if len(d) > 1 else np.nan
+    return {"point": point, "lo": float(lo), "hi": float(hi), "se": float(d.std(ddof=1)) if len(d) > 1 else np.nan,
+            "p_value": float(p), "n_dates": n_dates, "n_boot_finite": int(len(d))}

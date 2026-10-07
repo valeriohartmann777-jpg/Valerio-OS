@@ -30,7 +30,7 @@ walk_forward:
   step_months: 3
 
 event_study:
-  horizons_bars: [1, 2, 3, 5, 10, 20, 30, 60]
+  horizons_bars: [1, 3, 6, 12, 24, 48]     # 5-minute signal bars: 5 min .. 4 h (see configs/event_studies.yaml)
   control_draws_per_event: 5
   stay_within_session: true
 

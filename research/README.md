@@ -9,6 +9,12 @@ place; no real market data could be obtained from inside the environment (see
 [reports/DATA_ACQUISITION_LOG.md](reports/DATA_ACQUISITION_LOG.md)). No performance
 result exists anywhere in this directory, and none will be produced from synthetic data.
 
+All 52 event studies (A001–A015, B001–B018, C001–C018, C009vC001) are implemented in
+`edgelab/studies/`, their parameters are frozen in `configs/event_studies.yaml`, and each
+is pre-registered with its expected outcome in
+[journal/RESEARCH_JOURNAL.md](journal/RESEARCH_JOURNAL.md), all before any data. The first
+real run is one command (below) and cannot be tuned to what it shows.
+
 ## Research chain
 
 theory → mechanism → hypothesis → event study → minimum viable strategy → trade
@@ -45,6 +51,11 @@ frozen candidate see the final test period exactly once.
   shapes), swings with confirmation delay, structure (BOS/CHoCH), FVG, session levels,
   opening range, equal highs/lows, S/R zones and touches, regimes
 * `events/` — event studies against time-matched controls, first-passage analysis
+* `studies/` — the pre-registered event studies: causal feature context, detectors
+  (sweeps, zone entries, breakouts, retests, runs, band fades), controls (time-matched,
+  momentum / strength twins, shifted reference, displaced pivot-zone set), date-cluster
+  bootstrap tests, one function per study ID, and the runner that applies gates G1–G6
+  with Benjamini–Hochberg over the whole test registry
 * `execution/` — bar-based execution engine (market/limit/stop, gaps, stop-first
   ambiguity, flat time, session end), cost model, position sizing
 * `metrics`, `stats/`, `validation/` — full metric set, bootstrap, Monte Carlo, risk of
@@ -81,6 +92,11 @@ python -m pytest            # about a minute
 3. Register it in `configs/datasets.yaml`.
 4. `python scripts/prepare_data.py` then `python scripts/data_quality.py`, and read
    `reports/DATA_QUALITY_REPORT.md` before any research step.
+5. Record how its findings were handled:
+   `python scripts/journal_note.py --title "DATA_QUALITY <id>" --text-file <notes>`.
+6. `python scripts/run_event_studies.py --dataset <id>` runs every pre-registered event
+   study on the DEV period only (the split is frozen on this first run) and writes
+   `event_studies/<id>/SUMMARY.md`, the test registry, journal results and rejections.
 
 Preferred: ES and NQ 1-minute OHLCV, 2015 or later, with a contract column or a
 documented roll method. BTCUSDT perpetual data is accepted as PROXY evidence only and

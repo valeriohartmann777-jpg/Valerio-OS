@@ -165,7 +165,12 @@ def load_registry(results_root: Path = RESULTS_DIR) -> pd.DataFrame:
     return pd.read_parquet(path) if path.exists() else pd.DataFrame(columns=REGISTRY_COLUMNS)
 
 
-def next_experiment_id(prefix: str, results_root: Path = RESULTS_DIR) -> str:
+def next_experiment_id(prefix: str, results_root: Path = RESULTS_DIR, journal_path: Path | None = None) -> str:
+    """Next free ID of a family: above every ID in the registry AND in the journal (the
+    event studies A001-A015, B001-B018, C001-C018 hold their IDs in the journal)."""
+    from .journal import JOURNAL, entries
+
     reg = load_registry(results_root)
-    nums = [int(x[1:]) for x in reg.get("experiment_id", pd.Series(dtype=str)).astype(str) if x.startswith(prefix) and x[1:].isdigit()]
+    ids = list(reg.get("experiment_id", pd.Series(dtype=str)).astype(str)) + entries(journal_path or JOURNAL)
+    nums = [int(x[1:4]) for x in ids if x.startswith(prefix) and x[1:4].isdigit()]
     return f"{prefix}{(max(nums) + 1) if nums else 1:03d}"

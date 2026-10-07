@@ -23,7 +23,9 @@ journal entry. Theory: `theory/THEORY_PRICE_ACTION.md`. Common definitions are t
   the same minute over the prior 20 sessions; strong body: close breakout with body ≥ 1.5 ×
   median body(100) and close location ≥ 0.75.
 * **Session window.** RTH decisions 09:45–15:00 unless stated.
-* **Shifted-reference twin** and **time-matched controls** as in family A.
+* **Shifted-reference twin** and **time-matched controls** as in family A. For pivot
+  zones (an adaptive level) the shifted reference is the displaced zone set
+  (RESEARCH_PROTOCOL.md 13.5).
 
 ## Ranking (made before data)
 
