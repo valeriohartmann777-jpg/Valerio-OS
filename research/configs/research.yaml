@@ -1,0 +1,60 @@
+# Global research protocol settings. Changing any value here after real data has been
+# inspected must be logged in journal/RESEARCH_JOURNAL.md with the reason.
+
+seeds:
+  bootstrap: 20261007
+  monte_carlo: 20261008
+  sampling: 20261009
+  randomization: 20261010
+
+markets:
+  development: ES
+  validation_market: NQ
+  proxy: BTCUSDT_PERP        # labelled PROXY in every output, never CME evidence
+
+data:
+  base_resolution_minutes: 1
+  strategy_timeframes_minutes: [5, 15]   # small set chosen from the mechanisms, not a grid search
+  context_timeframes: ["30min", "60min", "240min", "1D"]
+
+splits:
+  method: chronological_trading_days
+  fractions: {DEV: 0.50, VAL: 0.25, TEST: 0.25}
+  # The TEST window is fixed the first time real data is registered and is then written to
+  # results/split_ledger.json. It may be evaluated once per frozen candidate.
+  embargo_trading_days: 5      # gap between DEV/VAL and VAL/TEST to avoid overlap leakage
+
+walk_forward:
+  train_months: 12
+  test_months: 3
+  step_months: 3
+
+event_study:
+  horizons_bars: [1, 2, 3, 5, 10, 20, 30, 60]
+  control_draws_per_event: 5
+  stay_within_session: true
+
+statistics:
+  bootstrap_resamples: 10000
+  ci_level: 0.95
+  fdr_q: 0.10                  # Benjamini-Hochberg false discovery rate across all registered tests
+  min_trades_interpretable: 100
+
+costs:
+  default_scenario: BASE
+  scenarios: [LOW, BASE, STRESS]
+  slippage_multipliers: [0.5, 1.0, 1.5, 2.0]
+
+execution:
+  ambiguity: conservative      # stop first when stop and target sit inside one bar
+  entry_delays_bars: [0, 1, 2] # 0 = next bar open after the signal bar closes
+  min_risk_ticks: 4
+
+sizing:
+  normalized_risk_R: 1.0
+  fixed_fractional: [0.0025, 0.005]
+  initial_equity: 100000
+
+development_budget:
+  max_refinement_generations: 3   # V0 baseline + at most 3 refinements per candidate
+  max_candidates_per_family: 5

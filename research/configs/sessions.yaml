@@ -1,0 +1,57 @@
+# Session templates. All times are wall-clock times in `timezone`.
+#
+# trading_day_start  bars at or after this wall-clock time belong to the NEXT trading date
+#                    (CME Globex: Sunday 18:00 ET opens Monday's trade date).
+# buckets            mutually exclusive [start, end) research partitions. They are
+#                    economically motivated (overnight inventory, data releases at 08:30,
+#                    the opening auction, lunch lull, closing flows), NOT optimised.
+#                    A bucket whose start > end wraps midnight.
+# phases             coarse partition used for level construction (keys are quoted:
+#                    YAML 1.1 would otherwise read ON as the boolean true):
+#                    ON   = overnight / Globex session before the cash open (18:00-09:30)
+#                    RTH  = regular trading hours (09:30-16:00)
+#                    POST = post-cash-close Globex trading (16:00-17:00)
+#                    BREAK = daily maintenance halt (no bars expected for CME)
+
+templates:
+  cme_equity_index:
+    timezone: America/New_York
+    trading_day_start: "18:00"
+    maintenance_break: ["17:00", "18:00"]
+    rth: ["09:30", "16:00"]
+    initial_balance_minutes: 60
+    buckets:
+      OVERNIGHT: ["18:00", "08:00"]
+      PREMARKET: ["08:00", "09:30"]
+      RTH_OPEN:  ["09:30", "10:30"]
+      MORNING:   ["10:30", "12:00"]
+      MIDDAY:    ["12:00", "14:00"]
+      AFTERNOON: ["14:00", "16:00"]
+      POST:      ["16:00", "17:00"]
+      BREAK:     ["17:00", "18:00"]
+    phases:
+      "ON":    ["18:00", "09:30"]
+      RTH:   ["09:30", "16:00"]
+      POST:  ["16:00", "17:00"]
+      BREAK: ["17:00", "18:00"]
+
+  # Crypto trades 24/7. The same New York partitions are used so that results are
+  # comparable by time of day; there is no maintenance break, POST runs to 18:00.
+  crypto_24x7_ny:
+    timezone: America/New_York
+    trading_day_start: "18:00"
+    maintenance_break: null
+    rth: ["09:30", "16:00"]
+    initial_balance_minutes: 60
+    buckets:
+      OVERNIGHT: ["18:00", "08:00"]
+      PREMARKET: ["08:00", "09:30"]
+      RTH_OPEN:  ["09:30", "10:30"]
+      MORNING:   ["10:30", "12:00"]
+      MIDDAY:    ["12:00", "14:00"]
+      AFTERNOON: ["14:00", "16:00"]
+      POST:      ["16:00", "18:00"]
+    phases:
+      "ON":   ["18:00", "09:30"]
+      RTH:  ["09:30", "16:00"]
+      POST: ["16:00", "18:00"]

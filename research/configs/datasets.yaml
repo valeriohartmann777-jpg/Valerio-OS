@@ -1,0 +1,33 @@
+# Registered raw datasets. Research code only ever reads data listed here.
+#
+# Every entry must state how the vendor timestamps its bars. There are no defaults
+# for `tz_in` and `label` because guessing them wrong shifts every signal by one bar
+# (a lookahead bug) or by hours (a session bug).
+#
+#   id            unique name; processed output is data/processed/<id>.parquet
+#   instrument    key in instruments.yaml (ES, NQ, ..., BTCUSDT_PERP)
+#   path          raw file, relative to research/
+#   source        vendor, product and how a continuous series was built
+#   tz_in         timezone of NAIVE timestamps in the file (ignored for epoch / tz-aware)
+#   label         "open" if the timestamp marks the bar start, "close" if the bar end
+#   bar_minutes   bar length in the file
+#   adjustment    unadjusted | difference | ratio | per_contract | unknown
+#   on_conflict   what to do with duplicate timestamps whose values differ:
+#                 abort (default) | first | last. Identical duplicates are dropped and counted.
+#   column_map    optional {vendor column: canonical name}
+#   read_kwargs   optional pandas.read_csv arguments, e.g. {header: null, names: [ts, open, high, low, close, volume]}
+#   ts_format     optional strftime format, e.g. "%Y%m%d %H%M%S" for NinjaTrader exports
+#   price_scale   multiplier for fixed-point prices (1e-9 for raw Databento integers)
+#
+# Example (not active):
+#   - id: ES_1m
+#     instrument: ES
+#     path: data/raw/ES_1m.csv
+#     source: "Databento GLBX.MDP3 ohlcv-1m, ES.c.0 continuous front month by volume, unadjusted"
+#     tz_in: UTC
+#     label: open
+#     bar_minutes: 1
+#     adjustment: unadjusted
+#     on_conflict: abort
+
+datasets: []
