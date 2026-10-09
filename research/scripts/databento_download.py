@@ -3,6 +3,7 @@
 Usage (from research/, with DATABENTO_API_KEY set in the shell):
     python scripts/databento_download.py --pilot --dry-run          # costs of the pilot, nothing fetched
     python scripts/databento_download.py --pilot                    # ES and NQ, 2024-01-01 -> 2024-04-01
+    python scripts/databento_download.py --symbols NQ.FUT ES.FUT --start 2024-01-01 --end 2024-04-01
     python scripts/databento_download.py --start 2021-10-01 --end 2026-10-01 --products ES --confirm-cost 412.50
 
 Before anything is fetched, the cost of every file still missing is estimated with the
@@ -24,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from edgelab.config import RESEARCH_ROOT  # noqa: E402
 from edgelab.data.databento_client import (  # noqa: E402
     CostLimitExceeded, MissingApiKey, check_cost, download_chunk, library_versions, load_databento_config, make_client,
-    plan_downloads, request_error,
+    plan_downloads, product_for_parent, request_error,
 )
 
 LOG = RESEARCH_ROOT / "reports" / "DATA_ACQUISITION_LOG.md"
@@ -63,6 +64,7 @@ def main() -> int:
     ap.add_argument("--pilot", action="store_true", help="use the pilot period of configs/databento.yaml")
     ap.add_argument("--start", help="YYYY-MM-DD (UTC)")
     ap.add_argument("--end", help="YYYY-MM-DD (UTC, exclusive)")
+    ap.add_argument("--symbols", nargs="+", help="parent symbols, e.g. NQ.FUT ES.FUT (instead of --products)")
     ap.add_argument("--products", nargs="+", help="product keys of configs/databento.yaml (default: all)")
     ap.add_argument("--schemas", nargs="+", help="default: definition and trades")
     ap.add_argument("--confirm-cost", type=float, help="accept an estimate above the safety limit, up to this amount (USD)")
@@ -74,7 +76,13 @@ def main() -> int:
     end = args.end or (cfg["pilot"]["end"] if args.pilot else None)
     if not (start and end):
         ap.error("give --start and --end, or --pilot")
-    products = args.products or list(cfg["products"])
+    if args.symbols and args.products:
+        ap.error("give --symbols or --products, not both")
+    try:
+        from_symbols = [product_for_parent(cfg, s) for s in args.symbols] if args.symbols else None
+    except KeyError as exc:
+        ap.error(str(exc))
+    products = from_symbols or args.products or list(cfg["products"])
     unknown = [p for p in products if p not in cfg["products"]]
     if unknown:
         ap.error(f"unknown products {unknown}; configured: {list(cfg['products'])}")

@@ -226,6 +226,24 @@ def test_download_refuses_above_the_limit_then_fetches_once_after_confirmation(t
     assert "db-SECRETKEY" not in written and "explicitly confirmed up to $24.00" in written
 
 
+def test_download_accepts_parent_symbols(tmp_path, monkeypatch, capsys, cfg):
+    import databento_download as dl
+
+    fake = FakeHistorical(cost_per_request=1.0)
+    monkeypatch.setattr(dl, "load_databento_config", lambda: {**cfg, "raw_dir": str(tmp_path / "raw")})
+    monkeypatch.setattr(dl, "make_client", lambda: fake)
+    monkeypatch.setenv(dbc.ENV_KEY, "db-SECRETKEY")
+    monkeypatch.setattr(sys, "argv", ["x", "--symbols", "ES.FUT", "--start", START, "--end", END, "--dry-run"])
+    assert dl.main() == 0
+    assert "--dry-run: nothing downloaded." in capsys.readouterr().out
+    assert {tuple(kw["symbols"]) for name, kw in fake.calls if name == "get_cost"} == {("ES.FUT",)}
+    assert not any(name == "get_range" for name, _ in fake.calls) and not (tmp_path / "raw").exists()
+    for argv in (["x", "--symbols", "CL.FUT", "--pilot"], ["x", "--symbols", "ES.FUT", "--products", "ES", "--pilot"]):
+        monkeypatch.setattr(sys, "argv", argv)
+        with pytest.raises(SystemExit):
+            dl.main()
+
+
 def test_raw_files_have_metadata_and_are_never_overwritten(built, tmp_path):
     files = sorted(built.raw.rglob("*.dbn.zst"))
     assert len(files) == 4
