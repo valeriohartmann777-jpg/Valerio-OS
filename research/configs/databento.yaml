@@ -1,0 +1,42 @@
+# Databento data acquisition. Data infrastructure only: nothing here is a strategy or
+# study parameter, and nothing here changes the frozen research configuration.
+#
+# The API key is read from the environment variable DATABENTO_API_KEY and from nowhere
+# else. It is never stored in this file, printed, logged or written to a metadata file.
+
+dataset: GLBX.MDP3
+schema: trades                  # every trade print; bars and volume-at-price are built from it
+definition_schema: definition   # instrument definitions: maps instrument_id -> contract, drops spreads
+stype_in: parent
+timestamp: ts_event             # exchange matching-engine time; ts_recv is Databento's capture time
+
+products:                       # keys are instruments in instruments.yaml
+  ES: {parent: ES.FUT, root: ES}
+  NQ: {parent: NQ.FUT, root: NQ}
+
+raw_dir: data/raw/databento               # DBN files, one per product, schema and calendar month
+processed_dir: data/processed/databento   # bars, contract schedule, volume-at-price per dataset
+
+safety:
+  # A download whose cost estimate exceeds this aborts unless the caller confirms the
+  # amount explicitly (--confirm-cost). Already downloaded chunks are never bought twice.
+  max_auto_download_cost_usd: 20.00
+
+pilot:
+  start: "2024-01-01"
+  end: "2024-04-01"             # exclusive
+  # The pilot only checks the software on real data (manifest purpose pipeline_check):
+  # the research runner refuses it, so it never freezes the DEV/VAL/TEST split.
+  purpose: pipeline_check
+  dataset_ids:
+    ES: ES_DB_PILOT
+    NQ: NQ_DB_PILOT
+
+# Comparison schemas for the cost table only (never downloaded automatically).
+cost_table_schemas: [trades, ohlcv-1m]
+
+volume_at_price:
+  phases: [RTH, ALL]            # ALL = the whole CME trade date, 18:00 previous day to 17:00 ET
+  va_pct: 0.70                  # same value-area definition as configs/event_studies.yaml
+  va_method: single
+  composite_sessions: 5         # data product only; no pre-registered study reads it

@@ -702,3 +702,15 @@ The same text is the journal note "PRE-DATA CLARIFICATIONS".
 - **Expected outcome BEFORE running:** +0.00 to +0.05 ATR_d; P ~ 0.20
 
 <!-- results:C018 -->
+
+### NOTE 2026-10-09T10:38:04+00:00 — DATA INFRASTRUCTURE: Databento (GLBX.MDP3 trades, ES and NQ)
+
+Data infrastructure only; no study, parameter, gate, control, FDR rule or fallback was changed, and no market data existed when this was written (blocker: reports/DATA_ACQUISITION_LOG.md, 2026-10-09).
+
+- **Source.** Databento GLBX.MDP3, schema `trades`, parent symbols ES.FUT and NQ.FUT, plus schema `definition` for the same period. Plan and as-built details: docs/DATA_INTEGRATION_PLAN.md.
+- **Contracts and roll.** Only outright quarterly futures of the product (checked against the definitions; spreads and other instruments are counted and never used). One active contract per trading date by the roll rule frozen on 2026-10-07 in configs/instruments.yaml (third Friday, roll 8 calendar days before expiry), chosen from the calendar and the listing date only. Volume is used for diagnostics only. No Databento continuous symbols. Prices are unadjusted; the runner's exclusion of each contract-change date (protocol 13.3) is unchanged. docs/FUTURES_ROLL_METHOD.md.
+- **Time.** Bars and profiles use the exchange timestamp `ts_event`; conversion to New York time through the tz database only; every build checks that sessions open at 18:00 New York time in EST and EDT.
+- **Profiles.** Exact volume at price, POC/VAH/VAL, developing values and VWAP are built from trades as a separate data product. The pre-registered studies keep their 1-minute uniform-allocation profile (configs/event_studies.yaml: value_area); the difference is measured and reported. Using trade profiles in a study would change a pre-registered definition and needs its own dated decision.
+- **Pilot.** 2024-01-01 to 2024-04-01, manifest purpose `pipeline_check` (ES_DB_PILOT, NQ_DB_PILOT). scripts/run_event_studies.py refuses it, so it cannot freeze the DEV/VAL/TEST split, consume the first run or add tests to the registry. scripts/pipeline_check.py runs the 52 studies once over ES_DB_PILOT in a sandbox outside the repository and reports structure only. Nothing from that run may be used to change a rule.
+- **NQ** is downloaded, validated and built as data only; no study runs on NQ before rule freeze (protocol 2.5).
+- **A lookahead found before data.** The first version of the developing value area sized its price grid by the whole session's range, so prices traded later could change value-area tie-breaks of earlier minutes. The brute-force and future-perturbation tests in tests/test_databento.py caught it; the developing profile at minute t now spans only prices traded up to t.

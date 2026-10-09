@@ -53,6 +53,9 @@ def main() -> int:
     cfg = load_config()
     rcfg = load_research_config()
     entry = get_entry(args.dataset)
+    if entry.purpose != "research":
+        return refuse(f"{entry.id} is a {entry.purpose} dataset (configs/datasets.yaml): it may only run through "
+                      "scripts/pipeline_check.py, never through the research runner")
     inst = load_instrument(entry.instrument)
     dev_market, val_market = rcfg["markets"]["development"], rcfg["markets"]["validation_market"]
     if entry.instrument in (val_market, f"M{val_market}"):

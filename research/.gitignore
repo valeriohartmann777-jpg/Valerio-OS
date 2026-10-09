@@ -4,6 +4,19 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# Credentials are never committed. The Databento API key is read from the environment
+# variable DATABENTO_API_KEY only and is never written to a file, log or report.
+.env
+.env.*
+*.env
+.envrc
+secrets/
+*.secret
+*.key
+*.pem
+credentials*
+*_credentials.*
+
 # Python / tooling
 .venv/
 __pycache__/

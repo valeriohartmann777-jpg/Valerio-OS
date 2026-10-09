@@ -4,8 +4,9 @@ A skeptical research lab that tries to find out whether three trading philosophi
 contain repeatable, cost-surviving market behaviour on CME index futures. It is
 built to falsify ideas, not to produce attractive backtests.
 
-**Current status (2026-10-07): BLOCKED on data.** The framework and its tests are in
-place; no real market data could be obtained from inside the environment (see
+**Current status (2026-10-09): BLOCKED on data.** The framework, its tests and the
+Databento data pipeline (below) are in place. No real market data has been downloaded:
+the environment cannot reach Databento and no API key is set (see
 [reports/DATA_ACQUISITION_LOG.md](reports/DATA_ACQUISITION_LOG.md)). No performance
 result exists anywhere in this directory, and none will be produced from synthetic data.
 
@@ -46,10 +47,12 @@ frozen candidate see the final test period exactly once.
 
 * `config`, `sessions`, `timing`, `resample` — YAML specs, CME trading dates, DST-safe
   session labels, scheduled availability times, the single as-of join, causal resampling
-* `data/` — vendor loader (explicit timezone and open/close label), manifest, quality report, roll calendar
+* `data/` — vendor loader (explicit timezone and open/close label), manifest, quality report, roll calendar;
+  Databento client, instrument definitions and active contract, trade validation, bar and profile build
 * `features/` — volatility, candles, VWAP, volume/TPO profile (POC, value area, HVN/LVN,
-  shapes), swings with confirmation delay, structure (BOS/CHoCH), FVG, session levels,
-  opening range, equal highs/lows, S/R zones and touches, regimes
+  shapes), exact volume at price from trades, swings with confirmation delay, structure
+  (BOS/CHoCH), FVG, session levels, opening range, equal highs/lows, S/R zones and
+  touches, regimes
 * `events/` — event studies against time-matched controls, first-passage analysis
 * `studies/` — the pre-registered event studies: causal feature context, detectors
   (sweeps, zone entries, breakouts, retests, runs, band fades), controls (time-matched,
@@ -83,6 +86,44 @@ python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 python -m pytest            # about a minute
 ```
+
+## Databento: ES and NQ from trades
+
+Real CME data comes from Databento (`GLBX.MDP3`, schema `trades`, parent symbols
+`ES.FUT` and `NQ.FUT`); see [docs/DATA_INTEGRATION_PLAN.md](docs/DATA_INTEGRATION_PLAN.md)
+and [docs/FUTURES_ROLL_METHOD.md](docs/FUTURES_ROLL_METHOD.md). Nothing in this path
+changes a study, a parameter or the frozen roll rule.
+
+The API key is read from the environment variable `DATABENTO_API_KEY` and nowhere else;
+it is never written to a file, log or report. The network must allow `hist.databento.com`.
+
+```bash
+export DATABENTO_API_KEY="..."        # macOS / Linux
+$env:DATABENTO_API_KEY="..."          # Windows PowerShell
+```
+
+1. `python scripts/databento_cost.py --start 2024-01-01 --end 2024-04-01 --symbols NQ.FUT ES.FUT`
+   estimates cost and size (free, downloads nothing).
+2. `python scripts/databento_download.py --pilot` downloads trades and instrument
+   definitions per calendar month to `data/raw/databento/<ES|NQ>/`, with a metadata JSON
+   per file; a file that exists is never bought or overwritten again. Above the safety
+   limit (`configs/databento.yaml`, $20.00) it stops unless `--confirm-cost <amount>` is
+   given; `--dry-run` shows the plan and the cost only.
+3. `python scripts/validate_market_data.py --pilot` checks every trade and writes
+   `reports/TRADE_DATA_QUALITY_REPORT.md`. Nothing is dropped silently: every excluded
+   record is counted with its reason. A fatal finding stops the pipeline here.
+4. `python scripts/build_market_data.py --pilot` builds 1-minute bars of the active
+   contract (frozen calendar roll, unadjusted), exact volume at price, POC/VAH/VAL,
+   developing levels and VWAP per minute, registers the datasets `ES_DB_PILOT` and
+   `NQ_DB_PILOT` in `configs/datasets.yaml` and prepares them.
+5. `python scripts/databento_debug_charts.py --id ES_DB_PILOT` draws sessions chosen by
+   rule (roll, DST change, highest volume, seeded random, overnight).
+6. After the `DATA_QUALITY <id>` journal note,
+   `python scripts/pipeline_check.py --dataset ES_DB_PILOT` runs the 52 studies once over the pilot in a sandbox and reports structure only (no
+   effect sizes, p-values or decisions). The research runner refuses pilot datasets, so
+   the pilot can never freeze the split or count as the first run.
+7. `python scripts/databento_cost.py --table` estimates 1, 3 and 5 years, since 2020 and
+   the full history. The full download starts only after a period has been chosen.
 
 ## Adding data
 

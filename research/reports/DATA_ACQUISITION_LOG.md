@@ -44,3 +44,21 @@ mission rules, no synthetic data was generated for research, and no results exis
 3. Allow a data host in the environment's network settings. `data.binance.vision`
    would give BTCUSDT perpetual klines, which are PROXY evidence only and never stand
    in for CME results.
+
+## 2026-10-09 — Databento (GLBX.MDP3 trades, ES.FUT and NQ.FUT)
+
+The Databento pipeline is implemented (README, section "Databento"). Before the pilot
+cost estimate (2024-01-01 to 2024-04-01), checked at 10:35 UTC:
+
+| check | result |
+|---|---|
+| environment variable `DATABENTO_API_KEY` | not set |
+| hist.databento.com (historical API: metadata, cost, downloads) | 403 at proxy (`CONNECT tunnel failed`) |
+| api.databento.com | 403 at proxy |
+
+Nothing was requested from Databento and nothing was downloaded; $0.00 spent. No cost
+estimate exists yet, because the cost endpoints are on the same blocked host.
+
+**To unblock:** allow `hist.databento.com` in the cloud environment's network access and
+add `DATABENTO_API_KEY` as an environment variable there (never in a file of this
+repository); a new session picks both up. Then run step 1 of the README Databento section.

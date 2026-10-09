@@ -18,6 +18,14 @@
 #   read_kwargs   optional pandas.read_csv arguments, e.g. {header: null, names: [ts, open, high, low, close, volume]}
 #   ts_format     optional strftime format, e.g. "%Y%m%d %H%M%S" for NinjaTrader exports
 #   price_scale   multiplier for fixed-point prices (1e-9 for raw Databento integers)
+#   purpose       research (default) | pipeline_check. A pipeline_check dataset only checks the
+#                 software on real data: scripts/run_event_studies.py refuses it and only
+#                 scripts/pipeline_check.py runs it (blind sandbox, structure only).
+#
+# Databento trades are registered by scripts/build_market_data.py, never by hand: one entry
+# per product and period, path data/processed/databento/<id>/bars_1m.parquet (one-minute
+# bars of the contract active under the frozen roll rule, unadjusted, column `contract`),
+# tz_in UTC, label open. See docs/FUTURES_ROLL_METHOD.md.
 #
 # Example (not active):
 #   - id: ES_1m

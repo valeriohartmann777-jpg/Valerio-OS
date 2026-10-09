@@ -9,11 +9,12 @@ so each result can name the exact file hash it came from.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import yaml
 
 from ..config import CONFIG_DIR, RESEARCH_ROOT, load_yaml
 from .loader import file_sha256, load_bars
@@ -21,6 +22,10 @@ from .loader import file_sha256, load_bars
 PROCESSED_DIR = RESEARCH_ROOT / "data" / "processed"
 ADJUSTMENTS = ("unadjusted", "difference", "ratio", "per_contract", "unknown")
 CONFLICT_POLICIES = ("abort", "first", "last")
+# research: may be used by the event-study runner. pipeline_check: a pilot that only checks
+# the software on real data; the runner refuses it so it can never freeze the split,
+# consume a pre-registered first run or add tests to the multiple-testing registry.
+PURPOSES = ("research", "pipeline_check")
 
 
 @dataclass(frozen=True)
@@ -38,6 +43,7 @@ class DatasetEntry:
     read_kwargs: dict[str, Any] = field(default_factory=dict)
     ts_format: str | None = None
     price_scale: float = 1.0
+    purpose: str = "research"
 
     def __post_init__(self) -> None:
         if self.label not in ("open", "close"):
@@ -46,6 +52,8 @@ class DatasetEntry:
             raise ValueError(f"{self.id}: adjustment must be one of {ADJUSTMENTS}")
         if self.on_conflict not in CONFLICT_POLICIES:
             raise ValueError(f"{self.id}: on_conflict must be one of {CONFLICT_POLICIES}")
+        if self.purpose not in PURPOSES:
+            raise ValueError(f"{self.id}: purpose must be one of {PURPOSES}")
 
     @property
     def raw_path(self) -> Path:
@@ -73,6 +81,37 @@ def get_entry(dataset_id: str, path: str | Path | None = None) -> DatasetEntry:
         if e.id == dataset_id:
             return e
     raise KeyError(f"dataset {dataset_id!r} is not in the manifest")
+
+
+def register(row: dict[str, Any], path: str | Path | None = None) -> bool:
+    """Append a dataset entry to the manifest, keeping its comments. Returns False when an
+    identical entry exists; an entry with the same id and other values is an error, because
+    a registered dataset is never redefined silently."""
+    p = Path(path or CONFIG_DIR / "datasets.yaml")
+    new = DatasetEntry(**{**row, "bar_minutes": int(row["bar_minutes"])})
+    for e in load_manifest(p):
+        if e.id == new.id:
+            if asdict(e) == asdict(new):
+                return False
+            raise ValueError(f"dataset {new.id!r} is already registered with other values; register it under a new id")
+    text = p.read_text()
+    block = yaml.safe_dump([row], sort_keys=False, allow_unicode=True, width=10_000)
+    block = "\n".join("  " + line if line else line for line in block.splitlines()) + "\n"
+    if "\ndatasets: []" in "\n" + text:
+        updated = text.replace("datasets: []", "datasets:\n" + block.rstrip("\n"), 1)
+    else:
+        top = [ln for ln in text.splitlines() if ln and not ln[0].isspace() and not ln.startswith(("#", "-"))]
+        if not top or not top[-1].startswith("datasets:"):
+            raise ValueError(f"{p}: 'datasets:' must be the last top-level key to append an entry")
+        updated = text.rstrip("\n") + "\n" + block
+    p.write_text(updated)
+    try:
+        if get_entry(new.id, p) != new:
+            raise ValueError("entry read back differs")
+    except Exception:
+        p.write_text(text)
+        raise
+    return True
 
 
 def resolve_duplicates(bars: pd.DataFrame, policy: str) -> tuple[pd.DataFrame, dict[str, int]]:
@@ -119,6 +158,7 @@ def prepare(entry: DatasetEntry, out_dir: Path = PROCESSED_DIR) -> tuple[Path, d
         "source": entry.source,
         "adjustment": entry.adjustment,
         "on_conflict": entry.on_conflict,
+        "purpose": entry.purpose,
         "rows_processed": int(len(bars)),
         "processed_sha256": file_sha256(pq),
     })
