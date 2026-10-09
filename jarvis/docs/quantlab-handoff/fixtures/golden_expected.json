@@ -1,0 +1,64 @@
+{
+  "disclaimer": "SYNTHETIC TEST FIXTURE ONLY. Not real market data, not a trading backtest.",
+  "input": {
+    "initial_cash_usd": 10000,
+    "shares": 1,
+    "fee_usd_per_order": 0.5,
+    "slippage_bps": 0
+  },
+  "execution": [
+    {
+      "signal_bar_start_utc": "2026-09-15T09:33:00Z",
+      "signal_available_at_utc": "2026-09-15T09:34:00Z",
+      "fill_bar_start_utc": "2026-09-15T09:34:00Z",
+      "side": "BUY",
+      "fill_price_usd": 103.0,
+      "fee_usd": 0.5,
+      "cash_after_usd": 9896.5,
+      "position_after_shares": 1
+    },
+    {
+      "signal_bar_start_utc": "2026-09-15T09:36:00Z",
+      "signal_available_at_utc": "2026-09-15T09:37:00Z",
+      "fill_bar_start_utc": "2026-09-15T09:37:00Z",
+      "side": "SELL",
+      "fill_price_usd": 104.0,
+      "fee_usd": 0.5,
+      "cash_after_usd": 10000,
+      "position_after_shares": 0
+    }
+  ],
+  "round_trip": {
+    "gross_pnl_usd": 1.0,
+    "total_fees_usd": 1.0,
+    "net_pnl_usd": 0.0
+  },
+  "end": {
+    "cash_usd": 10000,
+    "equity_usd": 10000
+  },
+  "ma_fixture": {
+    "fast_window": 2,
+    "slow_window": 3,
+    "buy_signal_bar_indices": [
+      3,
+      9
+    ],
+    "sell_signal_bar_indices": [
+      6,
+      11
+    ],
+    "executed_buy_indices": [
+      4,
+      10
+    ],
+    "executed_sell_indices": [
+      7
+    ],
+    "final_position_shares": 1,
+    "initial_cash_usd": 100,
+    "fee_usd_per_order": 0.5,
+    "final_equity_usd": 92.5,
+    "note": "Last-bar SELL signal has no next bar to execute; mark remaining position at last close 9 USD."
+  }
+}

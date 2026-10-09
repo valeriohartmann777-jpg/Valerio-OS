@@ -43,6 +43,15 @@ class EventType(StrEnum):
     MEMORY_CHANGED = "memory.changed"
     TRAINING_CHANGED = "training.changed"
     BOTS_CHANGED = "bots.changed"
+    QUANTLAB_STRATEGY_CREATED = "quantlab.strategy.created"
+    QUANTLAB_DATASET_IMPORTED = "quantlab.dataset.imported"
+    QUANTLAB_DATASET_REJECTED = "quantlab.dataset.rejected"
+    QUANTLAB_EXPERIMENT_CREATED = "quantlab.experiment.created"
+    QUANTLAB_EXPERIMENT_RUNNING = "quantlab.experiment.running"
+    QUANTLAB_EXPERIMENT_COMPLETED = "quantlab.experiment.completed"
+    QUANTLAB_EXPERIMENT_FAILED = "quantlab.experiment.failed"
+    QUANTLAB_EXPERIMENT_CANCELLED = "quantlab.experiment.cancelled"
+    QUANTLAB_VALIDATION_COMPLETED = "quantlab.validation.completed"
     CONTEXT_UPDATED = "context.updated"
 
 

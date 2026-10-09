@@ -39,7 +39,9 @@ from jarvis.missions.engine import MissionEngine
 from jarvis.missions.planner import DeterministicPlanner
 from jarvis.missions.repository import MissionRepository
 from jarvis.permissions.service import PermissionService
-from jarvis.settings import Settings
+from jarvis.quantlab.service import QuantLabService
+from jarvis.quantlab.store import QuantLabStore
+from jarvis.settings import PROJECT_ROOT, Settings
 from jarvis.storage.audit import AuditLog
 from jarvis.storage.database import Database
 from jarvis.storage.preferences import Preferences
@@ -50,6 +52,7 @@ from jarvis.tools.files import FileAccess, register_file_tools
 from jarvis.tools.learning import register_learning_tools
 from jarvis.tools.media import register_media_tools
 from jarvis.tools.memory import register_memory_tools
+from jarvis.tools.quantlab import register_quantlab_tools
 from jarvis.tools.registry import ToolRegistry
 from jarvis.tools.system import create_backend, register_system_tools
 from jarvis.tools.system.apps import AppCatalog
@@ -127,6 +130,7 @@ class Runtime:
         register_briefing_tools(self.tools, lambda: self.briefing)
         register_training_tools(self.tools, lambda: self.training)
         register_bot_tools(self.tools, lambda: self.bots)
+        register_quantlab_tools(self.tools, lambda: self.quantlab)
         self.market = market or MarketData(settings.data_dir / "market")
         self.preferences = Preferences(settings.data_dir / "preferences.json")
         self.executor = ToolExecutor(
@@ -244,6 +248,14 @@ class Runtime:
             tester_factory=bot_tester,
         )
 
+        self.quantlab = QuantLabService(
+            store=QuantLabStore(self.db),
+            bus=self.bus,
+            root=settings.data_dir / "quantlab",
+            fixtures=PROJECT_ROOT / "docs" / "quantlab-handoff" / "fixtures",
+            code_revision=self.build,
+        )
+
         self.training = TrainingService(
             settings=settings.training,
             learning=settings.learning,
@@ -348,6 +360,7 @@ class Runtime:
         await self.briefing.start()
         await self.training.start()
         await self.bots.start()
+        await self.quantlab.start()
 
     async def _housekeep(self) -> None:
         """Once a day: drop old activity (the conversation stays)."""
@@ -366,6 +379,7 @@ class Runtime:
             self._housekeeping.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._housekeeping
+        await self.quantlab.stop()
         await self.bots.stop()
         await self.training.stop()
         await self.briefing.stop()

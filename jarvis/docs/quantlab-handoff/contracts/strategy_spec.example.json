@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1",
+  "name": "Simple SMA Cross Demo",
+  "hypothesis": "A short SMA crossing a long SMA may predict a subsequent price move.",
+  "instrument": {
+    "asset_class": "cash_equity",
+    "symbol": "TEST_SYNTHETIC",
+    "exchange": "TEST_ONLY",
+    "currency": "USD",
+    "timezone": "Etc/UTC",
+    "corporate_action_policy": "not_applicable_test_fixture"
+  },
+  "timeframe": {
+    "bar_interval": "1m",
+    "timestamps_are_bar": "open",
+    "signal_timestamp": "bar_close",
+    "session_calendar": "TEST_CONTINUOUS"
+  },
+  "signal": {
+    "type": "sma_crossover",
+    "fast_window": 2,
+    "slow_window": 3,
+    "price_column": "close",
+    "cross": "strict_cross"
+  },
+  "execution": {
+    "entry_order": "market",
+    "exit_order": "market",
+    "fill_timing": "next_bar_open",
+    "slippage_bps": 0,
+    "end_of_data": "mark_open_position_no_forced_sale"
+  },
+  "position": {
+    "direction": "long_only",
+    "size_units": 1,
+    "initial_cash": 100,
+    "leverage": 1
+  },
+  "costs": {
+    "fee_fixed_per_order": 0.5,
+    "fee_variable_bps": 0,
+    "currency": "USD"
+  },
+  "analysis": {
+    "chronological_oos_fraction": 0.25,
+    "allow_parameter_search_on_oos": false
+  }
+}

@@ -254,6 +254,99 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # 9 — QuantLab: strategies, frozen versions and datasets, experiments, artifacts
+    [
+        """
+        CREATE TABLE ql_strategies (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            hypothesis  TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE ql_strategy_versions (
+            id           TEXT PRIMARY KEY,
+            strategy_id  TEXT NOT NULL REFERENCES ql_strategies(id),
+            number       INTEGER NOT NULL,
+            spec_json    TEXT NOT NULL,
+            spec_sha256  TEXT NOT NULL,
+            created_at   TEXT NOT NULL,
+            UNIQUE (strategy_id, number),
+            UNIQUE (strategy_id, spec_sha256)
+        )
+        """,
+        """
+        CREATE TRIGGER ql_strategy_versions_immutable BEFORE UPDATE ON ql_strategy_versions
+        BEGIN SELECT RAISE(ABORT, 'strategy versions are immutable'); END
+        """,
+        """
+        CREATE TABLE ql_datasets (
+            id                TEXT PRIMARY KEY,
+            created_at        TEXT NOT NULL,
+            status            TEXT NOT NULL,
+            synthetic         INTEGER NOT NULL,
+            symbol            TEXT NOT NULL,
+            frequency         TEXT,
+            filename          TEXT NOT NULL,
+            original_sha256   TEXT NOT NULL,
+            normalized_sha256 TEXT,
+            snapshot_sha256   TEXT,
+            rows              INTEGER NOT NULL,
+            passport          TEXT NOT NULL,
+            preview           TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER ql_datasets_immutable BEFORE UPDATE ON ql_datasets
+        BEGIN SELECT RAISE(ABORT, 'dataset snapshots are immutable'); END
+        """,
+        """
+        CREATE TABLE ql_experiments (
+            id                   TEXT PRIMARY KEY,
+            strategy_version_id  TEXT NOT NULL REFERENCES ql_strategy_versions(id),
+            dataset_id           TEXT NOT NULL REFERENCES ql_datasets(id),
+            manifest             TEXT NOT NULL,
+            manifest_sha256      TEXT NOT NULL,
+            status               TEXT NOT NULL,
+            stage                TEXT,
+            created_at           TEXT NOT NULL,
+            started_at           TEXT,
+            finished_at          TEXT,
+            attempts             INTEGER NOT NULL DEFAULT 0,
+            error_code           TEXT,
+            error                TEXT,
+            verdict              TEXT,
+            results_sha256       TEXT,
+            summary              TEXT
+        )
+        """,
+        "CREATE INDEX idx_ql_experiments_dataset ON ql_experiments(dataset_id)",
+        """
+        CREATE TABLE ql_artifacts (
+            experiment_id  TEXT NOT NULL REFERENCES ql_experiments(id),
+            kind           TEXT NOT NULL,
+            relative_path  TEXT NOT NULL,
+            sha256         TEXT NOT NULL,
+            bytes          INTEGER NOT NULL,
+            PRIMARY KEY (experiment_id, kind)
+        )
+        """,
+        """
+        CREATE TABLE ql_validations (
+            experiment_id      TEXT NOT NULL REFERENCES ql_experiments(id),
+            check_id           TEXT NOT NULL,
+            gate               TEXT NOT NULL,
+            method_version     TEXT NOT NULL,
+            result             TEXT NOT NULL,
+            observations       TEXT NOT NULL,
+            metric             TEXT NOT NULL,
+            assumptions        TEXT NOT NULL,
+            evidence_artifact  TEXT,
+            PRIMARY KEY (experiment_id, check_id)
+        )
+        """,
+    ],
 ]
 
 

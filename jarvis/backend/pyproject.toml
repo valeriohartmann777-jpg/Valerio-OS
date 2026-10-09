@@ -56,6 +56,8 @@ ignore = ["RUF012"]
 "jarvis/core/persona.py" = ["E501"]
 "jarvis/learning/prompt.py" = ["E501"]
 "jarvis/bots/prompt.py" = ["E501"]
+# user-facing QuantLab text uses typographic × and −
+"jarvis/quantlab/*.py" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -64,5 +66,5 @@ plugins = ["pydantic.mypy"]
 warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
-module = ["aiosqlite.*", "Quartz", "Quartz.*", "AppKit", "AppKit.*", "onnxruntime", "onnxruntime.*", "sounddevice", "sklearn", "sklearn.*", "threadpoolctl"]
+module = ["aiosqlite.*", "Quartz", "Quartz.*", "AppKit", "AppKit.*", "onnxruntime", "onnxruntime.*", "sounddevice", "sklearn", "sklearn.*", "threadpoolctl", "pyarrow", "pyarrow.*"]
 ignore_missing_imports = true

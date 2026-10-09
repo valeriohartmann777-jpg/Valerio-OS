@@ -1,0 +1,29 @@
+{
+  "schema_version": "0.1",
+  "source_type": "user_supplied",
+  "dataset_kind": "synthetic_engineering_fixture",
+  "provider": "synthetic_test_fixture",
+  "license": "internal_test_only",
+  "original_filename": "ma_crossover_case.csv",
+  "original_sha256": "600b91f32a8b893929bf72ace21c22d3b704515f814f8ddf336ebb004f811a77",
+  "instrument": {
+    "asset_class": "cash_equity",
+    "symbol": "TEST_SYNTHETIC",
+    "exchange": "TEST_ONLY",
+    "currency": "USD"
+  },
+  "original_timezone": "Etc/UTC",
+  "normalized_timezone": "Etc/UTC",
+  "frequency": "1m",
+  "timestamp_semantics": "bar_open",
+  "coverage_start_utc": "2026-09-16T09:30:00Z",
+  "coverage_end_utc": "2026-09-16T09:41:00Z",
+  "row_count": 12,
+  "quality_status": "ACCEPTED_FOR_SYNTHETIC_TESTS_ONLY",
+  "quality_findings": [],
+  "limitations": [
+    "Not real prices",
+    "No exchange calendar",
+    "Not suitable for statistical OOS validation"
+  ]
+}

@@ -1,0 +1,39 @@
+# QuantLab Implementation Status
+
+Updated: <date>
+Repo location: <observed actual path>
+Branch: <actual>
+Stack: <actual>
+
+## COMPLETE (implemented & exercised)
+- [ ] ...
+
+## IMPLEMENTED BUT UNVERIFIED
+- [ ] ...
+
+## IN PROGRESS
+- [ ] ...
+
+## BLOCKED
+- [ ] ... with exact reason and required information
+
+## NEXT
+1. ...
+2. ...
+3. ...
+
+## Commands actually executed
+- Backend tests: `<command>` -> `<observed result>`
+- UI typecheck: `<command>` -> `<observed result>`
+- UI build: `<command>` -> `<observed result>`
+- Smoke/E2E: `<command>` -> `<observed result>`
+
+## Known limitations
+- Instruments/timeframes: ...
+- Datasets: ...
+- Fill assumptions: ...
+- Missing evidence gates: ...
+- AI integration: ...
+
+## Screenshot and artifact links
+- ...

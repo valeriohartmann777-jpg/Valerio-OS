@@ -135,6 +135,34 @@ class BotBacktestRequest(BaseModel):
     inputs: dict[str, str] = Field(default_factory=dict)
 
 
+class QuantLabSpecRequest(BaseModel):
+    spec: dict[str, Any]
+
+
+class QuantLabDatasetImport(BaseModel):
+    filename: str = Field(min_length=1, max_length=200)
+    content_base64: str = Field(min_length=1)
+    symbol: str = Field(min_length=1, max_length=40)
+    exchange: str = Field(min_length=1, max_length=40)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    asset_class: str = "cash_equity"
+    timezone: str | None = Field(None, max_length=64)
+    frequency: Literal["1m", "5m", "1h", "1d"] | None = None
+    provider: str = Field("user_supplied", max_length=80)
+    license: str = Field("unverified (user's responsibility)", max_length=120)
+    adjustment: Literal["adjusted", "unadjusted", "unknown"] = "unknown"
+    columns: dict[str, str] = Field(default_factory=dict)
+
+
+class QuantLabFixtureRequest(BaseModel):
+    name: str
+
+
+class QuantLabExperimentRequest(BaseModel):
+    strategy_version_id: str
+    dataset_id: str
+
+
 class TrainingPreferences(BaseModel):
     enabled: bool
 

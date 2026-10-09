@@ -32,6 +32,15 @@ export const EVENT_TYPES = [
   "memory.changed",
   "training.changed",
   "bots.changed",
+  "quantlab.strategy.created",
+  "quantlab.dataset.imported",
+  "quantlab.dataset.rejected",
+  "quantlab.experiment.created",
+  "quantlab.experiment.running",
+  "quantlab.experiment.completed",
+  "quantlab.experiment.failed",
+  "quantlab.experiment.cancelled",
+  "quantlab.validation.completed",
   "context.updated",
 ] as const;
 

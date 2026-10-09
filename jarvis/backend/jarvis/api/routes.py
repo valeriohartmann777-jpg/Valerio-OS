@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import contextlib
 import os
 from dataclasses import asdict
@@ -38,6 +40,10 @@ from jarvis.api.schemas import (
     MemoryCreate,
     MemoryView,
     MissionCreate,
+    QuantLabDatasetImport,
+    QuantLabExperimentRequest,
+    QuantLabFixtureRequest,
+    QuantLabSpecRequest,
     RejectRequest,
     SettingsView,
     Snapshot,
@@ -56,6 +62,9 @@ from jarvis.missions.engine import MissionError
 from jarvis.missions.models import Mission
 from jarvis.permissions.models import LEVEL_LABELS, PermissionRequest
 from jarvis.permissions.service import ApprovalError, StrongConfirmationRequired
+from jarvis.quantlab.data import ImportMeta
+from jarvis.quantlab.service import QuantLabError
+from jarvis.quantlab.spec import example_spec
 from jarvis.runtime import Runtime
 from jarvis.storage.audit import AuditEntry
 from jarvis.tools.base import ToolSpec
@@ -364,6 +373,178 @@ async def bot_improve(name: str, rt: RuntimeDep) -> BotLabView:
     except BotLabError as exc:
         raise _bot_error(exc) from exc
     return await bots_view(rt)
+
+
+# QuantLab: research only — there is no order, broker or live-trading endpoint.
+
+
+def _ql_error(exc: QuantLabError) -> HTTPException:
+    return HTTPException(
+        exc.status, {"code": exc.code, "message": exc.message, "details": exc.details}
+    )
+
+
+@router.get("/quantlab/health")
+async def quantlab_health(rt: RuntimeDep) -> dict[str, Any]:
+    overview = await rt.quantlab.overview()
+    return {
+        "status": "ok",
+        "engine": overview["engine"],
+        "scope": overview["scope"],
+        "live_trading": False,
+    }
+
+
+@router.get("/quantlab/overview")
+async def quantlab_overview(rt: RuntimeDep) -> dict[str, Any]:
+    return {**await rt.quantlab.overview(), "template": example_spec()}
+
+
+@router.get("/quantlab/strategies")
+async def quantlab_strategies(rt: RuntimeDep) -> list[dict[str, Any]]:
+    return await rt.quantlab.strategies()
+
+
+@router.post("/quantlab/strategies/validate")
+async def quantlab_validate(body: QuantLabSpecRequest, rt: RuntimeDep) -> dict[str, Any]:
+    return rt.quantlab.validate(body.spec)
+
+
+@router.post("/quantlab/strategies")
+async def quantlab_create_strategy(body: QuantLabSpecRequest, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.create_strategy(body.spec)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.get("/quantlab/strategies/{strategy_id}")
+async def quantlab_strategy(strategy_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.strategy(strategy_id)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.post("/quantlab/strategies/{strategy_id}/versions")
+async def quantlab_add_version(
+    strategy_id: str, body: QuantLabSpecRequest, rt: RuntimeDep
+) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.add_version(strategy_id, body.spec)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.get("/quantlab/datasets")
+async def quantlab_datasets(rt: RuntimeDep) -> list[dict[str, Any]]:
+    return await rt.quantlab.datasets()
+
+
+@router.post("/quantlab/datasets/import")
+async def quantlab_import(body: QuantLabDatasetImport, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        data = base64.b64decode(body.content_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(
+            422, {"code": "FILE_UNREADABLE", "message": "The upload isn't valid base64."}
+        ) from exc
+    meta = ImportMeta(
+        symbol=body.symbol.strip(),
+        exchange=body.exchange.strip(),
+        currency=body.currency,
+        asset_class=body.asset_class,
+        timezone=body.timezone or None,
+        frequency=body.frequency,
+        provider=body.provider.strip() or "user_supplied",
+        license=body.license.strip() or "unverified (user's responsibility)",
+        adjustment=body.adjustment,
+        columns={k: v for k, v in body.columns.items() if v},
+    )
+    try:
+        return await rt.quantlab.import_dataset(body.filename, data, meta)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.post("/quantlab/datasets/fixture")
+async def quantlab_fixture(body: QuantLabFixtureRequest, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.import_fixture(body.name)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.get("/quantlab/datasets/{dataset_id}")
+async def quantlab_dataset(dataset_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.dataset(dataset_id)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.get("/quantlab/experiments")
+async def quantlab_experiments(rt: RuntimeDep) -> list[dict[str, Any]]:
+    return await rt.quantlab.experiments()
+
+
+@router.post("/quantlab/experiments")
+async def quantlab_run(body: QuantLabExperimentRequest, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.create_experiment(body.strategy_version_id, body.dataset_id)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.get("/quantlab/experiments/{experiment_id}")
+async def quantlab_experiment(experiment_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.experiment(experiment_id)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.get("/quantlab/experiments/{experiment_id}/trades")
+async def quantlab_trades(experiment_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.ledger(experiment_id)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.get("/quantlab/experiments/{experiment_id}/equity")
+async def quantlab_equity(
+    experiment_id: str, rt: RuntimeDep, points: Annotated[int, Query(ge=50, le=5000)] = 800
+) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.equity(experiment_id, points)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.get("/quantlab/experiments/{experiment_id}/artifacts")
+async def quantlab_artifacts(experiment_id: str, rt: RuntimeDep) -> list[dict[str, Any]]:
+    try:
+        artifacts: list[dict[str, Any]] = (await rt.quantlab.experiment(experiment_id))["artifacts"]
+        return artifacts
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.post("/quantlab/experiments/{experiment_id}/cancel")
+async def quantlab_cancel(experiment_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.cancel(experiment_id)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
+
+
+@router.post("/quantlab/experiments/{experiment_id}/reproduce")
+async def quantlab_reproduce(experiment_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.quantlab.reproduce(experiment_id)
+    except QuantLabError as exc:
+        raise _ql_error(exc) from exc
 
 
 @router.get("/training")

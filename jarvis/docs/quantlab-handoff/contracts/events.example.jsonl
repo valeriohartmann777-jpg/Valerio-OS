@@ -1,0 +1,3 @@
+{"event_id":"evt-1","trace_id":"trace-demo","type":"quantlab.experiment.created","entity_id":"exp-demo","timestamp":"2026-10-09T12:00:00Z","safe_payload":{"status":"queued","synthetic":true}}
+{"event_id":"evt-2","trace_id":"trace-demo","type":"quantlab.experiment.running","entity_id":"exp-demo","timestamp":"2026-10-09T12:00:01Z","safe_payload":{"status":"running","stage":"causal_simulation"}}
+{"event_id":"evt-3","trace_id":"trace-demo","type":"quantlab.experiment.completed","entity_id":"exp-demo","timestamp":"2026-10-09T12:00:02Z","safe_payload":{"status":"complete","verdict":"INCONCLUSIVE","synthetic":true}}

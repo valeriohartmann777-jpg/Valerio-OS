@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.jarvis/quantlab/strategy_spec.schema.json",
+  "title": "QuantLab StrategySpec v0.1: deterministic R1 cash equity long-only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "hypothesis",
+    "instrument",
+    "timeframe",
+    "signal",
+    "execution",
+    "position",
+    "costs",
+    "analysis"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "hypothesis": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 1000
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_class",
+        "symbol",
+        "exchange",
+        "currency",
+        "timezone"
+      ],
+      "properties": {
+        "asset_class": {
+          "const": "cash_equity"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exchange": {
+          "type": "string",
+          "minLength": 1
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 3
+        },
+        "corporate_action_policy": {
+          "enum": [
+            "data_adjusted",
+            "not_applicable_test_fixture"
+          ]
+        }
+      }
+    },
+    "timeframe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bar_interval",
+        "timestamps_are_bar",
+        "signal_timestamp"
+      ],
+      "properties": {
+        "bar_interval": {
+          "type": "string",
+          "enum": [
+            "1d",
+            "1h",
+            "5m",
+            "1m"
+          ]
+        },
+        "timestamps_are_bar": {
+          "const": "open"
+        },
+        "signal_timestamp": {
+          "const": "bar_close"
+        },
+        "session_calendar": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "fast_window",
+        "slow_window",
+        "price_column",
+        "cross"
+      ],
+      "properties": {
+        "type": {
+          "const": "sma_crossover"
+        },
+        "fast_window": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "slow_window": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "price_column": {
+          "const": "close"
+        },
+        "cross": {
+          "const": "strict_cross"
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry_order",
+        "exit_order",
+        "fill_timing",
+        "slippage_bps",
+        "end_of_data"
+      ],
+      "properties": {
+        "entry_order": {
+          "const": "market"
+        },
+        "exit_order": {
+          "const": "market"
+        },
+        "fill_timing": {
+          "const": "next_bar_open"
+        },
+        "slippage_bps": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "end_of_data": {
+          "const": "mark_open_position_no_forced_sale"
+        }
+      }
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "size_units",
+        "initial_cash",
+        "leverage"
+      ],
+      "properties": {
+        "direction": {
+          "const": "long_only"
+        },
+        "size_units": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "initial_cash": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "leverage": {
+          "const": 1
+        }
+      }
+    },
+    "costs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fee_fixed_per_order",
+        "fee_variable_bps",
+        "currency"
+      ],
+      "properties": {
+        "fee_fixed_per_order": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fee_variable_bps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chronological_oos_fraction",
+        "allow_parameter_search_on_oos"
+      ],
+      "properties": {
+        "chronological_oos_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 0.5
+        },
+        "allow_parameter_search_on_oos": {
+          "const": false
+        }
+      }
+    }
+  }
+}

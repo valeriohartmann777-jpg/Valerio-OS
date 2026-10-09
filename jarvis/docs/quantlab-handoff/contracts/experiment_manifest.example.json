@@ -1,0 +1,28 @@
+{
+  "schema_version": "0.1",
+  "environment": "synthetic_fixture_test",
+  "strategy_spec_sha256": "<compute on canonical json>",
+  "strategy_version_id": "demo-version",
+  "dataset_snapshot_sha256": "600b91f32a8b893929bf72ace21c22d3b704515f814f8ddf336ebb004f811a77",
+  "engine_name": "reference_equity_long_only",
+  "engine_version": "r1-placeholder",
+  "code_revision": "<actual git commit at run time>",
+  "simulation": {
+    "signal_availability": "bar_close",
+    "fill": "next_bar_open",
+    "slippage_bps": 0,
+    "fee_fixed_usd_per_order": 0.5
+  },
+  "validation": {
+    "method": "chronological_split",
+    "train_fraction": 0.75,
+    "oos_fraction": 0.25,
+    "holdout_touched_for_optimization": false
+  },
+  "artifact_sha256s": {
+    "orders": "<compute>",
+    "trades": "<compute>",
+    "equity": "<compute>"
+  },
+  "disclaimer": "Example schema only, fields in angle brackets must be computed, never shown as verified actual results."
+}
