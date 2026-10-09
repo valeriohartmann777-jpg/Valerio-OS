@@ -16,6 +16,17 @@ import type {
   ChatAccepted,
   Mission,
   PermissionRequest,
+  QlDataset,
+  QlEquity,
+  QlExperiment,
+  QlExperimentRow,
+  QlImportRequest,
+  QlLedger,
+  QlOverview,
+  QlReproduction,
+  QlSpecCheck,
+  QlStrategy,
+  QlStrategySpec,
   SettingsView,
   TrainingStatus,
 } from "@jarvis/protocol";
@@ -128,4 +139,27 @@ export const api = {
   voiceListen: () => post<VoiceStatus>("/voice/listen"),
   voiceStop: () => post<VoiceStatus>("/voice/stop"),
   voiceTest: () => post<VoiceStatus>("/voice/test"),
+  // QuantLab — research only; there is no order or broker endpoint.
+  qlOverview: () => request<QlOverview>("/quantlab/overview"),
+  qlStrategies: () => request<QlStrategy[]>("/quantlab/strategies"),
+  qlValidate: (spec: QlStrategySpec) => post<QlSpecCheck>("/quantlab/strategies/validate", { spec }),
+  qlCreateStrategy: (spec: QlStrategySpec) => post<QlStrategy>("/quantlab/strategies", { spec }),
+  qlAddVersion: (id: string, spec: QlStrategySpec) =>
+    post<QlStrategy>(`/quantlab/strategies/${encodeURIComponent(id)}/versions`, { spec }),
+  qlDatasets: () => request<QlDataset[]>("/quantlab/datasets"),
+  qlImport: (body: QlImportRequest) => post<QlDataset>("/quantlab/datasets/import", body),
+  qlFixture: (name: string) => post<QlDataset>("/quantlab/datasets/fixture", { name }),
+  qlExperiments: () => request<QlExperimentRow[]>("/quantlab/experiments"),
+  qlRun: (strategyVersionId: string, datasetId: string) =>
+    post<QlExperiment>("/quantlab/experiments", {
+      strategy_version_id: strategyVersionId,
+      dataset_id: datasetId,
+    }),
+  qlExperiment: (id: string) => request<QlExperiment>(`/quantlab/experiments/${encodeURIComponent(id)}`),
+  qlLedger: (id: string) => request<QlLedger>(`/quantlab/experiments/${encodeURIComponent(id)}/trades`),
+  qlEquity: (id: string, points = 800) =>
+    request<QlEquity>(`/quantlab/experiments/${encodeURIComponent(id)}/equity?points=${points}`),
+  qlCancel: (id: string) => post<QlExperiment>(`/quantlab/experiments/${encodeURIComponent(id)}/cancel`),
+  qlReproduce: (id: string) =>
+    post<QlReproduction>(`/quantlab/experiments/${encodeURIComponent(id)}/reproduce`),
 };

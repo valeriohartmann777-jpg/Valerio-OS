@@ -19,6 +19,7 @@ dependencies = [
   "httpx2",
   "numpy>=1.26",
   "scikit-learn>=1.5",
+  "pyarrow>=15",
   "onnxruntime>=1.18",
   "sounddevice>=0.5",
   "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",

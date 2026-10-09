@@ -16,6 +16,21 @@ docs that match reality.
 | 9     | Specialist agents       | Atlas, Forge, Archive fully online when missions justify them           | planned       |
 | 10    | Advanced                | War Room, MCP, calendar/email/GitHub, companion app, proactive engine   | planned       |
 | —     | Trading research        | Self-directed learning on NQ / XAUUSD with honest out-of-sample scoring | **first version** |
+| —     | QuantLab                | Hypothesis → StrategySpec → data passport → reference backtest → OOS verdict | **R0 + R1** |
+
+## QuantLab (R0 + R1 done; handoff in `docs/quantlab-handoff/`)
+
+- **R0/R1 (done):** UI shell, StrategySpec registry, Data Passport importer,
+  reference engine, experiment registry with artifacts, chronological OOS,
+  evidence gates, critical assessment. Status: `docs/quantlab/IMPLEMENTATION_STATUS.md`.
+- **R2:** walk-forward with parameter ranges fixed in advance, cost/slippage
+  stress, dependence-preserving bootstrap, regime slices, static reports; a
+  fast sweep adapter checked against the reference engine.
+- **R3:** natural language → StrategySpec draft (LLM output stays DRAFT until
+  confirmed), comparisons on equal data/cost bases.
+- **R4:** paper-forward tests with frozen parameters. Separately designed
+  engines for futures (NQ) and CFD/FX (XAUUSD) accounting before either is
+  supported.
 
 ## Phase 7 — Memory (first version) and the morning briefing
 

@@ -58,6 +58,11 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   holdout only you see, prop-firm limits checked, and what account a $10k
   month would really need. Improved versions reach MetaTrader only when you
   click "Copy to MetaTrader".
+- **QuantLab**: test a trading hypothesis on historical data you import —
+  StrategySpec with visible assumptions, Data Passport with fail-closed
+  quality checks, a deterministic backtest (signal at the close, fill at the
+  next open, costs included), a chronological out-of-sample test and a
+  critical verdict from JARVIS. Research only: it never trades.
 - **Backend** (FastAPI): event bus + WebSocket stream, state service, router,
   missions with pause/resume/stop, Operator + Sentinel agents, tool framework,
   permission levels 0–4 with approvals, SQLite persistence, audit log,
@@ -144,6 +149,36 @@ $10k a month is not something to optimize a backtest for — it comes from
 account size × a real edge × risk. The Bots page shows what account a $10k
 month would need at prop-firm and own-account drawdown limits, from the
 months the EA wasn't tuned on. Settings: `config/bots.yaml`.
+
+### QuantLab: test a trading hypothesis on your own data
+
+**QuantLab** (top bar) is a research workbench, not a trading tool: it never
+places orders. Release 1 tests one kind of strategy — a moving-average
+crossover on one stock or ETF, long only — on historical bars you import.
+
+1. **Datasets** → import a CSV or Parquet file (time, open, high, low,
+   close, volume; MetaTrader exports work too) with symbol, exchange and
+   currency. JARVIS checks it and writes a Data Passport. Duplicates, broken
+   OHLC bars, bad prices or unknown timezones reject the file — nothing is
+   repaired silently. The three handoff fixtures can be loaded with one click;
+   they are fabricated and stay labelled SYNTHETIC / TEST ONLY.
+2. **Strategies** → the Architect: windows, costs, slippage, starting cash and
+   the out-of-sample share. Every field shows Unknown / Assumed / Confirmed;
+   you save after reading the plain-language summary. Saved versions are
+   frozen by their hash.
+3. Pick a dataset → **Run experiment**. Signals use closed bars only and fill
+   at the next bar's open; the last part of the data is held out. The result
+   shows equity and drawdown after costs, train vs out-of-sample, every trade
+   with its signal and fill bar, the evidence gates and JARVIS's critical
+   assessment: what was observed, what can't be concluded, and the next test
+   to decide in advance. **Re-run & compare** proves the run is reproducible.
+
+Verdicts: INVALID (data, timing or accounting broke), FAILED (enough
+out-of-sample trades and a loss after costs), otherwise INCONCLUSIVE — Release
+1 never calls anything validated. Futures (NQ) and currency/metal pairs
+(XAUUSD) are refused as unsupported: their accounting (contract size,
+leverage, roll, swaps) isn't built yet. Ask JARVIS "what can I conclude from
+the latest QuantLab run?" — it answers from `quantlab_report`.
 
 ### The trained model
 
@@ -260,10 +295,10 @@ npm run build && npm run test:e2e     # drives the real Electron app (xvfb-run -
 
 ```
 apps/desktop/        Electron main (electron/) + React renderer (src/)
-backend/jarvis/      api · core · missions · agents · tools · permissions · events · storage · observability
+backend/jarvis/      api · core · missions · agents · tools · permissions · events · storage · observability · quantlab
 packages/protocol/   typed event/API contract shared with the UI
 config/              jarvis · permissions · personality · apps · models (.yaml)
-docs/                implementation status
+docs/                implementation status · quantlab/ (QuantLab status) · quantlab-handoff/ (specs, contracts, fixtures)
 scripts/             setup, dev, checks, real-system smoke test
 tests/e2e/           Electron end-to-end test
 data/                SQLite + logs at runtime (git-ignored)

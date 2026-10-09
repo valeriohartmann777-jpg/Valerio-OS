@@ -38,6 +38,16 @@
   --color-warning: #f1b65c;
   --color-danger: #f26d62;
 
+  /* QuantLab (handoff 02_UX): one teal accent, graphite surfaces, scoped to QuantLab. */
+  --color-ql: #4ec7bb;
+  --color-ql-positive: #76bfa9;
+  --color-ql-warning: #d8aa60;
+  --color-ql-danger: #e37d84;
+  --color-ql-surface: #111820;
+  --color-ql-raised: #17212a;
+  --color-ql-border: #27323a;
+  --color-ql-muted: #91a3ae;
+
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
 

@@ -326,6 +326,21 @@ _Last updated: 2026-10-04_
   set up, import, backtest, results, copy (23 steps)
 - Not yet run against the real MetaTrader on the MacBook
 
+### QuantLab R0 + R1 (D-026) — details in `docs/quantlab/IMPLEMENTATION_STATUS.md`
+- Handoff package in `docs/quantlab-handoff/`; module `backend/jarvis/quantlab/`, page
+  QuantLab (Overview · Strategies · Experiments · Datasets · Reports)
+- StrategySpec v0.1 (strict, hashed, frozen versions), Data Passport importer (CSV/Parquet,
+  fail-closed QA, Parquet snapshots), deterministic reference engine (next-open fills, exact
+  decimal accounting, invariant audit), experiment registry (manifest-hash ids, staged
+  checksummed artifacts, background runs with `quantlab.*` events, cancel, reproduce),
+  chronological OOS, evidence gates A–E, verdict INVALID / FAILED / INCONCLUSIVE, JARVIS
+  assessment, `quantlab_report` brain tool
+- Tests: 48 backend tests covering the handoff matrix Q-001…Q-022 against its fixtures; 4
+  vitest cases; E2E step (broken file refused, fixture passported, spec frozen, run judged,
+  trade detail, reproduce) — **24/24 E2E steps** pass
+- No real market data used yet: all results are SYNTHETIC / TEST ONLY engineering checks
+- Screenshots: `docs/screenshots/quantlab-*.png`
+
 ## IN PROGRESS
 - —
 
@@ -336,6 +351,7 @@ _Last updated: 2026-10-04_
 0. Learning on the MacBook: first Dukascopy download, first rounds
 0. Trained model on the MacBook: first real verdict (Learning page)
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
+0. QuantLab on the MacBook: import real daily bars of one liquid ETF and run one frozen spec
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")

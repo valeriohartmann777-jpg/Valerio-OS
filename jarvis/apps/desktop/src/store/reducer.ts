@@ -27,6 +27,7 @@ export type View =
   | { name: "mission"; id: string }
   | { name: "learning" }
   | { name: "bots" }
+  | { name: "quantlab" }
   | { name: "settings" };
 export type Connection = "connecting" | "online" | "offline";
 

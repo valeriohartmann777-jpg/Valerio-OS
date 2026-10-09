@@ -571,6 +571,51 @@ service.py  import, backtests (one MetaTrader run at a time), validation gate,
 - The E2E test seeds a fake MetaTrader install whose `wine64` is a script
   playing MetaEditor and the tester, so the real process/path code runs.
 
+## 13f. QuantLab (`backend/jarvis/quantlab/`)
+
+```
+spec.py        StrategySpec v0.1 (Pydantic mirror of the handoff schema, unknown fields
+               forbidden), canonical JSON + SHA-256, UNSUPPORTED_INSTRUMENT guard
+data.py        CSV/Parquet import, column mapping, UTC normalisation (offsets, declared
+               IANA zone, DST ambiguity refused), fail-closed QA, Data Passport,
+               Parquet snapshot; normalized_sha256 over a library-independent text form
+engine.py      reference simulator: exact SMA crossings, next-open fills, Decimal cash,
+               ledger (signals, orders, round trips), equity, invariant audit, metrics
+validation.py  evidence gates A–E, pre-registered verdict policy, JARVIS assessment
+store.py       ql_* tables (migration 9); versions and datasets insert-only (triggers)
+service.py     registry, imports, background runs (one at a time, cancellable), staged
+               artifacts, reproduce, overview, report text for the brain
+```
+
+```
+StrategySpec ──validate──▶ ql_strategy_versions (frozen, sha256)
+CSV/Parquet ──import/QA──▶ Data Passport + data/quantlab/datasets/<id>/snapshot.parquet
+version + dataset ──manifest (sha256 → exp_<id>)──▶ background run
+   load snapshot (checksum) → SMA crossings → simulate → audit → metrics (full/train/OOS)
+   → gates + verdict → artifacts in .staging-* → rename → ql_artifacts / ql_validations
+   events: quantlab.experiment.created → running(stage) → completed | failed | cancelled
+```
+
+- Time: timestamps are UTC bar starts; a bar's close is known at
+  `bar_start + interval`; fills are the next bar's open (`fill_index =
+  signal_index + 1`), so no same-bar fill exists. A signal on the last bar is
+  recorded as NOT_EXECUTABLE; an open position is marked, never sold.
+- One continuous simulation; the chronological split only attributes bars:
+  OOS starts from the equity at the last train close, trades belong to the
+  segment they were entered in. No parameter is ever chosen on OOS (there is
+  no parameter search in R1 at all).
+- Artifacts per experiment: `manifest.json`, `data_qa.json`, `metrics.json`,
+  `trades/orders/signals/equity.parquet`, `audit.jsonl`, each with SHA-256 in
+  `ql_artifacts`. `results_sha256` covers the exact ledger, equity and metrics.
+- API under `/quantlab/*` (no `/api` prefix, as everywhere in JARVIS); ids are
+  checked against `^[a-z]{2,3}_[0-9a-f]+$` before they touch a path. There is
+  no order, broker or live endpoint; the package imports no network or
+  process modules (a test enforces both).
+- UI: `pages/QuantLab.tsx` (Overview cockpit, Strategies, Experiments,
+  Datasets, Reports) and `components/quantlab/` (Architect, DataLab,
+  ExperimentView, EquityChart in plain SVG). It refetches on every
+  `quantlab.*` event and after reconnecting.
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

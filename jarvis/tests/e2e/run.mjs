@@ -300,6 +300,51 @@ try {
     await page.getByRole("button", { name: "Home" }).click();
   });
 
+  await step("QuantLab: broken data refused, synthetic data passported, a spec frozen, a run judged critically", async () => {
+    const top = () => page.getByTestId("quantlab-page").evaluate((el) => el.scrollTo(0, 0));
+    await page.getByRole("button", { name: "QuantLab", exact: true }).click();
+    await page.getByTestId("ql-empty").waitFor(); // no curve before a real run
+    await page.getByTestId("ql-section-datasets").click();
+    await page.getByTestId("ql-fixture-invalid_ohlc_duplicate.csv").click();
+    await page.getByTestId("ql-data-blocked").waitFor(); // fail closed
+    await page.getByTestId("ql-passport").getByText("DUPLICATE_TIMESTAMP").waitFor();
+    await page.getByTestId("ql-fixture-ma_crossover_case.csv").click();
+    await page.getByTestId("ql-passport").getByTestId("ql-synthetic").waitFor();
+    await top();
+    await page.waitForTimeout(200);
+    await shot("11c-quantlab-passport");
+
+    await page.getByTestId("ql-section-strategies").click();
+    await page.getByTestId("ql-preset-fixture").click();
+    await page.getByTestId("ql-spec-summary").waitFor();
+    assert.equal(await page.getByTestId("ql-save-strategy").isDisabled(), true, "saved without review");
+    await page.getByRole("button", { name: "Confirm all" }).click();
+    await page.getByTestId("ql-reviewed").check();
+    await shot("11d-quantlab-architect");
+    await page.getByTestId("ql-save-strategy").click();
+    await page.getByTestId("ql-run-dataset").selectOption({ index: 1 });
+    await page.getByTestId("ql-run").click();
+    const experiment = page.getByTestId("ql-experiment").and(page.locator('[data-status="completed"]'));
+    await experiment.waitFor({ timeout: 30_000 });
+    await experiment.getByTestId("ql-verdict").first().filter({ hasText: "Inconclusive" }).waitFor();
+    await page.getByTestId("ql-equity-chart").waitFor();
+    assert.match(await page.getByTestId("ql-metric-net").innerText(), /7\.50 USD/); // the fixture's 92.50 end
+    await page.waitForTimeout(300);
+    await shot("11e-quantlab-experiment");
+    await page.getByTestId("ql-tab-trades").click();
+    await page.getByTestId("ql-trade-row").first().click();
+    await page.getByTestId("ql-trade-detail").waitFor();
+    await shot("11f-quantlab-trades");
+    await page.getByTestId("ql-tab-audit").click();
+    await page.getByTestId("ql-reproduce").click();
+    await page.getByTestId("ql-repro-result").filter({ hasText: "Identical" }).waitFor();
+    await page.getByTestId("ql-section-overview").click();
+    await page.getByTestId("ql-cockpit-verdict").waitFor();
+    await page.waitForTimeout(300);
+    await shot("11g-quantlab-cockpit");
+    await page.getByRole("button", { name: "Home" }).click();
+  });
+
   await step("memory: added on Home, kept, forgotten; the morning briefing is set in Settings", async () => {
     await page.getByTestId("memory-input").fill("Prefers short answers.");
     await page.getByTestId("memory-input").press("Enter");

@@ -160,6 +160,40 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-026 — QuantLab: a fail-closed research workbench with its own reference engine
+
+- **Decision:** QuantLab (handoff in `docs/quantlab-handoff/`) is built into
+  JARVIS as a backend package `backend/jarvis/quantlab/` and a QuantLab page,
+  not as a second app. R1 runs exactly one strategy family (SMA crossover,
+  StrategySpec v0.1) on one cash-equity instrument, long only, through a small
+  sequential reference simulator: signal at a bar's close, market fill at the
+  next bar's open, exact `Decimal` cash accounting, and an audit that
+  re-derives every booking from the ledger. Data is imported fail-closed into
+  an immutable Parquet snapshot with a Data Passport; experiments are
+  identified by the SHA-256 of their manifest (spec, data snapshot, engine,
+  code revision, runtime). The verdict policy is fixed before any run:
+  INVALID if Gate A fails, FAILED if the OOS segment has ≥ 30 closed trades
+  and loses after costs, otherwise INCONCLUSIVE — never "validated".
+- **Reason:** The handoff demands correctness before speed and no false
+  certainty. A vectorised library would be faster but can't be audited line by
+  line against the golden fixtures; exact decimals keep SMA ties ties (floats
+  turn `(3 × 101.3) / 3` vs `101.3` into a fake cross) and make cash reconcile
+  to the cent. A content-derived experiment id makes "same inputs, same
+  result" checkable (Reproduce re-runs from the snapshot and compares the
+  results hash) and stops duplicate runs.
+- **Alternatives:** VectorBT/pandas as the engine (planned later as a fast
+  sweep adapter, never as the only source of truth); random train/test split
+  (wrong for time series); letting the LLM write strategy code (refused: no
+  arbitrary code execution); treating XAUUSD or NQ with share accounting
+  (refused as `UNSUPPORTED_INSTRUMENT` — contract size, leverage, roll and
+  swaps aren't modelled).
+- **Consequences:** pyarrow is a new backend dependency (Parquet snapshots and
+  artifacts). R1 can't test the user's gold or NQ markets — those need their
+  own accounting (R2+). Fixtures are recognised by checksum and labelled
+  SYNTHETIC / TEST ONLY everywhere; no real market dataset ships with JARVIS,
+  so no market evidence exists until the user imports licensed history.
+- **Date:** 2026-10-09
+
 ## D-025 — Bot Lab: improving the user's MT5 EAs without touching their trading
 
 - **Decision:** JARVIS works on the user's MetaTrader 5 EAs in its own
