@@ -1,0 +1,14 @@
+# Exact versions the test suite passes with (Python 3.13).
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.18.1
+pyarrow==25.0.1
+PyYAML==6.0.3
+matplotlib==3.11.2
+statsmodels==0.15.0
+databento==0.87.0
+databento-dbn==0.70.0
+kaggle==2.2.4
+kagglesdk==0.1.37
+pytest==9.1.1
+hypothesis==6.168.5

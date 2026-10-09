@@ -1,0 +1,138 @@
+# Contract specifications.
+#
+# Every tick size, tick value and point value used by the cost model and by the
+# R / currency conversion is read from this file. The engine never hardcodes
+# them. `tick_value` must equal `tick_size * point_value`; the loader checks it.
+#
+# Source: CME Group contract specifications (tick size, multiplier) and the
+# Binance USD-M contract page for BTCUSDT. Re-check before live use; exchanges
+# change specifications rarely but they do change them.
+#
+# `roll` documents the convention used to build or interpret continuous series.
+# CME equity-index futures expire on the 3rd Friday of Mar/Jun/Sep/Dec. Liquidity
+# moves to the next contract around 8 calendar days before expiry (the
+# Thursday of the prior week), which is the conventional roll date.
+
+instruments:
+  ES:
+    description: E-mini S&P 500 futures
+    asset_class: equity_index_future
+    exchange: CME
+    tick_size: 0.25
+    tick_value: 12.50
+    point_value: 50.0
+    currency: USD
+    session_template: cme_equity_index
+    roll:
+      months: [3, 6, 9, 12]
+      expiry: third_friday
+      roll_offset_days: 8
+
+  NQ:
+    description: E-mini Nasdaq-100 futures
+    asset_class: equity_index_future
+    exchange: CME
+    tick_size: 0.25
+    tick_value: 5.00
+    point_value: 20.0
+    currency: USD
+    session_template: cme_equity_index
+    roll:
+      months: [3, 6, 9, 12]
+      expiry: third_friday
+      roll_offset_days: 8
+
+  MES:
+    description: Micro E-mini S&P 500 futures
+    asset_class: equity_index_future
+    exchange: CME
+    tick_size: 0.25
+    tick_value: 1.25
+    point_value: 5.0
+    currency: USD
+    session_template: cme_equity_index
+    roll:
+      months: [3, 6, 9, 12]
+      expiry: third_friday
+      roll_offset_days: 8
+
+  MNQ:
+    description: Micro E-mini Nasdaq-100 futures
+    asset_class: equity_index_future
+    exchange: CME
+    tick_size: 0.25
+    tick_value: 0.50
+    point_value: 2.0
+    currency: USD
+    session_template: cme_equity_index
+    roll:
+      months: [3, 6, 9, 12]
+      expiry: third_friday
+      roll_offset_days: 8
+
+  YM:
+    description: E-mini Dow ($5) futures
+    asset_class: equity_index_future
+    exchange: CBOT
+    tick_size: 1.0
+    tick_value: 5.00
+    point_value: 5.0
+    currency: USD
+    session_template: cme_equity_index
+    roll:
+      months: [3, 6, 9, 12]
+      expiry: third_friday
+      roll_offset_days: 8
+
+  RTY:
+    description: E-mini Russell 2000 futures
+    asset_class: equity_index_future
+    exchange: CME
+    tick_size: 0.10
+    tick_value: 5.00
+    point_value: 50.0
+    currency: USD
+    session_template: cme_equity_index
+    roll:
+      months: [3, 6, 9, 12]
+      expiry: third_friday
+      roll_offset_days: 8
+
+  CL:
+    description: Crude oil (WTI) futures
+    asset_class: energy_future
+    exchange: NYMEX
+    tick_size: 0.01
+    tick_value: 10.00
+    point_value: 1000.0
+    currency: USD
+    session_template: cme_equity_index   # same 18:00-17:00 ET Globex hours; RTH buckets are reused as time-of-day partitions
+    roll:
+      months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      expiry: cl_rule
+      roll_offset_days: 5
+
+  GC:
+    description: Gold futures
+    asset_class: metal_future
+    exchange: COMEX
+    tick_size: 0.10
+    tick_value: 10.00
+    point_value: 100.0
+    currency: USD
+    session_template: cme_equity_index
+    roll:
+      months: [2, 4, 6, 8, 10, 12]
+      expiry: gc_rule
+      roll_offset_days: 30
+
+  BTCUSDT_PERP:
+    description: Binance USD-M BTCUSDT perpetual (PROXY market only, never CME evidence)
+    asset_class: crypto_perpetual
+    exchange: BINANCE
+    tick_size: 0.10
+    tick_value: 0.10       # per 1 BTC of size
+    point_value: 1.0       # USDT per 1.0 price move per 1 BTC
+    currency: USDT
+    session_template: crypto_24x7_ny
+    roll: null

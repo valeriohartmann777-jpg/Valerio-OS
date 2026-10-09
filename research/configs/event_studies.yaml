@@ -1,0 +1,587 @@
+# Pre-registered event studies (frozen 2026-10-07, BEFORE any market data was loaded).
+#
+# Machine-readable mirror of hypotheses/HYPOTHESES_AUCTION.md, HYPOTHESES_ICT.md and
+# HYPOTHESES_PRICE_ACTION.md. The detectors in edgelab/studies/catalog.py read their
+# parameters from here. Changing anything after data has been seen requires a NEW study
+# ID and a dated journal entry (RESEARCH_PROTOCOL.md section 3.1).
+#
+# type   E  event effect: event vs control; may become a strategy candidate (gates G1-G6)
+#        I  incremental: compares variants / subgroups of an event; refines a candidate,
+#           never a candidate by itself (G1, G2, G4 on the smallest group, G5)
+#        M  mechanism / magnitude / filter: not a signed trade return (G1, G2, G4, G5)
+# norm   unit of the primary effect, used for the cost hurdle G3:
+#        atr   = 5m ATR(14) of the event bar, atr_d = daily RTH ATR(14) known at the open,
+#        R     = stop distance of the trade (A003)
+# twin   control used for G6: "primary" when the primary control already is the simpler
+#        twin, a description when a separate twin test is run, null when none was
+#        pre-registered (G6 then reported as n/a)
+# rank   pre-data rank of the hypothesis inside its family (ties for the fallback rule)
+#
+# shifted_reference: the levels of another event day, re-anchored to today's RTH open (A006:
+#        the 10:30 price) with their offset scaled by ATR_d[today] / ATR_d[other day]; for the
+#        nearest pivot zone (an adaptive level) the displaced zone set (context pz_shift_*).
+
+version: 1
+frozen_utc: "2026-10-07"
+
+common:
+  bar_minutes: 5
+  control_draws: 5
+  n_boot: 10000
+  n_boot_descriptive: 2000
+  ci: 0.95
+  fdr_q: 0.10
+  min_events: 100
+  seed: 20261007
+  cost_scenario: BASE
+  context:                     # StudyContext parameters (edgelab/studies/context.py DEFAULTS)
+    atr_n: 14
+    pivots_ict: [3, 3]
+    pivots_pa: [6, 6]
+    pz_merge_atr: 0.25
+    pz_max_age_bars: 1380      # 5 sessions of 5m Globex bars; zones older than that expire
+    pz_shift_draws: 5          # randomized-level control for pivot zones: the whole zone set is
+    pz_shift_atr: [0.5, 1.5]   # displaced per draw and date by +-U(0.5, 1.5) x 5m ATR at the open
+    equal_tol_atr: 0.10
+    equal_min_sep: 5
+    equal_max_sep: 300
+    equal_min_reaction_atr: 1.0
+    value_area: {bin_ticks: 1, method: uniform, va_pct: 0.70, va_method: single}
+    volume_lookback_sessions: 20
+    body_median_bars: 100
+    displacement_body_mult: 1.5
+    displacement_clv: 0.75
+    ema_twin_span: 20
+    ema_twin_sd_window: 20
+    max_day_gap_days: 5
+
+touch: &touch {zone_atr: 0.10, break_atr: 0.25, rearm_atr: 0.50, window: ["09:45", "15:00"]}
+rth_window: &rth_window ["09:45", "15:00"]
+
+studies:
+  # ------------------------------------------------------------------ family A
+  A001:
+    hypothesis: HA01
+    title: Rejection back inside prior value -> rotation
+    type: E
+    rank: 4
+    norm: atr
+    primary: {metric: r12, control: shifted_reference}
+    twin: primary
+    params: {pen_atr: 0.10, reclaim_bars: 3, window: *rth_window}
+    expected: "+0.03 to +0.08 ATR vs shifted reference; P(passes gates) ~ 0.25"
+  A002:
+    hypothesis: HA02
+    title: Acceptance outside prior value -> continuation
+    type: E
+    rank: 6
+    norm: atr
+    primary: {metric: r12, control: momentum_twin_60min}
+    twin: primary
+    params: {last_pair_close: "14:30", momentum_lookback_bars: 12}
+    expected: "+0.00 to +0.06 ATR vs momentum twin; P ~ 0.20"
+  A003:
+    hypothesis: HA03
+    title: 80% rule - outside open, re-entry -> opposite value edge
+    type: E
+    rank: 5
+    norm: R
+    primary: {metric: P(target before stop by 15:55), control: geometry_twin}
+    twin: primary
+    params: {last_pair_close: "14:30", stop_atr_d: 0.25}
+    expected: "target-first rate 0.40-0.55; excess over geometry twin +0.00 to +0.08; P ~ 0.20"
+  A004:
+    hypothesis: HA04
+    title: Open location vs prior value and range -> day range (magnitude)
+    type: M
+    rank: 1
+    norm: atr_d
+    primary: {metric: RTH range / ATR_d, control: class 1 days}
+    twin: null
+    params: {}
+    expected: "class 3 - class 1 clearly positive (+0.2 ATR_d or more)"
+  A005:
+    hypothesis: HA04
+    title: Class-3 open, gap-direction continuation 09:35 -> 15:55
+    type: E
+    rank: 1
+    norm: atr_d
+    primary: {metric: reod (ATR_d), control: time_matched}
+    twin: null
+    params: {}
+    expected: "+-0.05 ATR_d; P(passes) ~ 0.15"
+  A006:
+    hypothesis: HA05
+    title: Failed IB range extension -> reversal
+    type: E
+    rank: 2
+    norm: atr
+    primary: {metric: r12, control: shifted_reference (anchor 10:30 price)}
+    twin: primary
+    params: {pen_atr: 0.10, reclaim_bars: 3, window: ["10:35", "15:00"], scan_from: "10:30", ib_tercile_window: 252, ib_tercile_min: 60}
+    expected: "+0.03 to +0.10 ATR; P ~ 0.25"
+  A007:
+    hypothesis: HA06
+    title: Narrow IB -> first extension continues
+    type: E
+    rank: 3
+    norm: atr
+    primary: {metric: r12, control: time_matched}
+    twin: first IB extension on wide-IB (top tercile) days
+    params: {window: ["10:35", "15:00"], scan_from: "10:30", ib_tercile_window: 252, ib_tercile_min: 60}
+    expected: "direction +0.00 to +0.06 ATR (magnitude effect strong, descriptive); P ~ 0.15"
+  A008:
+    hypothesis: HA07
+    title: Opening drive -> trend continuation
+    type: E
+    rank: 7
+    norm: atr_d
+    primary: {metric: reod from 10:00 (ATR_d), control: momentum_twin (large first-30-min move, not a drive)}
+    twin: primary
+    params: {drive_atr_d: 0.30, clv: 0.70, decision: "10:00"}
+    expected: "+0.00 to +0.08 ATR_d vs twin; P ~ 0.15"
+  A009:
+    hypothesis: HA08
+    title: Open-rejection-reverse / Judas swing (also HB14)
+    type: E
+    rank: 11
+    norm: atr
+    primary: {metric: r24, control: time_matched}
+    twin: open-crossing twin (crossing the open without a prior 0.20 ATR_d excursion)
+    params: {excursion_atr_d: 0.20, cross_atr_d: 0.05, end: "10:30", window: ["09:35", "10:30"]}
+    expected: "+0.00 to +0.05 ATR; P ~ 0.15"
+  A010:
+    hypothesis: HA09
+    title: Overnight inventory correction at the open
+    type: E
+    rank: 8
+    norm: atr
+    primary: {metric: r6, control: time_matched}
+    twin: null
+    params: {top_frac: 0.85, on_ret_atr_d: 0.30}
+    expected: "-0.03 to +0.03 ATR (no effect); P ~ 0.10"
+  A011:
+    hypothesis: HA10
+    title: VWAP 2-SD deviation -> reversion
+    type: E
+    rank: 9
+    norm: atr
+    primary: {metric: r12, control: ema_twin}
+    twin: primary
+    params: {window: ["10:00", "15:00"]}
+    expected: "+0.02 ATR overall, +0.06 in low-ER days, negative in high-ER days; P ~ 0.15"
+  A012:
+    hypothesis: HA10
+    title: VWAP reclaim after a 2-SD deviation -> continuation
+    type: E
+    rank: 9
+    norm: atr
+    primary: {metric: r12, control: ema_twin}
+    twin: primary
+    params: {window: ["10:00", "15:00"]}
+    expected: "+-0.03 ATR; P ~ 0.15"
+  A013:
+    hypothesis: HA11
+    title: Poor highs/lows revisited more than excess extremes
+    type: M
+    rank: 10
+    norm: none
+    primary: {metric: P(revisit next RTH), control: excess extremes, stratified by distance tercile}
+    twin: null
+    params: {}
+    expected: "difference ~ 0; P ~ 0.10"
+  A014:
+    hypothesis: HA12
+    title: POC migration -> next session direction
+    type: E
+    rank: 12
+    norm: atr_d
+    primary: {metric: OLS coefficient of POC-up on next-day open->15:55 return, control: sign of day-d return}
+    twin: primary
+    params: {}
+    expected: "no incremental effect; P ~ 0.05"
+  A015:
+    hypothesis: HA13
+    title: LVN fast travel (stability gate first)
+    type: M
+    rank: 13
+    norm: none
+    primary: {metric: median bars to traverse a 0.10 ATR_d zone, control: random zones of equal width}
+    twin: null
+    params: {bin_ticks: [1, 2, 4], sigmas: [1, 2, 4], ref_bin_ticks: 1, ref_sigma: 2, prominence: 0.10, match_bins: 2,
+             min_settings: 7, gate_frac: 0.50, composite_sessions: 5, zone_atr_d: 0.10, random_per_node: 5}
+    expected: "stability gate likely fails at 1m resolution; P ~ 0.05"
+
+  # ------------------------------------------------------------------ family B
+  B001:
+    hypothesis: HB00
+    title: Liquidity footprint at PDH/PDL/ONH/ONL/equal levels
+    type: M
+    rank: 0
+    norm: none
+    primary: {metric: log volume ratio of the first 1m crossing, control: shifted_reference}
+    twin: null
+    params: {equal_max_age_bars: 300}
+    expected: "positive at PDH/PDL (+0.05 to +0.20 log points); equal highs uncertain"
+  B002:
+    hypothesis: HB01
+    title: PDH/PDL sweep and reclaim -> reversal
+    type: E
+    rank: 1
+    norm: atr
+    primary: {metric: r12, control: shifted_reference}
+    twin: PA twin (identical detector on the nearest 6/6 pivot zones)
+    params: {mode: pen, pen_atr: 0.10, reclaim_bars: 3, window: *rth_window}
+    expected: "+0.02 to +0.08 ATR; reclaim variant >= wick variant; P ~ 0.25"
+  B003:
+    hypothesis: HB01
+    title: PDH/PDL wick sweep
+    type: E
+    rank: 1
+    norm: atr
+    primary: {metric: r12, control: shifted_reference}
+    twin: PA twin (identical detector on the nearest 6/6 pivot zones)
+    params: {mode: wick, pen_atr: 0.10, window: *rth_window}
+    expected: "<= B002; P ~ 0.20"
+  B004:
+    hypothesis: HB01
+    title: PDH/PDL close sweep
+    type: E
+    rank: 1
+    norm: atr
+    primary: {metric: r12, control: shifted_reference}
+    twin: PA twin (identical detector on the nearest 6/6 pivot zones)
+    params: {mode: close, close_thr_atr: 0.0, reclaim_bars: 3, window: *rth_window}
+    expected: "similar to B002; P ~ 0.20"
+  B005:
+    hypothesis: HB01
+    title: PDH/PDL multi-bar failed breakout
+    type: E
+    rank: 1
+    norm: atr
+    primary: {metric: r12, control: shifted_reference}
+    twin: PA twin (identical detector on the nearest 6/6 pivot zones)
+    params: {mode: multi, min_closes: 2, max_bars_multi: 6, window: *rth_window}
+    expected: "similar to B002; P ~ 0.20"
+  B006:
+    hypothesis: HB02
+    title: Overnight high/low sweep at the NY open -> reversal
+    type: E
+    rank: 2
+    norm: atr
+    primary: {metric: r12, control: shifted_reference}
+    twin: PA twin (identical detector on the nearest 6/6 pivot zones)
+    params: {mode: pen, pen_atr: 0.10, reclaim_bars: 3, window: ["09:35", "11:00"]}
+    expected: "+0.00 to +0.06 ATR; P ~ 0.20"
+  B007:
+    hypothesis: HB03
+    title: Equal highs/lows vs single-swing sweeps
+    type: I
+    rank: 10
+    norm: atr
+    primary: {metric: r12, control: single-pivot sweeps stratified by age x distance tercile}
+    twin: null
+    params: {pen_atr: 0.10, reclaim_bars: 3, window: *rth_window, max_age_bars: 300}
+    expected: "difference ~ 0; P ~ 0.10"
+  B008:
+    hypothesis: HB04
+    title: Liquidity run - clean break that holds -> continuation
+    type: E
+    rank: 3
+    norm: atr
+    primary: {metric: r12, control: time_matched}
+    twin: same detector on shifted-reference levels
+    params: {thr_atr: 0.10, hold_bars: 3, window: *rth_window}
+    expected: "+0.00 to +0.06 ATR; P ~ 0.20"
+  B009:
+    hypothesis: HB05
+    title: Sweep + displacement adds information
+    type: I
+    rank: 5
+    norm: atr
+    primary: {metric: r12, control: B002 events without displacement}
+    twin: null
+    params: {}
+    expected: "~ 0; P ~ 0.15"
+  B010:
+    hypothesis: HB06
+    title: Sweep + market structure shift
+    type: E
+    rank: 8
+    norm: atr
+    primary: {metric: r12, control: time_matched}
+    twin: the parent B002 entries of the same sessions
+    params: {within_bars: 12, window: *rth_window}
+    expected: "+0.00 to +0.04 ATR; MSS does not beat the reclaim entry; P ~ 0.15"
+  B011:
+    hypothesis: HB07
+    title: FVG first retrace -> continuation
+    type: E
+    rank: 4
+    norm: atr
+    primary: {metric: r12, control: matched_displacement_twin}
+    twin: primary
+    params: {min_width_atr: 0.25, formed: ["09:45", "14:30"], max_bars: 24, window: *rth_window}
+    expected: "~ 0 vs twin; P ~ 0.10"
+  B012:
+    hypothesis: HB08
+    title: FVGs get filled (dedicated FVG study)
+    type: M
+    rank: 7
+    norm: none
+    primary: {metric: P(partial fill within 12 bars), control: matched_displacement_twin}
+    twin: null
+    params: {min_width_atr: 0.25, formed: ["09:45", "14:30"], fill_bars: 12, window: *rth_window}
+    expected: "fill rate > 0.6 for both; difference ~ 0; P ~ 0.10"
+  B013:
+    hypothesis: HB09
+    title: Inverse FVG -> continuation in the new direction
+    type: E
+    rank: 12
+    norm: atr
+    primary: {metric: r12, control: gap-free move closing back through its pre-move extreme}
+    twin: primary
+    params: {min_width_atr: 0.25, formed: ["09:45", "14:30"], max_bars: 60, window: *rth_window}
+    expected: "~ 0; P ~ 0.10"
+  B014:
+    hypothesis: HB10
+    title: Order-block retest -> reaction
+    type: E
+    rank: 14
+    norm: atr
+    primary: {metric: r12, control: random_depth_twin}
+    twin: primary
+    params: {max_bars: 48, window: *rth_window}
+    expected: "~ 0; P ~ 0.05"
+  B015:
+    hypothesis: HB11
+    title: Premium/discount location after trend control
+    type: M
+    rank: 11
+    norm: atr
+    primary: {metric: -slope of r12 on location decile, control: structure trend x daily ER strata}
+    twin: null
+    params: {every_bars: 6, window: *rth_window}
+    expected: "slope ~ 0 after trend control; P ~ 0.05"
+  B016:
+    hypothesis: HB11
+    title: OTE band vs 0.50-0.62 band
+    type: I
+    rank: 11
+    norm: atr
+    primary: {metric: r12, control: "[0.50, 0.62) band entries"}
+    twin: null
+    params: {bands: {b38: [0.38, 0.50], b50: [0.50, 0.62], ote: [0.62, 0.79]}, max_bars: 24, window: *rth_window}
+    expected: "no Fibonacci peak; P ~ 0.05"
+  B017:
+    hypothesis: HB12
+    title: Killzone dependence of sweep outcomes
+    type: I
+    rank: 6
+    norm: atr
+    primary: {metric: r12, control: time-matched per bucket, difference of differences}
+    twin: null
+    params: {killzone_buckets: [RTH_OPEN, MORNING], comparison_buckets: [MIDDAY]}
+    expected: "~ 0 after normalisation; P ~ 0.10"
+  B018:
+    hypothesis: HB13
+    title: SMT divergence (needs ES + NQ) - BLOCKED
+    type: I
+    rank: 13
+    norm: atr
+    primary: {metric: r12, control: B002 events without divergence}
+    twin: null
+    params: {}
+    expected: "~ 0 to slightly positive; P ~ 0.10 (blocked: NQ embargoed until rule freeze)"
+
+  # ------------------------------------------------------------------ family C
+  C001:
+    hypothesis: HC01
+    title: First touch of prior-day extremes -> reaction
+    type: E
+    rank: 1
+    norm: atr
+    primary: {metric: r12, control: shifted_reference}
+    twin: primary
+    params: *touch
+    expected: "+0.02 to +0.08 ATR; P ~ 0.25"
+  C002:
+    hypothesis: HC02
+    title: Touch number - first touch strongest
+    type: I
+    rank: 5
+    norm: atr
+    primary: {metric: r12, control: time-matched per touch number, difference of differences}
+    twin: null
+    params: *touch
+    expected: "positive difference (+0.02 to +0.06); P ~ 0.20"
+  C003:
+    hypothesis: HC03
+    title: Recent levels beat old levels
+    type: I
+    rank: 8
+    norm: atr
+    primary: {metric: r12, control: time-matched per age group, difference of differences}
+    twin: null
+    params: *touch
+    expected: "small positive; P ~ 0.15"
+  C004:
+    hypothesis: HC04
+    title: ATR close breakout (close > L + 0.25 ATR) -> continuation
+    type: E
+    rank: 4
+    norm: atr
+    primary: {metric: r12, control: time_matched}
+    twin: strength twin (same-minute bars with a body of the same sign within +-20%)
+    params: {window: *rth_window}
+    expected: "+0.00 to +0.05 ATR; false-break rate 0.35-0.55; P ~ 0.20"
+  C005:
+    hypothesis: HC04
+    title: Wick breakout (high > L + 1 tick)
+    type: E
+    rank: 4
+    norm: atr
+    primary: {metric: r12, control: time_matched}
+    twin: strength twin (same-minute bars with a body of the same sign within +-20%)
+    params: {window: *rth_window}
+    expected: "<= C004; P ~ 0.10"
+  C006:
+    hypothesis: HC04
+    title: Close breakout (close > L + 0.10 ATR)
+    type: E
+    rank: 4
+    norm: atr
+    primary: {metric: r12, control: time_matched}
+    twin: strength twin (same-minute bars with a body of the same sign within +-20%)
+    params: {window: *rth_window}
+    expected: "+0.00 to +0.04 ATR; P ~ 0.15"
+  C007:
+    hypothesis: HC04
+    title: Volume breakout (close breakout, volume >= 80th pct of the slot)
+    type: E
+    rank: 4
+    norm: atr
+    primary: {metric: r12, control: time_matched}
+    twin: strength twin (same-minute bars with a body of the same sign within +-20%)
+    params: {window: *rth_window}
+    expected: "+0.00 to +0.05 ATR; P ~ 0.15"
+  C008:
+    hypothesis: HC04
+    title: Strong-body breakout (displacement bar)
+    type: E
+    rank: 4
+    norm: atr
+    primary: {metric: r12, control: time_matched}
+    twin: strength twin (same-minute bars with a body of the same sign within +-20%)
+    params: {window: *rth_window}
+    expected: "+0.00 to +0.05 ATR; P ~ 0.15"
+  C009:
+    hypothesis: HC05
+    title: Failed breakout -> reversal
+    type: E
+    rank: 2
+    norm: atr
+    primary: {metric: r12, control: "shifted_reference (PD: other day; PZ: displaced zone set)"}
+    twin: primary
+    params: {close_thr_atr: 0.10, reclaim_bars: 3, window: *rth_window}
+    expected: "+0.03 to +0.10 ATR; larger than C001; P ~ 0.25"
+  C009vC001:
+    hypothesis: HC05
+    title: Failed breakout vs ordinary first touch (PD levels)
+    type: I
+    rank: 2
+    norm: atr
+    primary: {metric: r12, control: "(C009 - shifted) - (C001 - shifted) on PD levels"}
+    twin: null
+    params: {}
+    expected: "positive; P ~ 0.20"
+  C010:
+    hypothesis: HC06
+    title: Polarity - first retest of a broken level holds
+    type: E
+    rank: 10
+    norm: atr
+    primary: {metric: r12, control: "shifted_reference (PD: other day; PZ: displaced zone set)"}
+    twin: primary
+    params: {max_bars: 24, zone_atr: 0.10, break_atr: 0.25, window: *rth_window}
+    expected: "+0.00 to +0.05 ATR; P ~ 0.15"
+  C011:
+    hypothesis: HC07
+    title: Compression -> larger move (magnitude)
+    type: M
+    rank: 9
+    norm: atr
+    primary: {metric: "|r12|", control: range breaks without compression}
+    twin: null
+    params: &compression {range_bars: 12, pct_window: 500, atr_pct_max: 0.20, range_atr_max: 2.0, window: *rth_window}
+    expected: "positive in ATR units, ~ 0 in ATR_d units"
+  C012:
+    hypothesis: HC07
+    title: Compression breakout direction
+    type: E
+    rank: 9
+    norm: atr
+    primary: {metric: r12, control: range breaks without compression}
+    twin: primary
+    params: *compression
+    expected: "~ 0; P ~ 0.10"
+  C013:
+    hypothesis: HC08
+    title: Higher-low confirmation in an uptrend -> continuation
+    type: E
+    rank: 12
+    norm: atr
+    primary: {metric: r12, control: momentum_twin_20_bars}
+    twin: primary
+    params: {momentum_lookback_bars: 20, window: *rth_window}
+    expected: "~ 0; P ~ 0.10"
+  C014:
+    hypothesis: HC09
+    title: Round-number bounce
+    type: E
+    rank: 6
+    norm: atr
+    primary: {metric: r12, control: half_step_grid}
+    twin: primary
+    params: {rn_step: {ES: 25, MES: 25, NQ: 100, MNQ: 100}, zone_atr: 0.10, break_atr: 0.25, rearm_atr: 0.50, window: *rth_window}
+    expected: "+0.00 to +0.03 ATR; P ~ 0.10"
+  C015:
+    hypothesis: HC09
+    title: Round-number cascade
+    type: E
+    rank: 6
+    norm: atr
+    primary: {metric: r12, control: half_step_grid}
+    twin: primary
+    params: {rn_step: {ES: 25, MES: 25, NQ: 100, MNQ: 100}, thr_atr: 0.25, window: *rth_window}
+    expected: "+0.00 to +0.04 ATR; P ~ 0.10"
+  C016:
+    hypothesis: HC10
+    title: Rejection candle at the level adds information
+    type: I
+    rank: 11
+    norm: atr
+    primary: {metric: r12, control: other C001 events}
+    twin: null
+    params: {wick_frac: 0.50, clv: 0.65}
+    expected: "~ 0; P ~ 0.10"
+  C017:
+    hypothesis: HC11
+    title: Level source - PD vs pivot zones (PW, RN descriptive)
+    type: I
+    rank: 7
+    norm: atr
+    primary: {metric: r12, control: "(PD - shifted) - (PZ - displaced zone set)"}
+    twin: null
+    params: *touch
+    expected: "PD > PZ by +0.01 to +0.05; P ~ 0.15"
+  C018:
+    hypothesis: HC12
+    title: 30-minute opening-range breakout -> continuation
+    type: E
+    rank: 3
+    norm: atr_d
+    primary: {metric: reod (ATR_d), control: time_matched}
+    twin: null
+    params: {window: ["10:00", "15:00"]}
+    expected: "+0.00 to +0.05 ATR_d; P ~ 0.20"

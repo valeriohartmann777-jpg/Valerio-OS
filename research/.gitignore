@@ -1,0 +1,32 @@
+# Market data is never committed (vendor licences, size). Only the manifest is.
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Credentials are never committed. The Databento API key is read from the environment
+# variable DATABENTO_API_KEY only and is never written to a file, log or report.
+.env
+.env.*
+*.env
+.envrc
+secrets/
+*.secret
+*.key
+*.pem
+credentials*
+*_credentials.*
+# Kaggle credentials (the public NQ dataset needs none; a token stays in the environment)
+kaggle.json
+access_token
+access_token.txt
+.kaggle/
+
+# Python / tooling
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+build/

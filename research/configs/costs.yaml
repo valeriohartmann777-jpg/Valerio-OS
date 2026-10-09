@@ -1,0 +1,66 @@
+# Transaction-cost scenarios, per contract (or per 1 unit for crypto).
+#
+# commission_rt          broker commission + exchange + clearing + NFA fees, round turn,
+#                        in instrument currency. Fixed per contract.
+# fee_bps_taker/maker    per side, basis points of notional (crypto). 0 for CME futures.
+# slippage_ticks_market  adverse ticks per side for market orders (entries and time exits).
+# slippage_ticks_stop    adverse ticks per side for stop orders (stop entries, protective stops).
+# slippage_ticks_limit   adverse ticks per side for limit orders (normally 0: the price is the limit).
+# eth_slippage_mult      multiplier applied to market/stop slippage outside RTH (thinner book).
+# limit_through_ticks    a resting limit order (limit entry or profit target) only counts as
+#                        filled if price trades THROUGH it by this many ticks. Models queue
+#                        position: a mere touch does not guarantee a fill.
+#
+# Rationale for the ES/NQ numbers (checked 2026-10, retail/semi-pro access):
+#   - CME non-member exchange fee for E-minis is about $1.38-1.40 per side, NFA $0.02,
+#     clearing $0.05-0.25, broker commission $0.25-1.30 per side. All-in round turn is
+#     roughly $3.50-5.00 for E-minis and $1.00-1.60 for micros.
+#   - ES trades with a 1-tick spread almost all of RTH. A market order filled against the
+#     next bar's open (a trade price that can sit on either side of the spread) costs about
+#     0.5 tick on average; 1 tick is a conservative base. Stops in fast markets slip more.
+#   - NQ also has a 1-tick spread but moves ~4x more ticks per minute, so stop slippage is set
+#     higher than ES.
+#
+# Global slippage multipliers for stress tests are applied on top: 0.5x, 1.0x, 1.5x, 2.0x.
+
+slippage_multipliers: [0.5, 1.0, 1.5, 2.0]
+
+scenarios:
+  ES:
+    LOW:    {commission_rt: 3.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 0.5, slippage_ticks_stop: 0.5, slippage_ticks_limit: 0, eth_slippage_mult: 1.5, limit_through_ticks: 0}
+    BASE:   {commission_rt: 4.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 1.0, slippage_ticks_stop: 1.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 6.00, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 2.0, slippage_ticks_stop: 2.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+  NQ:
+    LOW:    {commission_rt: 3.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 0.5, slippage_ticks_stop: 1.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.5, limit_through_ticks: 0}
+    BASE:   {commission_rt: 4.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 1.0, slippage_ticks_stop: 2.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 6.00, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 2.0, slippage_ticks_stop: 4.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 2}
+  MES:
+    LOW:    {commission_rt: 1.00, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 0.5, slippage_ticks_stop: 0.5, slippage_ticks_limit: 0, eth_slippage_mult: 1.5, limit_through_ticks: 0}
+    BASE:   {commission_rt: 1.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 1.0, slippage_ticks_stop: 1.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 2.00, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 2.0, slippage_ticks_stop: 2.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+  MNQ:
+    LOW:    {commission_rt: 1.00, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 0.5, slippage_ticks_stop: 1.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.5, limit_through_ticks: 0}
+    BASE:   {commission_rt: 1.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 1.0, slippage_ticks_stop: 2.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 2.00, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 2.0, slippage_ticks_stop: 4.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 2}
+  YM:
+    LOW:    {commission_rt: 3.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 0.5, slippage_ticks_stop: 1.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.5, limit_through_ticks: 0}
+    BASE:   {commission_rt: 4.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 1.0, slippage_ticks_stop: 2.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 6.00, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 2.0, slippage_ticks_stop: 3.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 2}
+  RTY:
+    LOW:    {commission_rt: 3.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 0.5, slippage_ticks_stop: 1.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.5, limit_through_ticks: 0}
+    BASE:   {commission_rt: 4.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 1.0, slippage_ticks_stop: 2.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 6.00, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 2.0, slippage_ticks_stop: 3.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 2}
+  CL:
+    LOW:    {commission_rt: 3.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 0.5, slippage_ticks_stop: 1.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.5, limit_through_ticks: 0}
+    BASE:   {commission_rt: 4.80, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 1.0, slippage_ticks_stop: 2.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 6.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 2.0, slippage_ticks_stop: 4.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 2}
+  GC:
+    LOW:    {commission_rt: 3.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 0.5, slippage_ticks_stop: 1.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.5, limit_through_ticks: 0}
+    BASE:   {commission_rt: 4.80, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 1.0, slippage_ticks_stop: 2.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 6.50, fee_bps_taker: 0, fee_bps_maker: 0, slippage_ticks_market: 2.0, slippage_ticks_stop: 4.0, slippage_ticks_limit: 0, eth_slippage_mult: 2.0, limit_through_ticks: 2}
+  BTCUSDT_PERP:
+    # Binance USD-M regular tier: taker 0.050%, maker 0.020% per side. Funding is ignored for
+    # intraday trades (documented limitation; |funding| is usually <= 0.01% per 8h).
+    LOW:    {commission_rt: 0, fee_bps_taker: 4.0, fee_bps_maker: 1.8, slippage_ticks_market: 2.0, slippage_ticks_stop: 5.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.0, limit_through_ticks: 0}
+    BASE:   {commission_rt: 0, fee_bps_taker: 5.0, fee_bps_maker: 2.0, slippage_ticks_market: 5.0, slippage_ticks_stop: 10.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.0, limit_through_ticks: 1}
+    STRESS: {commission_rt: 0, fee_bps_taker: 6.0, fee_bps_maker: 2.0, slippage_ticks_market: 10.0, slippage_ticks_stop: 30.0, slippage_ticks_limit: 0, eth_slippage_mult: 1.0, limit_through_ticks: 2}

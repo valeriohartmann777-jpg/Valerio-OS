@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edgelab"
+version = "0.1.0"
+description = "Skeptical research lab for intraday futures strategies: Auction Market Theory, ICT/SMC, Price Action"
+requires-python = ">=3.11"
+# Lower bounds are the versions the test suite was run with; exact pins are in requirements.txt.
+dependencies = [
+    "numpy>=2.5",
+    "pandas>=3.0",
+    "scipy>=1.18",
+    "pyarrow>=25",
+    "PyYAML>=6.0",
+    "matplotlib>=3.11",
+    "statsmodels>=0.15",
+    "databento>=0.87",
+    "kaggle>=2.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=9.1", "hypothesis>=6.168"]
+
+[tool.setuptools.packages.find]
+include = ["edgelab*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"
