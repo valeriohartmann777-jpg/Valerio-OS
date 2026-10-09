@@ -727,6 +727,11 @@ def extra_quality(frame: pd.DataFrame, bars: pd.DataFrame, template: SessionTemp
     conflicting = frame.loc[dup_ts & ~frame.duplicated(subset=["ts", *cols], keep=False).to_numpy()]
     rep["conflicting_duplicate_timestamps"] = int(pd.DatetimeIndex(conflicting["ts"]).nunique())
     rep["conflicting_examples"] = [str(t) for t in pd.DatetimeIndex(conflicting["ts"]).unique()[:5]]
+    if "contract" in frame.columns:  # several contracts per minute = a multi-contract file, not one series
+        per_ts = frame.groupby("ts")["contract"].nunique()
+        rep["contracts"] = int(frame["contract"].nunique())
+        rep["minutes_with_several_contracts"] = int((per_ts > 1).sum())
+        rep["contract_counts"] = {str(k): int(v) for k, v in frame["contract"].value_counts().head(12).items()}
 
     idx = bars.index
     wall = idx.tz_localize(None)

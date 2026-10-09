@@ -187,7 +187,13 @@ def findings(clock: ClockDecision, norm_log: dict | None, extra: dict | None, ch
             "first kept, the others dropped and counted by `manifest.prepare`", "the same bar twice")
         add("duplicate timestamps, conflicting values", extra["conflicting_duplicate_timestamps"],
             "STOP if > 0 (manifest `on_conflict: abort`)", "which of two different bars is right cannot be decided from the data")
-        if extra["conflicting_duplicate_timestamps"]:
+        if extra.get("minutes_with_several_contracts"):
+            add("minutes with bars of several contracts", extra["minutes_with_several_contracts"], "STOP",
+                f"{extra['contracts']} contract values, e.g. {list(extra['contract_counts'])[:6]}")
+            stops.append(f"the file holds several contracts per minute ({extra['contracts']} contract values): one "
+                         "active contract per trading date must first be chosen by the frozen roll rule (not done "
+                         "automatically)")
+        elif extra["conflicting_duplicate_timestamps"]:
             stops.append(f"{extra['conflicting_duplicate_timestamps']} timestamps carry conflicting bars "
                          f"(e.g. {extra['conflicting_examples'][:3]})")
         add("bars inside the 17:00-18:00 maintenance break", extra["break_bars"], "kept, reported",

@@ -307,6 +307,20 @@ def test_extra_quality_counts(spring):
     assert any("conflicting" in s for s in stops)
 
 
+def test_multi_contract_file_stops_with_its_own_reason(spring):
+    df = ohlcv(spring).assign(ts=file_clock(spring, "UTC", "open"), contract="NQH4")
+    d = vb.infer_clock(df, TPL)
+    frame, log = vb.normalise(df, d)
+    back = frame.iloc[:2000].assign(contract="NQM4", close=lambda x: x["close"] + 150, high=lambda x: x["high"] + 150,
+                                    open=lambda x: x["open"] + 150, low=lambda x: x["low"] + 150)
+    both = pd.concat([frame, back], ignore_index=True)
+    rep = vb.extra_quality(both, vb.to_ny_bars(both), TPL)
+    assert rep["contracts"] == 2 and rep["minutes_with_several_contracts"] == 2000
+    rows, stops = findings(d, log, rep, None, None, 1e-4)
+    assert any("several contracts per minute" in s for s in stops)
+    assert not any("conflicting bars" in s for s in stops)
+
+
 # =======================================================================================
 # rolls
 # =======================================================================================
