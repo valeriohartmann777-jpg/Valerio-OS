@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib>=3.11",
     "statsmodels>=0.15",
     "databento>=0.87",
+    "kaggle>=2.2",
 ]
 
 [project.optional-dependencies]

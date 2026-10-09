@@ -62,3 +62,18 @@ estimate exists yet, because the cost endpoints are on the same blocked host.
 **To unblock:** allow `hist.databento.com` in the cloud environment's network access and
 add `DATABENTO_API_KEY` as an environment variable there (never in a file of this
 repository); a new session picks both up. Then run step 1 of the README Databento section.
+
+## 2026-10-09 — Kaggle NQ 1-minute (tgtanalytics/nq-futures-1min-bar-2022-2025)
+
+Checked at 13:16 UTC with the Kaggle CLI 2.2.4 (`kaggle datasets download`):
+
+| check | result |
+|---|---|
+| Kaggle login | not needed: the CLI downloads public datasets without one; none is configured |
+| api.kaggle.com (dataset metadata and download) | 403 at proxy (`Tunnel connection failed: 403 Forbidden`) |
+| www.kaggle.com | refused at proxy |
+| storage.googleapis.com (file delivery) | reachable |
+
+Nothing was downloaded. **To unblock:** allow `api.kaggle.com` in the cloud environment's
+network access, or download the dataset ZIP in a browser and attach it in the project
+thread (`python scripts/kaggle_download.py --from-file <zip>`).

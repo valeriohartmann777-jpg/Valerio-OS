@@ -16,6 +16,11 @@ secrets/
 *.pem
 credentials*
 *_credentials.*
+# Kaggle credentials (the public NQ dataset needs none; a token stays in the environment)
+kaggle.json
+access_token
+access_token.txt
+.kaggle/
 
 # Python / tooling
 .venv/

@@ -4,11 +4,12 @@ A skeptical research lab that tries to find out whether three trading philosophi
 contain repeatable, cost-surviving market behaviour on CME index futures. It is
 built to falsify ideas, not to produce attractive backtests.
 
-**Current status (2026-10-09): BLOCKED on data.** The framework, its tests and the
-Databento data pipeline (below) are in place. No real market data has been downloaded:
-the environment cannot reach Databento and no API key is set (see
-[reports/DATA_ACQUISITION_LOG.md](reports/DATA_ACQUISITION_LOG.md)). No performance
-result exists anywhere in this directory, and none will be produced from synthetic data.
+**Current status (2026-10-09): BLOCKED on data.** The framework, its tests, the
+Databento data pipeline and the Kaggle NQ adapter (both below) are in place. No real market
+data has been downloaded: the environment cannot reach Databento or Kaggle, and no
+Databento API key is set (see [reports/DATA_ACQUISITION_LOG.md](reports/DATA_ACQUISITION_LOG.md)).
+No performance result exists anywhere in this directory, and none will be produced from
+synthetic data.
 
 All 52 event studies (A001–A015, B001–B018, C001–C018, C009vC001) are implemented in
 `edgelab/studies/`, their parameters are frozen in `configs/event_studies.yaml`, and each
@@ -124,6 +125,44 @@ $env:DATABENTO_API_KEY="..."          # Windows PowerShell
    the pilot can never freeze the split or count as the first run.
 7. `python scripts/databento_cost.py --table` estimates 1, 3 and 5 years, since 2020 and
    the full history. The full download starts only after a period has been chosen.
+
+## Kaggle: NQ 1-minute bars 2022-2025
+
+A free NQ 1-minute OHLCV file (Kaggle `tgtanalytics/nq-futures-1min-bar-2022-2025`,
+`configs/kaggle.yaml`) can serve until Databento is reachable. Its timezone, bar label and
+roll method are not documented, so they are determined from the data, and the pipeline
+stops when they cannot be ([edgelab/data/vendor_bars.py](edgelab/data/vendor_bars.py)).
+Nothing in this path changes a study, a parameter, a gate or the frozen roll rule.
+
+1. `python scripts/kaggle_download.py --check` shows what is missing. The public dataset
+   needs no Kaggle login; the network must allow `api.kaggle.com`. Then
+   `python scripts/kaggle_download.py` downloads it, or
+   `python scripts/kaggle_download.py --from-file <zip>` imports a ZIP downloaded by hand.
+   Files land unchanged in `data/raw/kaggle/nq/` and are never overwritten. A Kaggle token,
+   if one is ever needed, belongs in the environment variable `KAGGLE_API_TOKEN` only.
+2. `python scripts/assess_kaggle_nq.py` finds the bar file by content and writes
+   `outputs/nq_data_schema_report.md`, `outputs/nq_data_quality_report.md` and
+   `docs/KAGGLE_NQ_ROLLOVER_ASSESSMENT.md`. Timezone and open/close label come from the
+   session structure: session starts at 18:00 New York time under one timezone through both
+   DST regimes, the empty 17:00-18:00 maintenance hour, the 09:30 cash-open volume spike.
+   It stops (exit 2) when the clock is not unique, impossible bars exceed 0.01% of rows,
+   most bars have no volume, duplicate timestamps conflict, or the series is back-adjusted
+   or rolls on dates the frozen roll exclusion does not cover. Zero-volume bars (vendor
+   fillers for minutes without trades) are counted and removed, so the input matches the
+   pipeline's own bars, which exist only for minutes with trades.
+3. `python scripts/assess_kaggle_nq.py --register` writes the canonical input (UTC bar-open
+   times) for `NQ_KAGGLE_1M` and the blind pilot `NQ_KAGGLE_PILOT` (first three months of the
+   file), registers and prepares both. Then `python scripts/data_quality.py` and the
+   `DATA_QUALITY <id>` journal notes.
+4. NQ is embargoed until rule freeze (RESEARCH_PROTOCOL.md 2.5): the runner and the pipeline
+   check refuse it unless a dated protocol amendment makes NQ the development market.
+5. After a run, `python scripts/export_study_results.py --dataset NQ_KAGGLE_1M --prefix nq`
+   writes `outputs/nq_study_results.csv`, `nq_gate_results.csv`, `nq_fdr_results.csv` and
+   `nq_full_results.json` from what the runner wrote.
+
+1-minute OHLCV cannot reconstruct exact volume at price. The pre-registered studies already
+use the 1-minute approximation (`configs/event_studies.yaml`: `value_area`, uniform allocation
+of each bar's volume over its range at 1-tick bins, 70% value area), so it applies unchanged.
 
 ## Adding data
 

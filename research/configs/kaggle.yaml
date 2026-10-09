@@ -1,0 +1,38 @@
+# Kaggle NQ 1-minute bars: tgtanalytics/nq-futures-1min-bar-2022-2025.
+#
+# Read by scripts/kaggle_download.py and scripts/assess_kaggle_nq.py. Data infrastructure
+# only: no value here is a study parameter (those are frozen in configs/event_studies.yaml).
+# The thresholds below were set on 2026-10-09 BEFORE the file was seen and are not tuned
+# to it; changing one after the data has been looked at needs a dated journal note.
+
+dataset: tgtanalytics/nq-futures-1min-bar-2022-2025
+expected_file: Dataset_NQ_1min_2022_2025.csv   # informational: the bar file is chosen by content, not by name
+instrument: NQ
+raw_dir: data/raw/kaggle/nq                    # never committed; files are never overwritten
+derived_dir: data/processed/kaggle             # canonical input files registered in configs/datasets.yaml
+
+dataset_id: NQ_KAGGLE_1M                       # research dataset (scripts/run_event_studies.py)
+pilot:
+  id: NQ_KAGGLE_PILOT                          # purpose pipeline_check: blind structural check only
+  start: null                                  # null = first trading date in the file (inside DEV)
+  months: 3
+
+reports:
+  schema: outputs/nq_data_schema_report.md
+  quality: outputs/nq_data_quality_report.md
+  rollover: docs/KAGGLE_NQ_ROLLOVER_ASSESSMENT.md
+  json: reports/data_quality/kaggle_nq_assessment.json
+
+assessment:
+  # impossible bars (NaN or non-positive prices, high < low, open/close outside the range,
+  # NaN or negative volume) are removed and counted; above this share of rows: STOP
+  max_removed_share: 0.0001
+  # timezone: share of session starts one zone must explain; label: share of starts at
+  # the anchor minute (open label) or one bar later (close label)
+  clock_min_match: 0.98
+  clock_min_label_share: 0.90
+  # roll gaps: calendar days searched before / after each quarterly expiry, size in robust
+  # scales for a clear gap, and how much larger than the next gap in the window it must be
+  roll_window_days: [16, 3]
+  roll_clear_z: 8.0
+  roll_dominance: 3.0
