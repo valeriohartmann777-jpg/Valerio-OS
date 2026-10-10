@@ -10,6 +10,7 @@ import { Bots } from "./pages/Bots";
 import { Learning } from "./pages/Learning";
 import { MissionDetail } from "./pages/MissionDetail";
 import { QuantLab } from "./pages/QuantLab";
+import { Ultron } from "./pages/Ultron";
 import { Settings } from "./pages/Settings";
 import { dispatch, useJarvis } from "./store/store";
 
@@ -37,6 +38,7 @@ export function App() {
           {view.name === "learning" && <Learning />}
           {view.name === "bots" && <Bots />}
           {view.name === "quantlab" && <QuantLab />}
+          {view.name === "ultron" && <Ultron />}
           {view.name === "settings" && <Settings />}
         </motion.div>
       </AnimatePresence>

@@ -1,0 +1,59 @@
+{
+  "schema_version": "0.1-concept",
+  "project": "JARVIS QuantLab",
+  "mission": {
+    "id": "mission-quantlab-validation-v1",
+    "title": "Add trustworthy Out-of-Sample validation",
+    "goal": "Implement chronological train/test split with leakage protections and user-facing evidence",
+    "status": "DRAFT",
+    "autonomy_profile": "BUILD",
+    "max_parallel_workers": 3,
+    "max_delegation_depth": 1,
+    "require_approval_for": ["external_publication", "production_deploy", "high_risk_data_changes"],
+    "success_criteria": [
+      "Chronological split is deterministic",
+      "Holdout data is not read by parameter optimization code",
+      "Numerical fixtures and integration tests pass",
+      "Validation page shows actual evidence and limitations"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "spec",
+      "owner": "AXIOM",
+      "dependencies": [],
+      "deliverable": "Versioned OOS validation contract and ADR"
+    },
+    {
+      "id": "quant_method",
+      "owner": "CIPHER",
+      "dependencies": ["spec"],
+      "deliverable": "Leakage and reference numerical test cases"
+    },
+    {
+      "id": "backend",
+      "owner": "FORGE",
+      "dependencies": ["spec"],
+      "deliverable": "Validation engine implementation and tests"
+    },
+    {
+      "id": "ui",
+      "owner": "PRISM",
+      "dependencies": ["spec"],
+      "deliverable": "Validation view with evidence and assumptions"
+    },
+    {
+      "id": "integrate",
+      "owner": "FORGE",
+      "dependencies": ["quant_method", "backend", "ui"],
+      "deliverable": "Integration branch and deterministic acceptance run"
+    },
+    {
+      "id": "verify",
+      "owner": "SENTINEL",
+      "dependencies": ["integrate"],
+      "deliverable": "Independent pass/fail report with evidence"
+    }
+  ],
+  "notes": "Illustrative concept; no tasks executed."
+}

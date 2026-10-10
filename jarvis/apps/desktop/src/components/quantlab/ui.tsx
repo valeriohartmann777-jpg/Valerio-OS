@@ -54,7 +54,7 @@ export function Badge({ tone, icon, children, title, testId }: {
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1.5 rounded-lg border border-current/25 px-2 py-0.5 font-mono text-2xs font-medium tracking-[0.08em] uppercase",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-current/25 px-2 py-0.5 font-mono text-2xs font-medium tracking-[0.08em] uppercase",
         TONE_TEXT[tone],
       )}
       title={title}
@@ -273,3 +273,6 @@ export function FieldState({ state }: { state: "unknown" | "assumed" | "confirme
 
 export const inputClass =
   "h-8 w-full rounded-lg border border-ql-border bg-ql-raised px-2.5 text-[13px] text-fg outline-none placeholder:text-fg-faint focus:border-ql/60";
+
+/** The same control without the full width (for inline selects and small inputs). */
+export const compactInputClass = inputClass.replace("w-full ", "");

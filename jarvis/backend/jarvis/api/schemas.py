@@ -163,6 +163,26 @@ class QuantLabExperimentRequest(BaseModel):
     dataset_id: str
 
 
+class UltronMissionCreate(BaseModel):
+    goal: str = Field(min_length=8, max_length=4000)
+    project: Literal["sandbox", "jarvis"] = "sandbox"
+    budget_usd: float | None = Field(None, gt=0, le=500)
+
+
+class UltronAnswer(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class UltronBudget(BaseModel):
+    usd: float = Field(gt=0, le=500)
+
+
+class UltronConfigUpdate(BaseModel):
+    budget_usd_per_mission: float | None = None
+    max_parallel_workers: int | None = None
+    max_attempts: int | None = None
+
+
 class TrainingPreferences(BaseModel):
     enabled: bool
 

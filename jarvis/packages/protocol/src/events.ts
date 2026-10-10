@@ -41,6 +41,10 @@ export const EVENT_TYPES = [
   "quantlab.experiment.failed",
   "quantlab.experiment.cancelled",
   "quantlab.validation.completed",
+  "ultron.mission.changed",
+  "ultron.task.changed",
+  "ultron.activity",
+  "ultron.approval.changed",
   "context.updated",
 ] as const;
 

@@ -616,6 +616,51 @@ version + dataset ──manifest (sha256 → exp_<id>)──▶ background run
   ExperimentView, EquityChart in plain SVG). It refetches on every
   `quantlab.*` event and after reconnecting.
 
+## 13g. ULTRON (`backend/jarvis/ultron/`)
+
+```
+models.py     mission / task states and the allowed task transitions
+agents.py     the roster: JARVIS, AXIOM, FORGE, SENTINEL active; six more listed (R2/R3)
+plan.py       StrategySpec-like contract for plans: validation, topological order, review rule
+policy.py     path globs, argv allowlist, action categories (auto / approval / locked),
+              effect signatures
+sandbox.py    command runner: no shell, scrubbed env, timeout kills the process group;
+              Seatbelt (macOS) / network namespace (Linux) when available
+workspace.py  git: repo per mission (new sandbox repo or a JARVIS worktree), worktree +
+              branch per task, runtime commits and --no-ff merges, review checkouts, export
+tools.py      tool broker: per-agent manifests, every call checked and audited
+runner.py     one agent run: model ↔ tools, bounded rounds, pause gate, spend cap
+prompts.py    what each agent is told (rules that matter are enforced in code)
+scripted.py   test-only scripted model (JARVIS_ULTRON_SCRIPT), labelled in the UI
+store.py      ul_* tables (migration 10): missions, tasks, runs, artifacts, approvals, events
+service.py    planning, scheduler, produce / review flows, retries, approvals, controls,
+              recovery, views
+```
+
+```
+goal ─▶ JARVIS submit_plan ─▶ validate (code) ─▶ tasks DRAFT/READY
+scheduler: READY tasks (≤ max_parallel) ─▶ AXIOM/FORGE in task worktree
+   ─▶ runtime commits ─▶ runtime runs checks (sandbox) ─▶ fail: RETRYING (feedback)
+   ─▶ pass: patch artifact ─▶ merge into integration branch ─▶ COMPLETE
+SENTINEL: fresh review checkout ─▶ runtime re-runs all checks ─▶ agent review
+   ─▶ accepted only if checks pass AND verdict pass ─▶ else reopen FORGE (bounded)
+all COMPLETE ─▶ final acceptance checks ─▶ report ─▶ export approval (sandbox) / branch (JARVIS)
+```
+
+- States are persisted on every transition; events go to `ul_events` (replay)
+  and the bus (`ultron.mission.changed`, `ultron.task.changed`,
+  `ultron.activity`, `ultron.approval.changed`) for the live dashboard.
+- Restart: interrupted runs are recorded as INTERRUPTED; their tasks go back to
+  READY and start from a clean tree (uncommitted leftovers are reset — only in
+  that task's own worktree).
+- Pause clears a gate every agent awaits before its next model call; stop
+  cancels the asyncio tasks (killing sandboxed processes) and records which
+  tasks were interrupted.
+- API under `/ultron/*`; brain tools `ultron_start_mission`, `ultron_status`.
+- UI: `pages/Ultron.tsx` (Overview, Mission Control, Agent Matrix, Projects,
+  Knowledge, Activity, Permissions) and `components/ultron/` (task graph,
+  mission view, artifact viewer with checksum check).
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

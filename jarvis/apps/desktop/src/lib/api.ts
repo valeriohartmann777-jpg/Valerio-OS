@@ -29,6 +29,16 @@ import type {
   QlStrategySpec,
   SettingsView,
   TrainingStatus,
+  UlAgent,
+  UlApproval,
+  UlArtifactContent,
+  UlConfig,
+  UlEvent,
+  UlKnowledge,
+  UlMission,
+  UlMissionRow,
+  UlOverview,
+  UlProjectKind,
 } from "@jarvis/protocol";
 
 import { BACKEND_URL } from "./config";
@@ -160,6 +170,31 @@ export const api = {
   qlEquity: (id: string, points = 800) =>
     request<QlEquity>(`/quantlab/experiments/${encodeURIComponent(id)}/equity?points=${points}`),
   qlCancel: (id: string) => post<QlExperiment>(`/quantlab/experiments/${encodeURIComponent(id)}/cancel`),
+  // ULTRON — every control changes real backend state.
+  ulOverview: () => request<UlOverview>("/ultron/overview"),
+  ulMissions: () => request<UlMissionRow[]>("/ultron/missions"),
+  ulMission: (id: string) => request<UlMission>(`/ultron/missions/${encodeURIComponent(id)}`),
+  ulCreate: (goal: string, project: UlProjectKind, budgetUsd?: number) =>
+    post<UlMission>("/ultron/missions", { goal, project, budget_usd: budgetUsd ?? null }),
+  ulControl: (id: string, action: "pause" | "resume" | "cancel") =>
+    post<UlMission>(`/ultron/missions/${encodeURIComponent(id)}/${action}`),
+  ulAnswer: (id: string, text: string) =>
+    post<UlMission>(`/ultron/missions/${encodeURIComponent(id)}/answer`, { text }),
+  ulBudget: (id: string, usd: number) =>
+    post<UlMission>(`/ultron/missions/${encodeURIComponent(id)}/budget`, { usd }),
+  ulActivity: (missionId?: string, limit = 300) =>
+    request<UlEvent[]>(
+      `/ultron/activity?limit=${limit}${missionId ? `&mission=${encodeURIComponent(missionId)}` : ""}`,
+    ),
+  ulArtifact: (id: string) => request<UlArtifactContent>(`/ultron/artifacts/${encodeURIComponent(id)}`),
+  ulAgents: () => request<UlAgent[]>("/ultron/agents"),
+  ulKnowledge: () => request<UlKnowledge>("/ultron/knowledge"),
+  ulDecide: (id: string, decision: "approve" | "reject") =>
+    post<UlApproval>(`/ultron/approvals/${encodeURIComponent(id)}/${decision}`),
+  ulPauseAll: () => post<{ paused: number }>("/ultron/pause-all"),
+  ulStopAll: () => post<{ cancelled: number }>("/ultron/stop-all"),
+  ulConfig: (values: Partial<Pick<UlConfig, "budget_usd_per_mission" | "max_parallel_workers" | "max_attempts">>) =>
+    post<UlConfig>("/ultron/config", values),
   qlReproduce: (id: string) =>
     post<QlReproduction>(`/quantlab/experiments/${encodeURIComponent(id)}/reproduce`),
 };

@@ -341,6 +341,26 @@ _Last updated: 2026-10-04_
 - No real market data used yet: all results are SYNTHETIC / TEST ONLY engineering checks
 - Screenshots: `docs/screenshots/quantlab-*.png`
 
+### ULTRON R0 + R1 (D-027) — details in `docs/ultron/IMPLEMENTATION_STATUS.md`
+- Handoff in `docs/ultron-handoff/`, gap analysis in `docs/ultron/INTEGRATION_PLAN.md`;
+  module `backend/jarvis/ultron/`, page ULTRON (Overview · Mission Control · Agent Matrix ·
+  Projects · Knowledge · Activity · Permissions)
+- JARVIS plans (charter + task DAG validated in code); AXIOM, FORGE, SENTINEL work in a git
+  worktree per task through an audited tool broker; commands sandboxed (no shell, no
+  network, scrubbed env, timeouts; Seatbelt on macOS, network namespace on Linux)
+- The runtime runs the checks itself, merges, and gives SENTINEL a throwaway checkout;
+  rejected work goes back to FORGE; bounded retries; spend cap before every model call;
+  approval-gated export (effect signature); locked: network, installs, merging into the
+  running checkout, deploys, messages, credentials, money
+- Pause / resume / stop / emergency stop; restart recovery; brain tools
+  `ultron_start_mission`, `ultron_status`
+- Tests: 18 backend tests (acceptance mission, restart, pause, stop, crash recovery,
+  review loop, retries, budget, plans, policy, sandbox, approvals, API, brain); E2E step in
+  the real app — **25/25 E2E steps** pass
+- Agent replies in tests/E2E are scripted (labelled in the UI); no Anthropic key exists in
+  this container, so the first real-model mission is still to run on the MacBook
+- Screenshots: `docs/screenshots/ultron-*.png`
+
 ## IN PROGRESS
 - —
 
@@ -352,6 +372,7 @@ _Last updated: 2026-10-04_
 0. Trained model on the MacBook: first real verdict (Learning page)
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
 0. QuantLab on the MacBook: import real daily bars of one liquid ETF and run one frozen spec
+0. ULTRON on the MacBook: first real-model mission (e.g. a CSV → JSON CLI with tests, $3 budget)
 
 ### Phase 2 — remaining
 1. Instant rules for common commands ("lauter", "pause", "nächster Song")

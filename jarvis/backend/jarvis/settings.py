@@ -274,6 +274,37 @@ class BotsSettings(BaseModel):
     prop_firm: PropFirmSettings = Field(default_factory=PropFirmSettings)
 
 
+class UltronAgentModel(BaseModel):
+    model: str
+    effort: str | None = None
+    max_tokens: int = 16000
+
+
+def _ultron_agents() -> dict[str, UltronAgentModel]:
+    strong = UltronAgentModel(model="claude-opus-5-5", effort="high")
+    return {
+        "jarvis": strong,
+        "axiom": strong,
+        "forge": UltronAgentModel(model="claude-opus-5-5", effort="medium"),
+        "sentinel": UltronAgentModel(model="claude-sonnet-5-5", effort="medium"),
+    }
+
+
+class UltronSettings(BaseModel):
+    enabled: bool = True
+    budget_usd_per_mission: float = Field(3.0, gt=0, le=500)
+    max_parallel_workers: int = Field(3, ge=1, le=6)
+    max_attempts: int = Field(3, ge=1, le=5)
+    max_rounds_per_run: int = Field(40, ge=4, le=200)
+    command_timeout_seconds: float = Field(180.0, gt=0, le=3600)
+    model_timeout_seconds: float = 300.0
+    export_dir: str = ""
+    agents: dict[str, UltronAgentModel] = Field(default_factory=_ultron_agents)
+    prices: dict[str, ModelPrice] = Field(default_factory=dict)
+    # Tests and the E2E only: a JSON file of scripted agent replies (shown as such in the UI).
+    scripted_model: str = ""
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -315,6 +346,7 @@ class Settings(BaseModel):
     briefing: BriefingSettings = Field(default_factory=BriefingSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     bots: BotsSettings = Field(default_factory=BotsSettings)
+    ultron: UltronSettings = Field(default_factory=UltronSettings)
 
     @property
     def env_file(self) -> Path:
@@ -379,6 +411,7 @@ def load_settings(
     data["briefing"] = _read_yaml(config_dir / "briefing.yaml")
     data["training"] = _read_yaml(config_dir / "training.yaml")
     data["bots"] = _read_yaml(config_dir / "bots.yaml")
+    data["ultron"] = _read_yaml(config_dir / "ultron.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))
@@ -435,6 +468,11 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         data.setdefault("briefing", {})["enabled"] = False
     if env.get("JARVIS_TRAINING", "").strip().lower() == "off":  # tests, E2E
         data.setdefault("training", {})["enabled"] = False
+    ultron = data.setdefault("ultron", {})
+    if value := env.get("JARVIS_ULTRON_SCRIPT", "").strip():  # tests, E2E
+        ultron["scripted_model"] = value
+    if value := env.get("JARVIS_ULTRON_EXPORT_DIR", "").strip():
+        ultron["export_dir"] = value
 
 
 _QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019"}

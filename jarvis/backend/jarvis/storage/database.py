@@ -347,6 +347,118 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # 10 — ULTRON: missions, tasks, agent runs, artifacts, approvals, mission event log
+    [
+        """
+        CREATE TABLE ul_missions (
+            id            TEXT PRIMARY KEY,
+            number        INTEGER NOT NULL UNIQUE,
+            title         TEXT NOT NULL,
+            goal          TEXT NOT NULL,
+            project_kind  TEXT NOT NULL,
+            state         TEXT NOT NULL,
+            charter       TEXT,
+            plan_notes    TEXT,
+            revision      INTEGER NOT NULL DEFAULT 0,
+            budget_usd    REAL NOT NULL,
+            spent_usd     REAL NOT NULL DEFAULT 0,
+            workspace     TEXT NOT NULL,
+            base_commit   TEXT,
+            head_commit   TEXT,
+            blocker       TEXT,
+            report        TEXT,
+            model_label   TEXT,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL,
+            finished_at   TEXT
+        )
+        """,
+        """
+        CREATE TABLE ul_tasks (
+            id            TEXT PRIMARY KEY,
+            mission_id    TEXT NOT NULL REFERENCES ul_missions(id),
+            key           TEXT NOT NULL,
+            title         TEXT NOT NULL,
+            owner         TEXT NOT NULL,
+            depends_on    TEXT NOT NULL,
+            contract      TEXT NOT NULL,
+            state         TEXT NOT NULL,
+            attempts      INTEGER NOT NULL DEFAULT 0,
+            max_attempts  INTEGER NOT NULL,
+            feedback      TEXT,
+            result        TEXT,
+            cost_usd      REAL NOT NULL DEFAULT 0,
+            started_at    TEXT,
+            finished_at   TEXT,
+            UNIQUE (mission_id, key)
+        )
+        """,
+        """
+        CREATE TABLE ul_runs (
+            id             TEXT PRIMARY KEY,
+            mission_id     TEXT NOT NULL REFERENCES ul_missions(id),
+            task_id        TEXT,
+            agent          TEXT NOT NULL,
+            attempt        INTEGER NOT NULL,
+            state          TEXT NOT NULL,
+            model          TEXT,
+            input_tokens   INTEGER NOT NULL DEFAULT 0,
+            output_tokens  INTEGER NOT NULL DEFAULT 0,
+            cost_usd       REAL NOT NULL DEFAULT 0,
+            tool_calls     INTEGER NOT NULL DEFAULT 0,
+            summary        TEXT,
+            error          TEXT,
+            started_at     TEXT NOT NULL,
+            finished_at    TEXT
+        )
+        """,
+        """
+        CREATE TABLE ul_artifacts (
+            id          TEXT PRIMARY KEY,
+            mission_id  TEXT NOT NULL REFERENCES ul_missions(id),
+            task_id     TEXT,
+            run_id      TEXT,
+            agent       TEXT NOT NULL,
+            kind        TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            path        TEXT NOT NULL,
+            sha256      TEXT NOT NULL,
+            bytes       INTEGER NOT NULL,
+            created_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE ul_approvals (
+            id            TEXT PRIMARY KEY,
+            mission_id    TEXT NOT NULL REFERENCES ul_missions(id),
+            task_id       TEXT,
+            category      TEXT NOT NULL,
+            title         TEXT NOT NULL,
+            effect        TEXT NOT NULL,
+            signature     TEXT NOT NULL,
+            state         TEXT NOT NULL,
+            requested_by  TEXT NOT NULL,
+            requested_at  TEXT NOT NULL,
+            decided_at    TEXT,
+            result        TEXT
+        )
+        """,
+        """
+        CREATE TABLE ul_events (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            at          TEXT NOT NULL,
+            mission_id  TEXT,
+            task_id     TEXT,
+            agent       TEXT,
+            kind        TEXT NOT NULL,
+            severity    TEXT NOT NULL,
+            message     TEXT NOT NULL,
+            data        TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_ul_events_mission ON ul_events(mission_id, id)",
+        "CREATE INDEX idx_ul_tasks_mission ON ul_tasks(mission_id)",
+    ],
 ]
 
 

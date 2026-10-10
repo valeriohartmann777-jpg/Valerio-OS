@@ -15,7 +15,7 @@
  */
 
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -82,6 +82,7 @@ const botConfig = execFileSync(
 )
   .toString()
   .trim();
+const ultronExports = mkdtempSync(path.join(tmpdir(), "jarvis-e2e-ultron-exports-"));
 const app = await electron.launch({
   executablePath: electronBinary,
   args: [appDir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])],
@@ -93,6 +94,9 @@ const app = await electron.launch({
     JARVIS_UPDATES: "off",
     JARVIS_BACKGROUND: "on", // keep running when the window closes (default on macOS / Windows)
     JARVIS_CONFIG_DIR: botConfig,
+    // ULTRON agents reply from a script here (no API key in CI); the UI labels it.
+    JARVIS_ULTRON_SCRIPT: path.join(root, "tests", "e2e", "ultron_script.json"),
+    JARVIS_ULTRON_EXPORT_DIR: ultronExports,
   },
 });
 
@@ -345,6 +349,43 @@ try {
     await page.getByRole("button", { name: "Home" }).click();
   });
 
+  await step("ULTRON: a goal becomes a plan; AXIOM specs, FORGE codes and retries, SENTINEL verifies, export approved", async () => {
+    await page.getByRole("button", { name: "ULTRON", exact: true }).click();
+    await page.getByTestId("ul-overview").waitFor();
+    await page.getByTestId("ul-scripted").waitFor(); // the test model is labelled, always
+    await page.getByTestId("ul-goal").fill("Build a tested slugify(text) utility in a new Python package.");
+    await page.getByTestId("ul-start").click();
+    const mission = page.getByTestId("ul-mission");
+    await mission.waitFor();
+    await page.locator('[data-testid="ul-mission"][data-state="WAITING_APPROVAL"]').waitFor({ timeout: 90_000 });
+    assert.equal(await page.locator('[data-testid="ul-node"][data-state="COMPLETE"]').count(), 3);
+    await page.locator('[data-testid="ul-node"]').filter({ hasText: "Implement slugify" }).click();
+    const panel = page.getByTestId("ul-task-panel");
+    await panel.getByText("2 of 3").waitFor(); // the runtime's own check failed the first attempt
+    await page.waitForTimeout(300);
+    await shot("11h-ultron-mission");
+    await panel.getByTestId("ul-artifact").filter({ hasText: "patch" }).first().click();
+    await page.getByTestId("ul-artifact-viewer").getByText("sha256 intact").waitFor();
+    await shot("11i-ultron-patch");
+    await page.keyboard.press("Escape");
+    await page.getByTestId("ul-approve").click();
+    await page.locator('[data-testid="ul-mission"][data-state="COMPLETE"]').waitFor({ timeout: 30_000 });
+    await page.getByTestId("ul-report").getByText("Exported").waitFor();
+    const exported = readdirSync(ultronExports);
+    assert.equal(exported.length, 1, "one exported project");
+    assert.ok(existsSync(path.join(ultronExports, exported[0], "textutil", "__init__.py")));
+    await page.getByTestId("ul-view-activity").click();
+    await page.getByTestId("ul-activity").getByText("denied").first().waitFor(); // the out-of-scope write
+    await page.getByTestId("ul-view-agent-matrix").click();
+    await page.getByTestId("ul-agents").waitFor();
+    await shot("11j-ultron-agents");
+    await page.getByTestId("ul-view-overview").click();
+    await page.getByTestId("ul-mission-card").first().waitFor();
+    await page.waitForTimeout(300);
+    await shot("11k-ultron-overview");
+    await page.getByRole("button", { name: "Home" }).click();
+  });
+
   await step("memory: added on Home, kept, forgotten; the morning briefing is set in Settings", async () => {
     await page.getByTestId("memory-input").fill("Prefers short answers.");
     await page.getByTestId("memory-input").press("Enter");
@@ -434,6 +475,9 @@ await step("the conversation is still there after a restart", async () => {
     assert.ok(said >= 6, `expected the earlier commands, found ${said}`);
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(outDir, "13-conversation-after-restart.png") });
+    // ULTRON's mission ledger survived the restart too.
+    const missions = await fetch(`${backendUrl}/ultron/missions`).then((r) => r.json());
+    assert.equal(missions[0]?.state, "COMPLETE", "ULTRON mission persisted across the restart");
   } finally {
     await again.close();
   }

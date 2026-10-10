@@ -52,6 +52,10 @@ class EventType(StrEnum):
     QUANTLAB_EXPERIMENT_FAILED = "quantlab.experiment.failed"
     QUANTLAB_EXPERIMENT_CANCELLED = "quantlab.experiment.cancelled"
     QUANTLAB_VALIDATION_COMPLETED = "quantlab.validation.completed"
+    ULTRON_MISSION_CHANGED = "ultron.mission.changed"
+    ULTRON_TASK_CHANGED = "ultron.task.changed"
+    ULTRON_ACTIVITY = "ultron.activity"
+    ULTRON_APPROVAL_CHANGED = "ultron.approval.changed"
     CONTEXT_UPDATED = "context.updated"
 
 

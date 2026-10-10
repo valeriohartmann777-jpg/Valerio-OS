@@ -1,0 +1,29 @@
+# ULTRON — JARVIS's development team (docs/ultron-handoff/, DECISIONS D-027).
+#
+# JARVIS plans a mission as a task graph; AXIOM (architecture), FORGE (code) and
+# SENTINEL (independent verification) work in isolated git worktrees. Every
+# model call is checked against the mission's spend cap first. The Anthropic key
+# is the brain's (Settings → Brain); nothing here is secret.
+
+enabled: true
+
+# Defaults for new missions; the ULTRON page can change them (Permissions & Settings).
+budget_usd_per_mission: 3.0
+max_parallel_workers: 3       # tasks running at the same time, across all missions
+max_attempts: 3               # per task, including SENTINEL sending work back
+max_rounds_per_run: 40        # model ↔ tool round trips in one agent run
+command_timeout_seconds: 180  # one test/command inside the sandbox
+
+# Where an approved export puts a finished project ("" = ~/Documents/JARVIS ULTRON).
+export_dir: ""
+
+# Model per agent (USD prices below; used for the spend cap).
+agents:
+  jarvis:   {model: claude-opus-5-5,   effort: high,   max_tokens: 16000}
+  axiom:    {model: claude-opus-5-5,   effort: high,   max_tokens: 16000}
+  forge:    {model: claude-opus-5-5,   effort: medium, max_tokens: 16000}
+  sentinel: {model: claude-sonnet-5-5, effort: medium, max_tokens: 16000}
+
+prices:  # USD per million tokens
+  claude-opus-5-5: {input: 4.0, output: 20.0, cache_read: 0.2, cache_write: 5.0}
+  claude-sonnet-5-5: {input: 2.0, output: 10.0, cache_read: 0.2, cache_write: 2.5}

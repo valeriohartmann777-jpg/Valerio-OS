@@ -63,6 +63,11 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   quality checks, a deterministic backtest (signal at the close, fill at the
   next open, costs included), a chronological out-of-sample test and a
   critical verdict from JARVIS. Research only: it never trades.
+- **ULTRON**: JARVIS's development team. Give JARVIS a software goal (in chat
+  or on the ULTRON page): it plans the mission, AXIOM writes the spec, FORGE
+  codes and tests in an isolated git worktree, SENTINEL verifies independently,
+  and you approve the export. Sandboxed, budget-capped, resumable after a
+  restart, every step visible.
 - **Backend** (FastAPI): event bus + WebSocket stream, state service, router,
   missions with pause/resume/stop, Operator + Sentinel agents, tool framework,
   permission levels 0–4 with approvals, SQLite persistence, audit log,
@@ -180,6 +185,24 @@ out-of-sample trades and a loss after costs), otherwise INCONCLUSIVE — Release
 leverage, roll, swaps) isn't built yet. Ask JARVIS "what can I conclude from
 the latest QuantLab run?" — it answers from `quantlab_report`.
 
+### ULTRON: let the team build something
+
+1. Make sure Claude is connected (Settings → Brain) — ULTRON's agents use the
+   same key. Each mission has a hard budget (default $3, editable).
+2. Tell JARVIS what to build ("Bau mir ein kleines Tool, das CSV in JSON
+   umwandelt, mit Tests") or type it on **ULTRON → Overview**. Choose *New
+   isolated project* or *JARVIS itself* (changes land on a reviewed branch,
+   never in your running copy).
+3. Watch **Mission Control**: the task graph, who works on what, every check
+   the runtime ran, patches, reviews and costs. Pause, resume or stop at any
+   time; **Stop all** is the emergency stop.
+4. When SENTINEL has verified the result, approve the export — the project
+   lands in `~/Documents/JARVIS ULTRON/`.
+
+Agents can't use the network, install packages, touch files outside their
+task, merge into your checkout, send messages or spend money; those are locked.
+Settings: `config/ultron.yaml` and **ULTRON → Permissions**.
+
 ### The trained model
 
 Separately from the Claude research, JARVIS trains its own model on this
@@ -295,10 +318,10 @@ npm run build && npm run test:e2e     # drives the real Electron app (xvfb-run -
 
 ```
 apps/desktop/        Electron main (electron/) + React renderer (src/)
-backend/jarvis/      api · core · missions · agents · tools · permissions · events · storage · observability · quantlab
+backend/jarvis/      api · core · missions · agents · tools · permissions · events · storage · observability · quantlab · ultron
 packages/protocol/   typed event/API contract shared with the UI
 config/              jarvis · permissions · personality · apps · models (.yaml)
-docs/                implementation status · quantlab/ (QuantLab status) · quantlab-handoff/ (specs, contracts, fixtures)
+docs/                implementation status · quantlab/, ultron/ (status) · quantlab-handoff/, ultron-handoff/ (specs)
 scripts/             setup, dev, checks, real-system smoke test
 tests/e2e/           Electron end-to-end test
 data/                SQLite + logs at runtime (git-ignored)

@@ -116,6 +116,8 @@ async def test_open_ended_request_goes_to_the_fast_model(harness: HarnessFactory
         "quantlab_report",
         "remember",
         "forget",
+        "ultron_start_mission",
+        "ultron_status",
     }
     assert "purpose" in tools["open_application"].input_schema["properties"]
     assert "approval" in tools["open_application"].description

@@ -50,6 +50,10 @@ from jarvis.api.schemas import (
     SystemStatus,
     TrainingPreferences,
     TrainingView,
+    UltronAnswer,
+    UltronBudget,
+    UltronConfigUpdate,
+    UltronMissionCreate,
     VoicePreferences,
     VoiceView,
 )
@@ -68,6 +72,7 @@ from jarvis.quantlab.spec import example_spec
 from jarvis.runtime import Runtime
 from jarvis.storage.audit import AuditEntry
 from jarvis.tools.base import ToolSpec
+from jarvis.ultron.service import UltronError
 from jarvis.voice.elevenlabs import VoiceError
 
 router = APIRouter()
@@ -545,6 +550,136 @@ async def quantlab_reproduce(experiment_id: str, rt: RuntimeDep) -> dict[str, An
         return await rt.quantlab.reproduce(experiment_id)
     except QuantLabError as exc:
         raise _ql_error(exc) from exc
+
+
+# ULTRON: missions, team, approvals. Every control changes real backend state.
+
+
+def _ultron_error(exc: UltronError) -> HTTPException:
+    return HTTPException(exc.status, {"code": exc.code, "message": exc.message})
+
+
+@router.get("/ultron/overview")
+async def ultron_overview(rt: RuntimeDep) -> dict[str, Any]:
+    return await rt.ultron.overview()
+
+
+@router.get("/ultron/missions")
+async def ultron_missions(rt: RuntimeDep) -> list[dict[str, Any]]:
+    return await rt.ultron.missions()
+
+
+@router.post("/ultron/missions")
+async def ultron_create(body: UltronMissionCreate, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.ultron.create_mission(
+            body.goal, project=body.project, budget_usd=body.budget_usd
+        )
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
+
+
+@router.get("/ultron/missions/{mission_id}")
+async def ultron_mission(mission_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.ultron.mission(mission_id)
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
+
+
+@router.post("/ultron/missions/{mission_id}/answer")
+async def ultron_answer(mission_id: str, body: UltronAnswer, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.ultron.answer(mission_id, body.text)
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
+
+
+@router.post("/ultron/missions/{mission_id}/budget")
+async def ultron_budget(mission_id: str, body: UltronBudget, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.ultron.set_budget(mission_id, body.usd)
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
+
+
+@router.post("/ultron/missions/{mission_id}/{action}")
+async def ultron_control(
+    mission_id: str,
+    action: Literal["pause", "resume", "cancel"],
+    rt: RuntimeDep,
+) -> dict[str, Any]:
+    try:
+        if action == "pause":
+            return await rt.ultron.pause(mission_id)
+        if action == "resume":
+            return await rt.ultron.resume(mission_id)
+        return await rt.ultron.cancel(mission_id)
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
+
+
+@router.get("/ultron/activity")
+async def ultron_activity(
+    rt: RuntimeDep,
+    mission: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+) -> list[dict[str, Any]]:
+    try:
+        return await rt.ultron.activity(mission, limit)
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
+
+
+@router.get("/ultron/artifacts/{artifact_id}")
+async def ultron_artifact(artifact_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.ultron.artifact(artifact_id)
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
+
+
+@router.get("/ultron/agents")
+async def ultron_agents(rt: RuntimeDep) -> list[dict[str, Any]]:
+    return await rt.ultron.agents()
+
+
+@router.get("/ultron/knowledge")
+async def ultron_knowledge(rt: RuntimeDep) -> dict[str, Any]:
+    return await rt.ultron.knowledge()
+
+
+@router.get("/ultron/approvals")
+async def ultron_approvals(rt: RuntimeDep, state: str | None = None) -> list[dict[str, Any]]:
+    return await rt.ultron.approvals(state)
+
+
+@router.post("/ultron/approvals/{approval_id}/{decision}")
+async def ultron_decide(
+    approval_id: str, decision: Literal["approve", "reject"], rt: RuntimeDep
+) -> dict[str, Any]:
+    try:
+        return await rt.ultron.decide(approval_id, decision == "approve")
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
+
+
+@router.post("/ultron/pause-all")
+async def ultron_pause_all(rt: RuntimeDep) -> dict[str, int]:
+    return {"paused": await rt.ultron.pause_all()}
+
+
+@router.post("/ultron/stop-all")
+async def ultron_stop_all(rt: RuntimeDep) -> dict[str, int]:
+    return {"cancelled": await rt.ultron.stop_all()}
+
+
+@router.post("/ultron/config")
+async def ultron_config(body: UltronConfigUpdate, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return rt.ultron.update_config(body.model_dump(exclude_none=True))
+    except UltronError as exc:
+        raise _ultron_error(exc) from exc
 
 
 @router.get("/training")

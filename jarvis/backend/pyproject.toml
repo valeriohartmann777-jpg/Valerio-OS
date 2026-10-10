@@ -59,6 +59,8 @@ ignore = ["RUF012"]
 "jarvis/bots/prompt.py" = ["E501"]
 # user-facing QuantLab text uses typographic × and −
 "jarvis/quantlab/*.py" = ["RUF001", "RUF002", "RUF003"]
+"jarvis/ultron/prompts.py" = ["E501"]
+"jarvis/ultron/*.py" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 python_version = "3.12"

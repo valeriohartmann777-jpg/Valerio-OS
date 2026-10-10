@@ -33,6 +33,7 @@ from jarvis.events.types import EventType, Severity
 from jarvis.learning.journal import LearningJournal
 from jarvis.learning.market import MarketData
 from jarvis.learning.service import LearningService, ResearchModel
+from jarvis.llm.base import ChatModel
 from jarvis.llm.registry import ModelSet, build_models
 from jarvis.memory.store import MemoryStore
 from jarvis.missions.engine import MissionEngine
@@ -58,9 +59,12 @@ from jarvis.tools.system import create_backend, register_system_tools
 from jarvis.tools.system.apps import AppCatalog
 from jarvis.tools.system.backend import SystemBackend
 from jarvis.tools.training import register_training_tools
+from jarvis.tools.ultron import register_ultron_tools
 from jarvis.tools.web import register_web_tools
 from jarvis.training.service import TrainingService
 from jarvis.training.store import TrainingStore
+from jarvis.ultron.service import UltronService
+from jarvis.ultron.store import UltronStore
 from jarvis.util import utcnow
 from jarvis.voice.audio import AudioDevice
 from jarvis.voice.service import ProviderFactory, VoiceService, elevenlabs_provider
@@ -84,6 +88,8 @@ class Runtime:
         market: MarketData | None = None,
         bot_model: Callable[[], ResearchModel | None] | None = None,
         bot_tester: Callable[[Mt5Paths], Tester] | None = None,
+        ultron_model: Callable[[str], ChatModel | None] | None = None,
+        ultron_repo: Path | None = None,
     ) -> None:
         self.settings = settings
         self.started_at = time.time()
@@ -131,6 +137,7 @@ class Runtime:
         register_training_tools(self.tools, lambda: self.training)
         register_bot_tools(self.tools, lambda: self.bots)
         register_quantlab_tools(self.tools, lambda: self.quantlab)
+        register_ultron_tools(self.tools, lambda: self.ultron)
         self.market = market or MarketData(settings.data_dir / "market")
         self.preferences = Preferences(settings.data_dir / "preferences.json")
         self.executor = ToolExecutor(
@@ -256,6 +263,21 @@ class Runtime:
             code_revision=self.build,
         )
 
+        repo, subdir = _git_root(PROJECT_ROOT) if ultron_repo is None else (ultron_repo, "")
+        self._ultron_models: dict[tuple[str, str], ChatModel] = {}
+        self._ultron_script: dict[str, ChatModel] | None = None
+        self.ultron = UltronService(
+            settings=settings.ultron,
+            store=UltronStore(self.db),
+            bus=self.bus,
+            root=settings.data_dir / "ultron",
+            repo_root=repo,
+            jarvis_subdir=subdir,
+            preferences=self.preferences,
+            model_factory=ultron_model or self._ultron_model,
+            model_label=self._ultron_label,
+        )
+
         self.training = TrainingService(
             settings=settings.training,
             learning=settings.learning,
@@ -312,6 +334,45 @@ class Runtime:
             self._bot_research = (key, model)
         return self._bot_research[1]
 
+    def _ultron_model(self, agent: str) -> ChatModel | None:
+        """Claude for an ULTRON agent: the brain's key, the agent's model from ultron.yaml."""
+        ultron = self.settings.ultron
+        if ultron.scripted_model:  # tests and the E2E only; labelled in the UI
+            if self._ultron_script is None:
+                from jarvis.ultron import scripted
+
+                self._ultron_script = dict(scripted.load(Path(ultron.scripted_model)))
+            return self._ultron_script.get(agent)
+        secret = self.connector.settings.anthropic_api_key
+        role = ultron.agents.get(agent)
+        if secret is None or not self.brain.available or role is None:
+            return None
+        key = secret.get_secret_value()
+        cache_key = (key, agent)
+        if cache_key not in self._ultron_models:
+            import anthropic
+
+            from jarvis.llm.anthropic_provider import AnthropicChatModel
+
+            self._ultron_models = {k: v for k, v in self._ultron_models.items() if k[0] == key}
+            self._ultron_models[cache_key] = AnthropicChatModel(
+                client=anthropic.AsyncAnthropic(api_key=key),
+                model=role.model,
+                max_tokens=role.max_tokens,
+                effort=role.effort,
+                timeout_seconds=ultron.model_timeout_seconds,
+                refusal_fallback=self.settings.models.refusal_fallback,
+            )
+        return self._ultron_models[cache_key]
+
+    def _ultron_label(self) -> str:
+        if self.settings.ultron.scripted_model:
+            from jarvis.ultron.scripted import LABEL
+
+            return LABEL
+        models = sorted({r.model for r in self.settings.ultron.agents.values()})
+        return ", ".join(models)
+
     @property
     def uptime_seconds(self) -> float:
         return time.time() - self.started_at
@@ -361,6 +422,7 @@ class Runtime:
         await self.training.start()
         await self.bots.start()
         await self.quantlab.start()
+        await self.ultron.start()
 
     async def _housekeep(self) -> None:
         """Once a day: drop old activity (the conversation stays)."""
@@ -379,6 +441,7 @@ class Runtime:
             self._housekeeping.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._housekeeping
+        await self.ultron.stop()
         await self.quantlab.stop()
         await self.bots.stop()
         await self.training.stop()
@@ -393,6 +456,14 @@ class Runtime:
         await self.missions.shutdown()
         await self.state.close()
         await self.db.close()
+
+
+def _git_root(project: Path) -> tuple[Path | None, str]:
+    """The git repository holding JARVIS, and JARVIS's folder inside it."""
+    for candidate in (project, *project.parents):
+        if (candidate / ".git").exists():
+            return candidate, project.relative_to(candidate).as_posix().strip(".")
+    return None, ""
 
 
 def _sounddevice() -> AudioDevice:

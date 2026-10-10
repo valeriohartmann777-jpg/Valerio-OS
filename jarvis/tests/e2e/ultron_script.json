@@ -1,0 +1,233 @@
+{
+ "jarvis": [
+  {
+   "tool": "submit_plan",
+   "input": {
+    "title": "Slugify utility",
+    "objective": "A tested slugify(text) function in a new Python package.",
+    "in_scope": [
+     "slugify function",
+     "unit tests"
+    ],
+    "out_of_scope": [
+     "unicode transliteration"
+    ],
+    "assumptions": [
+     "ASCII input"
+    ],
+    "success_criteria": [
+     {
+      "criterion": "All unit tests pass",
+      "check": [
+       "python",
+       "-m",
+       "pytest",
+       "-q"
+      ]
+     },
+     {
+      "criterion": "slugify turns 'Hello World' into 'hello-world'"
+     }
+    ],
+    "tasks": [
+     {
+      "key": "spec",
+      "title": "Specify slugify",
+      "owner": "axiom",
+      "objective": "Write the specification for slugify into docs/SPEC.md.",
+      "deliverables": [
+       "docs/SPEC.md"
+      ],
+      "done_when": [
+       "docs/SPEC.md defines signature, behaviour and tests"
+      ],
+      "allowed_paths": [
+       "docs/**"
+      ]
+     },
+     {
+      "key": "impl",
+      "title": "Implement slugify",
+      "owner": "forge",
+      "depends_on": [
+       "spec"
+      ],
+      "objective": "Implement textutil.slugify with tests, following docs/SPEC.md.",
+      "deliverables": [
+       "textutil/__init__.py",
+       "tests/test_textutil.py"
+      ],
+      "done_when": [
+       "pytest passes"
+      ],
+      "allowed_paths": [
+       "textutil/**",
+       "tests/**"
+      ],
+      "checks": [
+       [
+        "python",
+        "-m",
+        "pytest",
+        "-q"
+       ]
+      ]
+     },
+     {
+      "key": "verify",
+      "title": "Independent review",
+      "owner": "sentinel",
+      "depends_on": [
+       "impl"
+      ],
+      "objective": "Independently verify slugify against the spec.",
+      "done_when": [
+       "review passes with evidence"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "axiom": [
+  {
+   "tool": "write_file",
+   "input": {
+    "path": "docs/SPEC.md",
+    "content": "# slugify\n\nslugify(text: str) -> str: lowercase, spaces become '-', strip ends.\n"
+   }
+  },
+  {
+   "tool": "submit_result",
+   "input": {
+    "summary": "Specified slugify(text) -> str in docs/SPEC.md.",
+    "criteria": [
+     {
+      "criterion": "docs/SPEC.md defines signature, behaviour and tests",
+      "met": true,
+      "evidence": "docs/SPEC.md written"
+     }
+    ]
+   }
+  }
+ ],
+ "forge": [
+  {
+   "tools": [
+    {
+     "tool": "write_file",
+     "input": {
+      "path": "textutil/__init__.py",
+      "content": "def slugify(text):\n    return text.lower()\n"
+     }
+    },
+    {
+     "tool": "write_file",
+     "input": {
+      "path": "tests/test_textutil.py",
+      "content": "from textutil import slugify\n\n\ndef test_basic():\n    assert slugify('Hello World') == 'hello-world'\n\n\ndef test_strip():\n    assert slugify('  A  b ') == 'a-b'\n"
+     }
+    },
+    {
+     "tool": "write_file",
+     "input": {
+      "path": "../outside.txt",
+      "content": "should be refused"
+     }
+    }
+   ]
+  },
+  {
+   "tool": "submit_result",
+   "input": {
+    "summary": "First implementation of slugify with tests.",
+    "criteria": [
+     {
+      "criterion": "pytest passes",
+      "met": true,
+      "evidence": "2 passed"
+     }
+    ]
+   }
+  },
+  {
+   "tools": [
+    {
+     "tool": "write_file",
+     "input": {
+      "path": "textutil/__init__.py",
+      "content": "def slugify(text):\n    return '-'.join(text.strip().lower().split())\n"
+     }
+    },
+    {
+     "tool": "run_command",
+     "input": {
+      "argv": [
+       "python",
+       "-m",
+       "pytest",
+       "-q"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "tool": "submit_result",
+   "input": {
+    "summary": "Fixed: spaces become hyphens and ends are stripped.",
+    "criteria": [
+     {
+      "criterion": "pytest passes",
+      "met": true,
+      "evidence": "2 passed"
+     }
+    ]
+   }
+  }
+ ],
+ "sentinel": [
+  {
+   "tools": [
+    {
+     "tool": "read_file",
+     "input": {
+      "path": "docs/SPEC.md"
+     }
+    },
+    {
+     "tool": "read_file",
+     "input": {
+      "path": "textutil/__init__.py"
+     }
+    },
+    {
+     "tool": "run_command",
+     "input": {
+      "argv": [
+       "python",
+       "-m",
+       "pytest",
+       "-q"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "tool": "submit_review",
+   "input": {
+    "verdict": "pass",
+    "summary": "Implementation matches the spec; independent test run passed.",
+    "findings": [],
+    "criteria": [
+     {
+      "criterion": "slugify turns 'Hello World' into 'hello-world'",
+      "met": true,
+      "evidence": "test_basic passed in the review checkout"
+     }
+    ]
+   }
+  }
+ ]
+}

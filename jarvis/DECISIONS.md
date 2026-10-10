@@ -160,6 +160,43 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-027 — ULTRON: a deterministic team runtime around model workers
+
+- **Decision:** ULTRON (handoff in `docs/ultron-handoff/`) is a package
+  `backend/jarvis/ultron/` and an ULTRON page inside JARVIS. JARVIS plans a
+  mission as a charter + task DAG through one structured tool call
+  (`submit_plan`); code validates it (acyclic, active owners, scopes, runnable
+  checks, every FORGE task reviewed by SENTINEL — added if missing). A
+  scheduler backed by SQLite runs ready tasks in parallel (default 3), each in
+  its own git worktree and branch. Agents act only through a tool broker
+  (scoped paths, argv allowlist, no shell) and commands run sandboxed (macOS
+  Seatbelt: no network, writes only in the workspace; Linux: network
+  namespace). The runtime — not the agent — commits, runs the task's checks
+  and merges; SENTINEL reviews a throwaway checkout with the runtime's own
+  check results. Rejected work goes back to FORGE within a bounded attempt
+  budget. A spend cap is checked before every model call. Exporting a
+  finished project needs the user's approval (bound to an effect signature);
+  network, installs, merging into the running checkout, deployments,
+  messages, credentials and money are locked.
+- **Reason:** The blueprint's core rule: authority lives in deterministic
+  code and durable state, not in a model's promise. Worktrees keep parallel
+  agents from overwriting each other; runtime-run checks make "done" mean
+  "proven"; a typed task graph avoids free-chatting swarms that burn tokens
+  and invent progress.
+- **Alternatives:** Temporal / LangGraph (not needed for one local machine;
+  the trigger to migrate is missions spanning machines or days of concurrent
+  load); an agent SDK's own loop and guardrails (guardrails aren't a
+  permission system, and JARVIS already has a provider-neutral `ChatModel`);
+  containers per task (no Docker on the user's Mac; Seatbelt is what Codex
+  CLI uses there too).
+- **Consequences:** R1 runs JARVIS, AXIOM, FORGE and SENTINEL only; the other
+  six are listed as not active. Real-model runs need the user's Anthropic key
+  and cost money (capped per mission). In this development container there is
+  no key: tests and the E2E use a scripted model that the UI labels; the
+  sandbox, git, test runs, policy, approvals and persistence are real. On
+  Linux the OS sandbox doesn't confine writes (the broker still does).
+- **Date:** 2026-10-10
+
 ## D-026 — QuantLab: a fail-closed research workbench with its own reference engine
 
 - **Decision:** QuantLab (handoff in `docs/quantlab-handoff/`) is built into

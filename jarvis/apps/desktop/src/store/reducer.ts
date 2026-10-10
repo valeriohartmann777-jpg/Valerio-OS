@@ -28,6 +28,7 @@ export type View =
   | { name: "learning" }
   | { name: "bots" }
   | { name: "quantlab" }
+  | { name: "ultron" }
   | { name: "settings" };
 export type Connection = "connecting" | "online" | "offline";
 

@@ -17,6 +17,24 @@ docs that match reality.
 | 10    | Advanced                | War Room, MCP, calendar/email/GitHub, companion app, proactive engine   | planned       |
 | —     | Trading research        | Self-directed learning on NQ / XAUUSD with honest out-of-sample scoring | **first version** |
 | —     | QuantLab                | Hypothesis → StrategySpec → data passport → reference backtest → OOS verdict | **R0 + R1** |
+| —     | ULTRON                  | Goal → mission DAG → AXIOM/FORGE/SENTINEL in worktrees → verified result      | **R0 + R1** |
+
+## ULTRON (R0 + R1 done; handoff in `docs/ultron-handoff/`)
+
+- **R0/R1 (done):** mission ledger, planner with validated DAG, AXIOM/FORGE/
+  SENTINEL, worktree per task, sandboxed checks run by the runtime, review
+  loop, bounded retries, budget cap, approvals with effect signatures,
+  pause/stop/emergency stop, restart recovery, Mission Control. Status:
+  `docs/ultron/IMPLEMENTATION_STATUS.md`.
+- **Next (R1.5):** first real-model missions on the MacBook; merge-conflict
+  resolution as a FORGE task; reviewed merge of a JARVIS branch into a
+  separate integration branch.
+- **R2:** ATLAS (sourced research), PRISM (UI with a Node sandbox), CIPHER
+  (QuantLab analyses), ARCHIVE (curated project memory); mission comparison.
+- **R3:** VECTOR (builds, packaging), scoped OPERATOR workflows, multi-model
+  routing, Temporal if missions span machines.
+- **R4:** idea → prototype → review pipelines; improvement proposals, never
+  unreviewed self-modification.
 
 ## QuantLab (R0 + R1 done; handoff in `docs/quantlab-handoff/`)
 

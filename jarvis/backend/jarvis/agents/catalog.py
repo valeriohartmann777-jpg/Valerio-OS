@@ -19,6 +19,7 @@ FILE_TOOLS = ["find_files", "list_folder", "read_file", "open_file"]
 MEDIA_TOOLS = ["get_volume", "set_volume", "media_control", "now_playing"]
 LEARNING_TOOLS = ["learning_report", "market_levels", "level_odds", "bot_report", "quantlab_report"]
 MEMORY_TOOLS = ["remember", "forget"]
+ULTRON_TOOLS = ["ultron_start_mission", "ultron_status"]
 # Every tool the Operator may run; Sentinel verifies the same set.
 OPERATOR_TOOLS = [
     *SYSTEM_TOOLS,
@@ -27,6 +28,7 @@ OPERATOR_TOOLS = [
     *MEDIA_TOOLS,
     *LEARNING_TOOLS,
     *MEMORY_TOOLS,
+    *ULTRON_TOOLS,
 ]
 
 AGENT_SPECS: list[AgentSpec] = [
