@@ -305,6 +305,13 @@ class UltronSettings(BaseModel):
     scripted_model: str = ""
 
 
+class QuantLabSettings(BaseModel):
+    # Tests and the E2E only, both labelled in the UI: "fixture" swaps Databento for the
+    # offline fixture provider; "memory" swaps the OS keystore for process memory.
+    provider: Literal["databento", "fixture"] = "databento"
+    keystore: Literal["os", "memory"] = "os"
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -347,6 +354,7 @@ class Settings(BaseModel):
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     bots: BotsSettings = Field(default_factory=BotsSettings)
     ultron: UltronSettings = Field(default_factory=UltronSettings)
+    quantlab: QuantLabSettings = Field(default_factory=QuantLabSettings)
 
     @property
     def env_file(self) -> Path:
@@ -473,6 +481,11 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         ultron["scripted_model"] = value
     if value := env.get("JARVIS_ULTRON_EXPORT_DIR", "").strip():
         ultron["export_dir"] = value
+    quantlab = data.setdefault("quantlab", {})
+    if value := env.get("JARVIS_QUANTLAB_PROVIDER", "").strip():  # tests, E2E
+        quantlab["provider"] = value
+    if value := env.get("JARVIS_QUANTLAB_KEYSTORE", "").strip():  # tests, E2E
+        quantlab["keystore"] = value
 
 
 _QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019"}

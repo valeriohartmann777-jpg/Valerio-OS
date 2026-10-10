@@ -40,6 +40,13 @@ from jarvis.missions.engine import MissionEngine
 from jarvis.missions.planner import DeterministicPlanner
 from jarvis.missions.repository import MissionRepository
 from jarvis.permissions.service import PermissionService
+from jarvis.quantlab.futures.service import ResearchService
+from jarvis.quantlab.futures.store import ResearchStore
+from jarvis.quantlab.hub import fixture as hub_fixture
+from jarvis.quantlab.hub.provider import DatabentoAdapter
+from jarvis.quantlab.hub.service import DataHubService
+from jarvis.quantlab.hub.store import HubStore
+from jarvis.quantlab.hub.vault import CredentialVault, MemoryKeyring
 from jarvis.quantlab.service import QuantLabService
 from jarvis.quantlab.store import QuantLabStore
 from jarvis.settings import PROJECT_ROOT, Settings
@@ -262,6 +269,25 @@ class Runtime:
             fixtures=PROJECT_ROOT / "docs" / "quantlab-handoff" / "fixtures",
             code_revision=self.build,
         )
+        lab = settings.quantlab
+        self.hub = DataHubService(
+            store=HubStore(self.db),
+            bus=self.bus,
+            root=settings.data_dir / "quantlab" / "hub",
+            vault=CredentialVault(MemoryKeyring() if lab.keystore == "memory" else None),
+            adapter=(
+                DatabentoAdapter(hub_fixture.FixtureHistorical, fixture_label=hub_fixture.LABEL)
+                if lab.provider == "fixture"
+                else DatabentoAdapter()
+            ),
+        )
+        self.research = ResearchService(
+            store=ResearchStore(self.db),
+            hub=self.hub,
+            bus=self.bus,
+            root=settings.data_dir / "quantlab" / "research",
+            code_revision=self.build,
+        )
 
         repo, subdir = _git_root(PROJECT_ROOT) if ultron_repo is None else (ultron_repo, "")
         self._ultron_models: dict[tuple[str, str], ChatModel] = {}
@@ -422,6 +448,8 @@ class Runtime:
         await self.training.start()
         await self.bots.start()
         await self.quantlab.start()
+        await self.hub.start()
+        await self.research.start()
         await self.ultron.start()
 
     async def _housekeep(self) -> None:
@@ -442,6 +470,8 @@ class Runtime:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._housekeeping
         await self.ultron.stop()
+        await self.research.stop()
+        await self.hub.stop()
         await self.quantlab.stop()
         await self.bots.stop()
         await self.training.stop()

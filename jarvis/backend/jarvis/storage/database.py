@@ -459,6 +459,244 @@ MIGRATIONS: list[list[str]] = [
         "CREATE INDEX idx_ul_events_mission ON ul_events(mission_id, id)",
         "CREATE INDEX idx_ul_tasks_mission ON ul_tasks(mission_id)",
     ],
+    # 11 — QuantLab Data Hub: provider connection (never the key), quotes, approved
+    # download jobs, the day-partitioned cache, built datasets, spend caps, audit trail
+    [
+        """
+        CREATE TABLE qh_connections (
+            provider      TEXT PRIMARY KEY,
+            status        TEXT NOT NULL,
+            key_hint      TEXT,
+            connected_at  TEXT,
+            verified_at   TEXT,
+            datasets      TEXT,
+            error_code    TEXT,
+            error         TEXT,
+            fixture       INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qh_quotes (
+            id                   TEXT PRIMARY KEY,
+            provider             TEXT NOT NULL,
+            created_at           TEXT NOT NULL,
+            expires_at           TEXT NOT NULL,
+            status               TEXT NOT NULL,
+            request              TEXT NOT NULL,
+            items                TEXT NOT NULL,
+            cost_usd             REAL NOT NULL,
+            billable_bytes       INTEGER NOT NULL,
+            records              INTEGER NOT NULL,
+            cached_days          INTEGER NOT NULL,
+            conditions           TEXT NOT NULL,
+            warnings             TEXT NOT NULL,
+            signature            TEXT NOT NULL,
+            fixture              INTEGER NOT NULL DEFAULT 0,
+            decided_at           TEXT,
+            approved_budget_usd  REAL,
+            job_id               TEXT,
+            note                 TEXT
+        )
+        """,
+        """
+        CREATE TABLE qh_jobs (
+            id                   TEXT PRIMARY KEY,
+            quote_id             TEXT NOT NULL REFERENCES qh_quotes(id),
+            status               TEXT NOT NULL,
+            created_at           TEXT NOT NULL,
+            started_at           TEXT,
+            finished_at          TEXT,
+            approved_budget_usd  REAL NOT NULL,
+            estimated_cost_usd   REAL NOT NULL,
+            chunks_total         INTEGER NOT NULL,
+            chunks_done          INTEGER NOT NULL DEFAULT 0,
+            bytes                INTEGER NOT NULL DEFAULT 0,
+            records              INTEGER NOT NULL DEFAULT 0,
+            error_code           TEXT,
+            error                TEXT,
+            warnings             TEXT NOT NULL DEFAULT '[]',
+            fixture              INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+        """
+        CREATE TABLE qh_chunks (
+            job_id      TEXT NOT NULL REFERENCES qh_jobs(id),
+            idx         INTEGER NOT NULL,
+            symbol      TEXT NOT NULL,
+            schema      TEXT NOT NULL,
+            stype_in    TEXT NOT NULL,
+            dataset     TEXT NOT NULL,
+            start       TEXT NOT NULL,
+            end         TEXT NOT NULL,
+            status      TEXT NOT NULL,
+            raw_path    TEXT,
+            raw_sha256  TEXT,
+            bytes       INTEGER NOT NULL DEFAULT 0,
+            records     INTEGER NOT NULL DEFAULT 0,
+            error       TEXT,
+            PRIMARY KEY (job_id, idx)
+        )
+        """,
+        """
+        CREATE TABLE qh_cache (
+            cache_key          TEXT NOT NULL,
+            day                TEXT NOT NULL,
+            provider           TEXT NOT NULL,
+            dataset            TEXT NOT NULL,
+            schema             TEXT NOT NULL,
+            stype_in           TEXT NOT NULL,
+            symbol             TEXT NOT NULL,
+            records            INTEGER NOT NULL,
+            canonical_path     TEXT,
+            sha256             TEXT,
+            raw_path           TEXT NOT NULL,
+            raw_sha256         TEXT NOT NULL,
+            condition          TEXT,
+            instrument_ids     TEXT NOT NULL,
+            job_id             TEXT NOT NULL,
+            transform_version  TEXT NOT NULL,
+            fixture            INTEGER NOT NULL DEFAULT 0,
+            created_at         TEXT NOT NULL,
+            PRIMARY KEY (cache_key, day)
+        )
+        """,
+        """
+        CREATE TABLE qh_datasets (
+            id               TEXT PRIMARY KEY,
+            created_at       TEXT NOT NULL,
+            provider         TEXT NOT NULL,
+            dataset          TEXT NOT NULL,
+            schema           TEXT NOT NULL,
+            stype_in         TEXT NOT NULL,
+            symbol           TEXT NOT NULL,
+            start            TEXT NOT NULL,
+            end              TEXT NOT NULL,
+            records          INTEGER NOT NULL,
+            snapshot_path    TEXT NOT NULL,
+            snapshot_sha256  TEXT NOT NULL,
+            manifest         TEXT NOT NULL,
+            quality          TEXT NOT NULL,
+            fixture          INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+        """
+        CREATE TRIGGER qh_datasets_immutable BEFORE UPDATE ON qh_datasets
+        BEGIN SELECT RAISE(ABORT, 'datasets are immutable'); END
+        """,
+        """
+        CREATE TABLE qh_settings (
+            provider            TEXT PRIMARY KEY,
+            max_usd_per_request REAL NOT NULL,
+            max_usd_per_month   REAL NOT NULL,
+            updated_at          TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qh_audit (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            at        TEXT NOT NULL,
+            provider  TEXT NOT NULL,
+            action    TEXT NOT NULL,
+            detail    TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_qh_jobs_status ON qh_jobs(status)",
+        "CREATE INDEX idx_qh_quotes_status ON qh_quotes(status)",
+    ],
+    # 12 — QuantLab research: futures strategies with insert-only versions, runs, the
+    # trial registry (every evaluated variant), holdout unseals, notes and decisions
+    [
+        """
+        CREATE TABLE qr_strategies (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            hypothesis  TEXT NOT NULL,
+            product     TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qr_versions (
+            id           TEXT PRIMARY KEY,
+            strategy_id  TEXT NOT NULL REFERENCES qr_strategies(id),
+            number       INTEGER NOT NULL,
+            parent_id    TEXT,
+            spec_json    TEXT NOT NULL,
+            spec_sha256  TEXT NOT NULL,
+            origin       TEXT NOT NULL,
+            note         TEXT,
+            created_at   TEXT NOT NULL,
+            UNIQUE (strategy_id, number),
+            UNIQUE (strategy_id, spec_sha256)
+        )
+        """,
+        """
+        CREATE TRIGGER qr_versions_immutable BEFORE UPDATE ON qr_versions
+        BEGIN SELECT RAISE(ABORT, 'strategy versions are immutable'); END
+        """,
+        """
+        CREATE TABLE qr_runs (
+            id               TEXT PRIMARY KEY,
+            strategy_id      TEXT NOT NULL REFERENCES qr_strategies(id),
+            version_id       TEXT NOT NULL REFERENCES qr_versions(id),
+            dataset_id       TEXT NOT NULL,
+            kind             TEXT NOT NULL,
+            include_holdout  INTEGER NOT NULL DEFAULT 0,
+            status           TEXT NOT NULL,
+            stage            TEXT,
+            progress         REAL NOT NULL DEFAULT 0,
+            manifest         TEXT NOT NULL,
+            manifest_sha256  TEXT NOT NULL,
+            verdict          TEXT,
+            summary          TEXT,
+            results_sha256   TEXT,
+            error_code       TEXT,
+            error            TEXT,
+            fixture          INTEGER NOT NULL DEFAULT 0,
+            created_at       TEXT NOT NULL,
+            started_at       TEXT,
+            finished_at      TEXT
+        )
+        """,
+        """
+        CREATE TABLE qr_trials (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            strategy_id   TEXT NOT NULL,
+            run_id        TEXT NOT NULL,
+            version_id    TEXT NOT NULL,
+            params        TEXT NOT NULL,
+            segment       TEXT NOT NULL,
+            trades        INTEGER NOT NULL,
+            net           REAL NOT NULL,
+            sharpe_daily  REAL,
+            created_at    TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qr_holdouts (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            strategy_id  TEXT NOT NULL,
+            product      TEXT NOT NULL,
+            first_day    TEXT NOT NULL,
+            last_day     TEXT NOT NULL,
+            run_id       TEXT NOT NULL,
+            at           TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qr_notes (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            strategy_id  TEXT NOT NULL,
+            run_id       TEXT,
+            kind         TEXT NOT NULL,
+            text         TEXT NOT NULL,
+            created_at   TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_qr_runs_version ON qr_runs(version_id)",
+        "CREATE INDEX idx_qr_trials_strategy ON qr_trials(strategy_id)",
+    ],
 ]
 
 
@@ -505,6 +743,14 @@ class Database:
     async def execute(self, sql: str, params: Sequence[Any] = ()) -> None:
         await self.conn.execute(sql, params)
         await self.conn.commit()
+
+    async def execute_count(self, sql: str, params: Sequence[Any] = ()) -> int:
+        """Execute and return the number of rows changed (for compare-and-set updates)."""
+        cursor = await self.conn.execute(sql, params)
+        count = cursor.rowcount
+        await cursor.close()
+        await self.conn.commit()
+        return int(count)
 
     async def execute_many(self, sql: str, rows: Iterable[Sequence[Any]]) -> None:
         await self.conn.executemany(sql, rows)

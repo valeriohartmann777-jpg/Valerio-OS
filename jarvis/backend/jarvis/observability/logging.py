@@ -5,10 +5,38 @@ from __future__ import annotations
 import json
 import logging
 import logging.handlers
+import re
 from pathlib import Path
 from typing import Any
 
 _STANDARD = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {"message", "asctime"}
+
+# Provider credentials that must never reach a log line, whatever code logs them.
+SECRET_PATTERNS = (
+    re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"),  # Anthropic
+    re.compile(r"\bdb-[A-Za-z0-9]{8,}"),  # Databento
+)
+
+
+def redact(text: str) -> str:
+    for pattern in SECRET_PATTERNS:
+        text = pattern.sub("[REDACTED]", text)
+    return text
+
+
+class RedactingFilter(logging.Filter):
+    """Scrubs credentials from the message, string extras and exception text."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        record.msg, record.args = redact(message), None
+        for key, value in list(record.__dict__.items()):
+            if key not in _STANDARD and isinstance(value, str):
+                setattr(record, key, redact(value))
+        if record.exc_info:
+            text = logging.Formatter().formatException(record.exc_info)
+            record.exc_info, record.exc_text = None, redact(text)
+        return True
 
 
 class JsonFormatter(logging.Formatter):
@@ -24,6 +52,8 @@ class JsonFormatter(logging.Formatter):
                 entry[key] = value
         if record.exc_info:
             entry["exc"] = self.formatException(record.exc_info)
+        elif record.exc_text:
+            entry["exc"] = record.exc_text
         return json.dumps(entry, default=str, ensure_ascii=False)
 
 
@@ -36,6 +66,8 @@ class ConsoleFormatter(logging.Formatter):
         line = f"{prefix} {record.getMessage()}" + (f"  [{trace}]" if trace else "")
         if record.exc_info:
             line += "\n" + self.formatException(record.exc_info)
+        elif record.exc_text:
+            line += "\n" + record.exc_text
         return line
 
 
@@ -58,5 +90,6 @@ def configure_logging(level: str, log_dir: Path) -> None:
     console.setLevel(level.upper())
     console.setFormatter(ConsoleFormatter())
 
-    root.addHandler(file_handler)
-    root.addHandler(console)
+    for handler in (file_handler, console):
+        handler.addFilter(RedactingFilter())
+        root.addHandler(handler)

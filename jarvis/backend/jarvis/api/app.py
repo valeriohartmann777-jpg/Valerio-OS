@@ -9,6 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from jarvis import __version__
+from jarvis.api.quantlab_hub_routes import router as hub_router
+from jarvis.api.quantlab_research_routes import router as research_router
 from jarvis.api.routes import router
 from jarvis.api.security import OriginGuard
 from jarvis.runtime import Runtime
@@ -37,4 +39,6 @@ def create_app(settings: Settings | None = None, *, runtime: Runtime | None = No
     )
     app.add_middleware(OriginGuard, allowed_origins=settings.server.allowed_origins)
     app.include_router(router)
+    app.include_router(hub_router)
+    app.include_router(research_router)
     return app
