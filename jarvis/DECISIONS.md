@@ -160,6 +160,50 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-028 — QuantLab Institutional Edition: Databento, futures engine, validation lab
+
+- **Decision:** QuantLab gains a Data Hub (`backend/jarvis/quantlab/hub/`) and a futures
+  research package (`backend/jarvis/quantlab/futures/`) inside the existing QuantLab page,
+  which becomes a research terminal with Simple / Research / Institutional modes. The
+  Databento key goes into the OS keystore only (keyring; no plaintext fallback) after a
+  metadata-only check. Every download needs a quote and the user's approval:
+  - the approval is bound to the quote's signature, re-priced before use, capped per
+    request and per month, single-use and expiring;
+  - no JARVIS or ULTRON tool can approve it.
+
+  Data is cached as raw DBN plus canonical per-day Parquet with integer prices, and frozen
+  into checksummed datasets with a manifest and a quality report. A new event-driven
+  engine on integer ticks:
+  - takes contract specs from definition records;
+  - resolves ambiguous 1-minute bars conservatively and reports an optimistic bound;
+  - keeps positions flat per session (no P&L across rolls).
+
+  A fixed validation suite:
+  - chronological split with embargo and a sealed holdout;
+  - look-ahead perturbation, cost stress, an in-sample grid, walk-forward;
+  - block bootstrap, a deflated Sharpe over the trial registry, regimes, tails.
+
+  It produces a verdict by a fixed function. JARVIS drafts specs through one validated tool
+  call and never computes results. Details: `docs/quantlab/DECISIONS.md` (QD-1 … QD-11).
+- **Reason:** The owner's directive (`docs/quantlab/INSTITUTIONAL_DIRECTIVE.md`): real
+  futures research on licensed data, with data, execution, statistical and operational
+  truth; nothing paid without consent; nothing claimed without evidence.
+- **Alternatives:**
+  - extend the R1 cash-equity engine (its share-based accounting can't express multipliers
+    or rolls);
+  - VectorBT as the engine (fills must be event-accurate first);
+  - DuckDB now (not needed for single-dataset work; QD-10);
+  - storing the key in `.env` like the Anthropic key (rejected: the directive requires an
+    OS-protected keystore).
+- **Consequences:**
+  - Databento, keyring and exchange_calendars become dependencies, with wheels for macOS
+    arm64 / Python 3.13.
+  - No real Databento call was made in development: an offline fixture provider (real DBN
+    files, synthetic prices, labelled everywhere, verdict capped) exercises the path. The
+    first real-key session on the MacBook is the next step.
+  - Overnight strategies, spread-aware fills and order-book data are out of scope (R6/R7).
+- **Date:** 2026-10-10
+
 ## D-027 — ULTRON: a deterministic team runtime around model workers
 
 - **Decision:** ULTRON (handoff in `docs/ultron-handoff/`) is a package

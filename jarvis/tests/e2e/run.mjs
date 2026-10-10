@@ -97,6 +97,11 @@ const app = await electron.launch({
     // ULTRON agents reply from a script here (no API key in CI); the UI labels it.
     JARVIS_ULTRON_SCRIPT: path.join(root, "tests", "e2e", "ultron_script.json"),
     JARVIS_ULTRON_EXPORT_DIR: ultronExports,
+    // QuantLab: the offline fixture provider (real DBN files, synthetic prices, labelled in the
+    // UI), a memory keystore (no Keychain in CI) and a scripted Strategy Architect.
+    JARVIS_QUANTLAB_PROVIDER: "fixture",
+    JARVIS_QUANTLAB_KEYSTORE: "memory",
+    JARVIS_QUANTLAB_ARCHITECT_SCRIPT: path.join(root, "tests", "e2e", "quantlab_architect_script.json"),
   },
 });
 
@@ -307,7 +312,10 @@ try {
   await step("QuantLab: broken data refused, synthetic data passported, a spec frozen, a run judged critically", async () => {
     const top = () => page.getByTestId("quantlab-page").evaluate((el) => el.scrollTo(0, 0));
     await page.getByRole("button", { name: "QuantLab", exact: true }).click();
-    await page.getByTestId("ql-empty").waitFor(); // no curve before a real run
+    await page.getByTestId("qr-getting-started").waitFor(); // no number before a real run
+    await page.getByTestId("ql-mode-research").click();
+    await page.getByTestId("ql-nav-equity-lab-r1").click();
+    await page.getByTestId("ql-empty").waitFor(); // the R1 lab, unchanged
     await page.getByTestId("ql-section-datasets").click();
     await page.getByTestId("ql-fixture-invalid_ohlc_duplicate.csv").click();
     await page.getByTestId("ql-data-blocked").waitFor(); // fail closed
@@ -346,6 +354,98 @@ try {
     await page.getByTestId("ql-cockpit-verdict").waitFor();
     await page.waitForTimeout(300);
     await shot("11g-quantlab-cockpit");
+    await page.getByRole("button", { name: "Home" }).click();
+  });
+
+  await step("QuantLab futures: Databento connect, quote, approval, download, dataset, JARVIS draft, validation, report", async () => {
+    const lab = () => page.getByTestId("quantlab-page");
+    const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
+    await page.getByRole("button", { name: "QuantLab", exact: true }).click();
+    await page.getByTestId("ql-nav-data-hub").click();
+    await page.getByTestId("qh-fixture-banner").waitFor(); // the fixture is never mistaken for Databento
+    await page.getByTestId("qh-key").fill("db-REVOKED00000000000000000000");
+    await page.getByTestId("qh-connect").click();
+    await page.getByTestId("qh-message").filter({ hasText: "rejected" }).waitFor();
+    await page.getByTestId("qh-key").fill("db-FIXTURE0000000000000000000000");
+    await page.getByTestId("qh-connect").click();
+    await page.getByTestId("qh-test").waitFor(); // only shown once connected
+    assert.equal(await page.getByTestId("qh-key").count(), 0, "the key field is gone once connected");
+    await page.getByTestId("qh-start").fill("2025-11-03");
+    await page.getByTestId("qh-end").fill("2026-03-03");
+    await page.getByTestId("qh-resolve").click();
+    await page.getByTestId("qh-resolution").getByText("instrument").first().waitFor();
+    await page.getByTestId("qh-get-quote").click();
+    const quote = page.getByTestId("qh-quote");
+    await quote.waitFor();
+    assert.match(await page.getByTestId("qh-quote-cost").innerText(), /^\$\d/);
+    assert.equal(await page.getByTestId("qh-approve").isDisabled(), true, "no download without explicit approval");
+    await page.waitForTimeout(200);
+    await shot("11l-quantlab-quote");
+    await page.getByTestId("qh-agree").check();
+    await page.getByTestId("qh-approve").click();
+    await page.locator('[data-testid="qh-job"][data-status="COMPLETED"]').first().waitFor({ timeout: 90_000 });
+    await page.getByTestId("qh-build").click();
+    await page.getByTestId("qh-dataset-detail").getByText("ROLLS").waitFor({ timeout: 30_000 });
+    await page.getByTestId("qh-preview").waitFor();
+    await page.getByTestId("qh-dataset-detail").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("11m-quantlab-dataset");
+
+    await page.getByTestId("ql-nav-strategy-studio").click();
+    await page.getByTestId("qr-idea").fill("Trade the breakout of NQ's first 15 minutes, stop at the other side of the range, 2R target, flat before the close.");
+    await page.getByTestId("qr-draft").click();
+    await page.getByTestId("qr-draft-notes").getByText("Scripted test model").waitFor();
+    await page.getByTestId("qr-state").filter({ hasText: "DRAFT" }).waitFor(); // an unknown blocks the run
+    await page.getByTestId("qr-confirm-rule.direction").click();
+    await page.getByTestId("qr-state").filter({ hasText: "READY" }).waitFor();
+    assert.equal(await page.getByTestId("qr-save").isDisabled(), true, "saved without review");
+    await page.getByTestId("qr-reviewed").check();
+    await top();
+    await page.waitForTimeout(250);
+    await shot("11n-quantlab-studio");
+    await page.getByTestId("qr-save").click();
+    await page.getByTestId("qr-save-message").filter({ hasText: "Saved as version 1" }).waitFor();
+    await page.getByTestId("qr-run-validation").click();
+    await page.getByTestId("qr-net").waitFor({ timeout: 120_000 }); // Backtest Lab once the run completed
+    await page.getByTestId("qr-session-chart").waitFor();
+    await top();
+    await page.waitForTimeout(400);
+    await shot("11o-quantlab-backtest");
+
+    await page.getByTestId("ql-nav-validation").click();
+    await page.getByTestId("qr-verdict-main").filter({ hasText: "Insufficient evidence" }).waitFor(); // synthetic: capped
+    await page.locator('[data-testid="qr-test"][data-id="LEAKAGE"][data-status="PASSED"]').waitFor();
+    await page.locator('[data-testid="qr-test"][data-id="HOLDOUT"][data-status="NOT_RUN"]').waitFor(); // sealed
+    await page.locator('[data-testid="qr-test"][data-id="PARAMETER_SENSITIVITY"]').click();
+    await page.getByTestId("qr-grid").waitFor();
+    await top();
+    await page.waitForTimeout(300);
+    await shot("11p-quantlab-validation");
+
+    await page.getByTestId("ql-nav-trade-explorer").click();
+    await page.getByTestId("qr-trade-row").first().click();
+    await page.getByTestId("qr-trade-story").waitFor();
+    await page.getByTestId("qr-trade-chart").waitFor();
+    await page.waitForTimeout(300);
+    await shot("11q-quantlab-trade");
+
+    await page.getByTestId("ql-nav-reports").click();
+    await page.getByTestId("qr-report").getByText("SYNTHETIC FIXTURE DATA").first().waitFor();
+    await page.getByTestId("qr-reproduce").click();
+    await page.getByTestId("qr-repro").filter({ hasText: "Identical" }).waitFor({ timeout: 60_000 });
+
+    await page.getByTestId("ql-nav-experiments").click();
+    const variants = Number(await page.getByTestId("qr-variants").innerText());
+    assert.ok(variants >= 6, `every grid point counts as a variant (got ${variants})`);
+    await page.getByTestId("ql-mode-institutional").click();
+    await page.getByTestId("ql-nav-risk-execution").click();
+    await page.getByTestId("qr-audit").getByText("PASS").first().waitFor();
+    assert.equal(await page.getByTestId("qr-audit").getByText("FAIL").count(), 0, "ledger audit passes");
+    await page.getByTestId("ql-nav-overview").click();
+    await page.getByTestId("qr-recent").waitFor();
+    await page.waitForTimeout(300);
+    await shot("11r-quantlab-overview");
+    await page.getByTestId("ql-mode-simple").click();
     await page.getByRole("button", { name: "Home" }).click();
   });
 
@@ -479,6 +579,9 @@ await step("the conversation is still there after a restart", async () => {
     // ULTRON's mission ledger survived the restart too.
     const missions = await fetch(`${backendUrl}/ultron/missions`).then((r) => r.json());
     assert.equal(missions[0]?.state, "COMPLETE", "ULTRON mission persisted across the restart");
+    // QuantLab research runs too.
+    const research = await fetch(`${backendUrl}/quantlab/research/runs`).then((r) => r.json());
+    assert.ok(research.some((r) => r.status === "COMPLETED"), "QuantLab runs persisted across the restart");
   } finally {
     await again.close();
   }

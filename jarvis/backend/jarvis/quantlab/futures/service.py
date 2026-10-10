@@ -244,6 +244,12 @@ class ResearchService:
         )
         return version_id
 
+    async def version_owner(self, version_id: str) -> str:
+        row = await self._store.version(version_id)
+        if row is None:
+            raise ResearchError("NOT_FOUND", "No such strategy version.", status=404)
+        return str(row["strategy_id"])
+
     async def strategies(self) -> list[dict[str, Any]]:
         out = []
         runs = await self._store.runs()

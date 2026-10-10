@@ -58,7 +58,10 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   holdout only you see, prop-firm limits checked, and what account a $10k
   month would really need. Improved versions reach MetaTrader only when you
   click "Copy to MetaTrader".
-- **QuantLab**: test a trading hypothesis on historical data you import —
+- **QuantLab**: research terminal for NQ/MNQ/ES/MES ideas on Databento data — key in the
+  Keychain, cost estimate and your approval before any purchase, honest futures engine,
+  validation lab with a sealed holdout and a verdict. Plus the earlier lab that tests a
+  hypothesis on historical data you import —
   StrategySpec with visible assumptions, Data Passport with fail-closed
   quality checks, a deterministic backtest (signal at the close, fill at the
   next open, costs included), a chronological out-of-sample test and a
@@ -155,7 +158,46 @@ account size × a real edge × risk. The Bots page shows what account a $10k
 month would need at prop-firm and own-account drawdown limits, from the
 months the EA wasn't tuned on. Settings: `config/bots.yaml`.
 
-### QuantLab: test a trading hypothesis on your own data
+### QuantLab: futures research on Databento data
+
+**QuantLab** (top bar) is a research terminal for intraday futures ideas on NQ, MNQ, ES and
+MES. It never places orders. The mode switch (Simple · Research · Institutional) shows more
+or less detail; the numbers are the same.
+
+1. **Data Hub:** paste your Databento API key → **Connect & Verify**.
+   - JARVIS checks it with a free metadata request and keeps it in the macOS Keychain.
+     It never goes into files, logs or chats.
+   - Pick an instrument (e.g. `NQ.v.0`, the most-traded contract) and dates → **Get cost
+     estimate**.
+   - Nothing is bought until you tick the approval and press **Approve & download**. Caps
+     per request ($25) and per month ($100) apply, and days you already have are free.
+   - **Build verified dataset** freezes the bars with a checksum, a manifest (contracts,
+     rolls, provider conditions) and a quality report.
+2. **Strategy Studio:** describe the idea in words → **Draft rules with JARVIS**, or start
+   from a template.
+   - Every value you didn't state is an assumption you confirm. Unknowns block runs.
+   - Read "What will run", tick the review box, save. Versions are frozen by their hash.
+3. **Run full validation** on a verified dataset. You get:
+   - **Backtest Lab:** session candles with trades, equity and drawdown, costs.
+   - **Validation:** a verdict and the evidence behind each test.
+   - **Trade Explorer:** every trade with its 1-minute bars, stop and target.
+   - **Reports:** downloadable, reproducible.
+4. The last 15 % of the data stays **sealed**. Evaluate it once, when the rules are final.
+
+Verdicts:
+- Invalid data or method
+- Insufficient evidence
+- Rejected hypothesis
+- Promising research candidate
+- Forward validation required
+
+Nothing is ever called guaranteed. Bars are 1-minute OHLCV, so when a stop and a target sit
+inside the same minute, QuantLab assumes the stop and shows the optimistic case alongside.
+Settings: `config` defaults plus **Data Hub → Spend control**.
+
+The earlier cash-equity reference lab (below) is under **Equity lab (R1)** in Research mode.
+
+### QuantLab R1: the cash-equity reference lab
 
 **QuantLab** (top bar) is a research workbench, not a trading tool: it never
 places orders. Release 1 tests one kind of strategy — a moving-average

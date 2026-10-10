@@ -661,6 +661,45 @@ all COMPLETE ─▶ final acceptance checks ─▶ report ─▶ export approval
   Knowledge, Activity, Permissions) and `components/ultron/` (task graph,
   mission view, artifact viewer with checksum check).
 
+## 13h. QuantLab Institutional Edition (`backend/jarvis/quantlab/{hub,futures}/`)
+
+```
+hub/vault.py      OS keystore (keyring) — the only place the Databento key lives
+hub/provider.py   Databento adapter (SDK 0.87.0): metadata, symbology, cost, get_range; errors
+hub/fixture.py    offline stand-in writing real DBN with synthetic prices (tests / E2E only)
+hub/cache.py      raw DBN as delivered + canonical per-UTC-day Parquet (integer prices)
+hub/quality.py    QA against CMES/XNYS calendars; rolls; provider conditions; capabilities
+hub/service.py    connect · catalog · resolve · quote · approve (bound, capped, single use)
+                  · jobs (chunks, cancel, interrupted on restart) · datasets (snapshot+manifest)
+futures/sessions.py   exchange_calendars sessions → strategy windows (holidays, early closes, DST)
+futures/contracts.py  contract master from definition records (reference table = ASSUMED)
+futures/spec.py       FuturesSpec 1.0: ORB / intraday MA, exits, costs, sizing, validation plan
+futures/engine.py     event-driven bar engine: ticks, Decimal, orders/fills/trades, known_at
+futures/audit.py      independent ledger checks;  metrics.py  ledger-derived metrics
+futures/validation.py split · tests · bootstrap · deflated Sharpe · fitness · verdict
+futures/architect.py  NL → draft spec via submit_strategy_spec (validated, never auto-saved)
+futures/service.py    runs as persistent jobs (manifest hash = run id), artifacts, reports
+```
+
+- Tables: `qh_*` (migration 11) and `qr_*` (migration 12). Versions and datasets are
+  insert-only (triggers).
+- Events: `quantlab.hub.changed`, `quantlab.hub.job`, `quantlab.hub.dataset` and
+  `quantlab.research.run`.
+- API:
+  - `/quantlab/connections/databento*`
+  - `/quantlab/data/*`
+  - `/quantlab/research/*`
+  - `/quantlab/stop-all`
+
+  The approval route needs `confirm: true` and the Origin guard.
+- UI: `pages/QuantLab.tsx`, organised as follows.
+  - Shell: modes, nav, Stop all.
+  - `components/quantlab/hub/DataHub.tsx`.
+  - `components/quantlab/research/*`: Studio, Backtest Lab, Validation, Trade Explorer,
+    Experiments, Risk & Execution, Reports, charts.
+  - The R1 lab lives on as `EquityLab.tsx`.
+- Detail: `docs/quantlab/ARCHITECTURE.md`.
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

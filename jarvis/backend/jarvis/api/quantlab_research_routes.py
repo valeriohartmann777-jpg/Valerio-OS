@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from jarvis.quantlab.futures.architect import ArchitectError
 from jarvis.quantlab.futures.service import ResearchError
 from jarvis.runtime import Runtime
 
@@ -39,6 +40,11 @@ class RunBody(BaseModel):
     confirm_holdout: bool = False
 
 
+class InterpretBody(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    current: dict[str, Any] | None = None
+
+
 class NoteBody(BaseModel):
     kind: Literal["note", "decision"] = "note"
     text: str = Field(min_length=1, max_length=4000)
@@ -62,6 +68,32 @@ async def research_templates(rt: RuntimeDep) -> list[dict[str, Any]]:
 @router.post("/quantlab/research/strategies/check")
 async def research_check(body: SpecBody, rt: RuntimeDep) -> dict[str, Any]:
     return rt.research.check(body.spec)
+
+
+@router.post("/quantlab/research/interpret")
+async def research_interpret(body: InterpretBody, rt: RuntimeDep) -> dict[str, Any]:
+    """A draft spec from words. Nothing is saved or run; the user reviews it first."""
+    try:
+        return await rt.architect.interpret(body.text, body.current)
+    except ArchitectError as exc:
+        status = 409 if exc.code == "NO_MODEL" else 400
+        raise HTTPException(
+            status, {"code": exc.code, "message": exc.message, "remedy": exc.remedy}
+        ) from None
+
+
+@router.post("/quantlab/research/strategies/ai")
+async def research_create_ai(body: SpecBody, rt: RuntimeDep) -> dict[str, Any]:
+    """Save a reviewed AI draft: origin 'ai', so the trial registry counts it as a variant."""
+    try:
+        if body.parent_id:
+            strategy = await rt.research.version_owner(body.parent_id)
+            return await rt.research.add_version(
+                strategy, body.spec, origin="ai", note=body.note, parent_id=body.parent_id
+            )
+        return await rt.research.create_strategy(body.spec, origin="ai", note=body.note)
+    except ResearchError as exc:
+        raise _error(exc) from None
 
 
 @router.get("/quantlab/research/strategies")

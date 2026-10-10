@@ -1,0 +1,140 @@
+{
+ "architect": [
+  {
+   "tool": "submit_strategy_spec",
+   "input": {
+    "spec": {
+     "schema_version": "1.0",
+     "kind": "futures_intraday",
+     "name": "NQ 15-minute opening range breakout",
+     "hypothesis": "When NQ breaks the range of its first 15 minutes, the move tends to continue into the afternoon.",
+     "instrument": {
+      "product": "NQ",
+      "dataset": "GLBX.MDP3",
+      "symbol": "NQ.v.0",
+      "stype_in": "continuous"
+     },
+     "session": {
+      "calendar": "XNYS",
+      "timezone": "America/New_York",
+      "start": "09:30",
+      "end": "16:00",
+      "flatten_at": "15:55",
+      "entry_cutoff": "12:00",
+      "weekdays": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ]
+     },
+     "rule": {
+      "type": "opening_range_breakout",
+      "range_minutes": 15,
+      "entry": "stop_through_range",
+      "direction": "both",
+      "buffer_ticks": 1
+     },
+     "exits": {
+      "stop": {
+       "type": "range_opposite"
+      },
+      "target": {
+       "type": "r_multiple",
+       "value": 2
+      }
+     },
+     "execution": {
+      "market_fill": "next_bar_open",
+      "slippage_ticks": 1,
+      "limit_fill": "trade_through",
+      "same_bar_ambiguity": "conservative",
+      "latency_bars": 0
+     },
+     "costs": {
+      "commission_per_contract_side": 2.25,
+      "exchange_fees_per_contract_side": 1.38,
+      "currency": "USD"
+     },
+     "sizing": {
+      "contracts": 1,
+      "account_capital": 50000,
+      "account_currency": "USD"
+     },
+     "validation": {
+      "oos_fraction": 0.3,
+      "holdout_fraction": 0.15,
+      "embargo_sessions": 1,
+      "min_trades_oos": 10,
+      "parameter_grid": {
+       "range_minutes": [
+        10,
+        15,
+        20
+       ],
+       "target_value": [
+        1.5,
+        2
+       ]
+      },
+      "walk_forward": {
+       "train_sessions": 30,
+       "test_sessions": 10,
+       "mode": "rolling"
+      },
+      "cost_stress": [
+       2,
+       3
+      ],
+      "bootstrap": {
+       "block_sessions": 5,
+       "samples": 400,
+       "seed": 7
+      }
+     },
+     "assumptions": [
+      {
+       "field": "costs.commission_per_contract_side",
+       "state": "assumed",
+       "note": "Typical retail rate, not your broker's quote \u2014 confirm or change."
+      },
+      {
+       "field": "costs.exchange_fees_per_contract_side",
+       "state": "assumed",
+       "note": "Approximate CME + NFA fees; schedules change over time."
+      },
+      {
+       "field": "execution.slippage_ticks",
+       "state": "assumed",
+       "note": "One tick per market/stop fill; stress tests multiply it."
+      },
+      {
+       "field": "sizing.account_capital",
+       "state": "assumed",
+       "note": "Only the denominator for returns; no margin model."
+      },
+      {
+       "field": "rule.direction",
+       "state": "unknown",
+       "note": "You didn't say whether to trade both breakouts or only one side."
+      },
+      {
+       "field": "validation.parameter_grid",
+       "state": "assumed",
+       "note": "A small grid around your 15 minutes and 2R, fixed before the run."
+      }
+     ]
+    },
+    "summary": "Trade a breakout of NQ's first 15-minute range, stop at the other side, target 2R, flat before the close.",
+    "questions": [
+     {
+      "field": "rule.direction",
+      "question": "Both breakouts, or only long?"
+     }
+    ],
+    "unsupported": []
+   }
+  }
+ ]
+}

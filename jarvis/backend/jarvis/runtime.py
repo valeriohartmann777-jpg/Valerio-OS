@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -40,6 +41,7 @@ from jarvis.missions.engine import MissionEngine
 from jarvis.missions.planner import DeterministicPlanner
 from jarvis.missions.repository import MissionRepository
 from jarvis.permissions.service import PermissionService
+from jarvis.quantlab.futures.architect import StrategyArchitect
 from jarvis.quantlab.futures.service import ResearchService
 from jarvis.quantlab.futures.store import ResearchStore
 from jarvis.quantlab.hub import fixture as hub_fixture
@@ -143,7 +145,7 @@ class Runtime:
         register_briefing_tools(self.tools, lambda: self.briefing)
         register_training_tools(self.tools, lambda: self.training)
         register_bot_tools(self.tools, lambda: self.bots)
-        register_quantlab_tools(self.tools, lambda: self.quantlab)
+        register_quantlab_tools(self.tools, lambda: self.quantlab, lambda: self.research)
         register_ultron_tools(self.tools, lambda: self.ultron)
         self.market = market or MarketData(settings.data_dir / "market")
         self.preferences = Preferences(settings.data_dir / "preferences.json")
@@ -288,6 +290,9 @@ class Runtime:
             root=settings.data_dir / "quantlab" / "research",
             code_revision=self.build,
         )
+        self._architect: tuple[str, ChatModel] | None = None
+        self._architect_script: ChatModel | None = None
+        self.architect = StrategyArchitect(self._architect_model, self._architect_label)
 
         repo, subdir = _git_root(PROJECT_ROOT) if ultron_repo is None else (ultron_repo, "")
         self._ultron_models: dict[tuple[str, str], ChatModel] = {}
@@ -359,6 +364,46 @@ class Runtime:
             )
             self._bot_research = (key, model)
         return self._bot_research[1]
+
+    def _architect_model(self) -> ChatModel | None:
+        """Claude for the QuantLab Strategy Architect (the brain's key), or the test script."""
+        lab = self.settings.quantlab
+        if lab.architect_script:  # tests and the E2E only; labelled in the UI
+            if self._architect_script is None:
+                from jarvis.ultron.scripted import ScriptedAgentModel
+
+                steps = json.loads(Path(lab.architect_script).read_text(encoding="utf-8"))
+                self._architect_script = ScriptedAgentModel("architect", steps["architect"])
+            return self._architect_script
+        secret = self.connector.settings.anthropic_api_key
+        if secret is None or not self.brain.available:
+            return None
+        key = secret.get_secret_value()
+        if self._architect is None or self._architect[0] != key:
+            import anthropic
+
+            from jarvis.llm.anthropic_provider import AnthropicChatModel
+
+            self._architect = (
+                key,
+                AnthropicChatModel(
+                    client=anthropic.AsyncAnthropic(api_key=key),
+                    model=lab.architect_model,
+                    max_tokens=lab.architect_max_tokens,
+                    effort=lab.architect_effort,
+                    timeout_seconds=lab.architect_timeout_seconds,
+                    refusal_fallback=self.settings.models.refusal_fallback,
+                ),
+            )
+        return self._architect[1]
+
+    def _architect_label(self) -> str:
+        lab = self.settings.quantlab
+        if lab.architect_script:
+            from jarvis.ultron.scripted import LABEL
+
+            return LABEL
+        return lab.architect_model
 
     def _ultron_model(self, agent: str) -> ChatModel | None:
         """Claude for an ULTRON agent: the brain's key, the agent's model from ultron.yaml."""

@@ -158,7 +158,7 @@ async def test_rejected_or_malformed_keys_store_nothing(hub: Hub) -> None:
 
 
 async def test_without_a_secure_keystore_nothing_is_stored_or_sent(hub: Hub) -> None:
-    service = hub.make(CredentialVault(fail.Keyring()))
+    service = hub.make(CredentialVault(fail.Keyring()))  # type: ignore[no-untyped-call]
     status = await service.status()
     assert status["keystore"]["available"] is False
     assert "plain text" in status["keystore"]["reason"]
@@ -411,9 +411,9 @@ def test_provider_errors_are_classified_and_redacted() -> None:
 
 def test_logs_never_contain_keys() -> None:
     record = logging.LogRecord("jarvis", logging.INFO, "", 0, "key=%s", (KEY,), None)
-    record.extra_key = f"Bearer {KEY}"
+    record.__dict__["extra_key"] = f"Bearer {KEY}"
     RedactingFilter().filter(record)
-    assert KEY not in record.getMessage() and KEY not in record.extra_key
+    assert KEY not in record.getMessage() and KEY not in record.__dict__["extra_key"]
     assert (
         redact("sk-ant-api03-abcdefghijkl and db-ABCDEFGHIJKLMNOP") == "[REDACTED] and [REDACTED]"
     )
@@ -492,3 +492,14 @@ def test_api_connect_quote_approve_dataset(client: Any) -> None:
     assert {"connect", "quote", "approve", "dataset.built"} <= {a["action"] for a in audit}
     assert KEY not in repr(audit)
     assert client.delete("/quantlab/connections/databento").json()["status"] == "NOT_CONNECTED"
+
+
+async def test_restart_without_the_key_is_not_connected(hub: Hub) -> None:
+    await hub.service.connect(KEY)
+    await hub.service.stop()
+    restarted = hub.make(CredentialVault(MemoryKeyring()))  # the keystore lost the key
+    await restarted.start()
+    status = await restarted.status()
+    assert status["status"] == "NOT_CONNECTED" and status["error_code"] == "KEY_MISSING"
+    await restarted.stop()
+    await hub.service.start()

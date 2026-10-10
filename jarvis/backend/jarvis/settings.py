@@ -310,6 +310,13 @@ class QuantLabSettings(BaseModel):
     # offline fixture provider; "memory" swaps the OS keystore for process memory.
     provider: Literal["databento", "fixture"] = "databento"
     keystore: Literal["os", "memory"] = "os"
+    # The Strategy Architect (natural language → draft spec); uses the brain's API key.
+    architect_model: str = "claude-opus-5-5"
+    architect_effort: str | None = "medium"
+    architect_max_tokens: int = 8000
+    architect_timeout_seconds: float = 120.0
+    # Tests and the E2E only: a JSON file of scripted architect replies (labelled in the UI).
+    architect_script: str = ""
 
 
 class ModelRoleSettings(BaseModel):
@@ -486,6 +493,8 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         quantlab["provider"] = value
     if value := env.get("JARVIS_QUANTLAB_KEYSTORE", "").strip():  # tests, E2E
         quantlab["keystore"] = value
+    if value := env.get("JARVIS_QUANTLAB_ARCHITECT_SCRIPT", "").strip():  # tests, E2E
+        quantlab["architect_script"] = value
 
 
 _QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019"}

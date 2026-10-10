@@ -16,7 +16,7 @@ docs that match reality.
 | 9     | Specialist agents       | Atlas, Forge, Archive fully online when missions justify them           | planned       |
 | 10    | Advanced                | War Room, MCP, calendar/email/GitHub, companion app, proactive engine   | planned       |
 | —     | Trading research        | Self-directed learning on NQ / XAUUSD with honest out-of-sample scoring | **first version** |
-| —     | QuantLab                | Hypothesis → StrategySpec → data passport → reference backtest → OOS verdict | **R0 + R1** |
+| —     | QuantLab                | Idea → spec → Databento data (approved) → futures engine → validation lab → verdict | **Institutional R0–R5** |
 | —     | ULTRON                  | Goal → mission DAG → AXIOM/FORGE/SENTINEL in worktrees → verified result      | **R0 + R1** |
 
 ## ULTRON (R0 + R1 done; handoff in `docs/ultron-handoff/`)
@@ -36,7 +36,16 @@ docs that match reality.
 - **R4:** idea → prototype → review pipelines; improvement proposals, never
   unreviewed self-modification.
 
-## QuantLab (R0 + R1 done; handoff in `docs/quantlab-handoff/`)
+## QuantLab Institutional Edition (R0–R5 done; plan in `docs/quantlab/RELEASE_PLAN.md`)
+
+- **Done:** Databento Data Hub (keystore, metadata verification, catalog, quotes, bound
+  approvals, caps, downloads, cache, verified datasets, quality); futures engine (ticks,
+  definitions, conservative/optimistic, flat per session); Strategy Studio with JARVIS drafts;
+  validation suite and verdicts; Experiments, Trade Explorer, Risk & Execution, Reports.
+- **Next:** real-key session on the MacBook; 1-second data only for ambiguous minutes; second
+  engine (R6); trades/MBP-1 (R7); forward paper monitoring (R8).
+
+## QuantLab R1 reference lab (R0 + R1 done; handoff in `docs/quantlab-handoff/`)
 
 - **R0/R1 (done):** UI shell, StrategySpec registry, Data Passport importer,
   reference engine, experiment registry with artifacts, chronological OOS,

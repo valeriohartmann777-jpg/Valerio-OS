@@ -330,3 +330,84 @@ def test_verdict_policy() -> None:
         val.verdict(v, fixture=False)["verdict"] for v in (passing, with_(HOLDOUT="NOT_RUN"))
     }
     assert math.isclose(len(val.VERDICTS), 6)
+
+
+# -- Strategy Architect (natural language → draft spec) ----------------------------------------
+
+
+async def test_architect_drafts_validates_and_asks() -> None:
+    from jarvis.quantlab.futures.architect import ArchitectError, StrategyArchitect
+    from tests.fakes import ScriptedChatModel, call, say
+
+    broken = small_spec(range_minutes=500)
+    fixed = small_spec(range_minutes=30)
+    fixed["assumptions"].append(
+        {"field": "rule.direction", "state": "unknown", "note": "Long only, or both sides?"}
+    )
+    model = ScriptedChatModel(
+        [
+            say("Here is my idea for you."),  # no tool call → nudged
+            call("submit_strategy_spec", {"spec": broken, "summary": "ORB"}),
+            call(
+                "submit_strategy_spec",
+                {
+                    "spec": fixed,
+                    "summary": "Breakout of the first 30 minutes on NQ.",
+                    "questions": [{"field": "rule.direction", "question": "Long only?"}],
+                    "unsupported": ["a VWAP filter"],
+                },
+                call_id="toolu_2",
+            ),
+        ]
+    )
+    architect = StrategyArchitect(lambda: model, lambda: "Test Model")
+    draft = await architect.interpret("Buy NQ when it breaks the first 30 minutes, VWAP filter")
+    assert draft["spec"]["rule"]["range_minutes"] == 30
+    assert draft["state"] == "DRAFT" and draft["questions"][0]["question"] == "Long only?"
+    assert draft["unsupported"] == ["a VWAP filter"]
+    assert any("30 minutes" in line for line in draft["description"])
+    assert "Nothing is saved" in draft["note"]
+    # The invalid proposal went back to the model with the parser's errors.
+    errors = model.calls[2]["messages"][-1]["content"][0]
+    assert errors["is_error"] and "range_minutes" in errors["content"]
+    # The idea is wrapped as data, and the model is told it never computes results.
+    assert "<idea>" in model.calls[0]["messages"][0]["content"][0]["text"]
+    assert "never calculate" in model.calls[0]["system"]
+
+    with pytest.raises(ArchitectError) as offline:
+        await StrategyArchitect(lambda: None, lambda: "").interpret("Buy the opening range break")
+    assert offline.value.code == "NO_MODEL" and "template" in offline.value.remedy
+
+
+def test_api_interpret_with_scripted_architect(tmp_path: Path) -> None:
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from jarvis.api.app import create_app
+
+    script = tmp_path / "architect.json"
+    spec = small_spec()
+    script.write_text(json.dumps({"architect": [
+        {"tool": "submit_strategy_spec", "input": {"spec": spec, "summary": "ORB on NQ"}},
+    ]}))  # fmt: skip
+    settings = make_settings(tmp_path)
+    settings = settings.model_copy(
+        update={"quantlab": settings.quantlab.model_copy(update={"architect_script": str(script)})}
+    )
+    with TestClient(create_app(settings)) as client:
+        draft = client.post("/quantlab/research/interpret", json={"text": "Opening range on NQ"})
+        assert draft.status_code == 200, draft.text
+        body = draft.json()
+        assert body["model"] == "Scripted test model" and body["state"] == "READY"
+        saved = client.post(
+            "/quantlab/research/strategies/ai", json={"spec": body["spec"], "note": "from words"}
+        ).json()
+        assert saved["versions"][0]["origin"] == "ai"
+        edit = small_spec(range_minutes=20)
+        revised = client.post(
+            "/quantlab/research/strategies/ai",
+            json={"spec": edit, "parent_id": saved["versions"][0]["id"], "note": "AI revision"},
+        ).json()
+        assert [v["number"] for v in revised["versions"]] == [1, 2]
+        assert revised["versions"][1]["parent_id"] == saved["versions"][0]["id"]

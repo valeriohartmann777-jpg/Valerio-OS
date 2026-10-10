@@ -361,6 +361,27 @@ _Last updated: 2026-10-04_
   this container, so the first real-model mission is still to run on the MacBook
 - Screenshots: `docs/screenshots/ultron-*.png`
 
+### QuantLab Institutional Edition (D-028) — details in `docs/quantlab/`
+- Futures research terminal for NQ / MNQ / ES / MES: Overview · Strategy Studio · Data Hub ·
+  Backtest Lab · Validation · Trade Explorer · Experiments · Risk & Execution · Reports, plus
+  the preserved R1 equity lab; Simple / Research / Institutional modes
+- Databento Data Hub: key only in the OS keystore (metadata-verified, redacted everywhere),
+  catalog from metadata, cost quote → explicit bound single-use approval with spend caps →
+  chunked download → raw DBN + canonical Parquet cache (no day bought twice) → immutable
+  dataset with manifest, quality report and capability matrix
+- Futures engine on integer ticks (contract specs from definitions, exchange-calendar
+  sessions, conservative same-bar handling, flat each session, roll guard, independent
+  audit); validation suite (split + embargo + sealed holdout, walk-forward, cost stress,
+  parameter grid, bootstrap, deflated Sharpe over the trial registry, regimes, tails) and
+  the six directive verdicts; reproducible runs; JARVIS Strategy Architect drafts specs
+  through one validated tool call and never computes results
+- Tests: 47 new backend tests (incl. a no-edge-on-random-walk regression) and E2E step
+  (connect, quote, approve, download, dataset, JARVIS draft, validation, trade, report,
+  reproduce) — **26/26 E2E steps** pass
+- Mocked here: Databento (offline fixture with synthetic prices), keystore (memory),
+  architect model (scripted) — all labelled in the UI; no real key, Keychain or model run yet
+- Screenshots: `docs/screenshots/quantlab-{hub-quote,dataset,studio,backtest,validation,trade,overview}.png`
+
 ## IN PROGRESS
 - —
 
@@ -371,7 +392,8 @@ _Last updated: 2026-10-04_
 0. Learning on the MacBook: first Dukascopy download, first rounds
 0. Trained model on the MacBook: first real verdict (Learning page)
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
-0. QuantLab on the MacBook: import real daily bars of one liquid ETF and run one frozen spec
+0. QuantLab on the MacBook: connect Databento (Keychain), quote one month of NQ.v.0 1-minute bars,
+   approve, build the dataset, run the opening-range template once — first real data
 0. ULTRON on the MacBook: first real-model mission (e.g. a CSV → JSON CLI with tests, $3 budget)
 
 ### Phase 2 — remaining

@@ -396,3 +396,44 @@ def test_contract_master_from_definitions_and_mismatch() -> None:
     broken = definitions.set_column(6, "min_price_increment_amount", pa.array([4 * NS]))
     _, bad = ct.build("NQ", {42261: BASE}, broken)
     assert bad[0]["code"] == "SPEC_INCONSISTENT"
+
+
+def test_no_edge_on_a_driftless_random_walk() -> None:
+    """With zero costs on a driftless walk sampled inside each minute, the breakout must
+    show no positive expectancy — a systematic optimistic fill bias would show up here."""
+    rng = np.random.default_rng(11)
+    sessions, minutes, sub = 800, 390, 20
+    rows_t, rows_o, rows_h, rows_l, rows_c, wins = [], [], [], [], [], []
+    for s in range(sessions):
+        start = BASE + s * 86_400 * NS
+        path = 84_000 + np.cumsum(rng.choice([-1, 1], size=minutes * sub)).reshape(minutes, sub)
+        opens = np.concatenate(([84_000], path[:-1, -1]))
+        rows_t.append(start + np.arange(minutes) * MINUTE)
+        rows_o.append(opens)
+        rows_h.append(np.maximum(opens, path.max(axis=1)))
+        rows_l.append(np.minimum(opens, path.min(axis=1)))
+        rows_c.append(path[:, -1])
+        wins.append(
+            Window(date(2020, 1, 1).fromordinal(737_425 + s), start, start + minutes * MINUTE,
+                   start + (minutes - 5) * MINUTE, start + 150 * MINUTE, start + minutes * MINUTE,
+                   False)
+        )  # fmt: skip
+    tick = 250_000_000
+
+    def cat(parts: list[np.ndarray]) -> np.ndarray:
+        return np.concatenate(parts).astype(np.int64)
+
+    ids = np.full(sessions * minutes, NQ.instrument_id, dtype=np.int64)
+    b = Bars(cat(rows_t), ids, cat(rows_o) * tick, cat(rows_h) * tick, cat(rows_l) * tick,
+             cat(rows_c) * tick)  # fmt: skip
+    spec = orb(
+        rule__range_minutes=15,
+        execution__slippage_ticks=0,
+        costs__commission_per_contract_side=0,
+        costs__exchange_fees_per_contract_side=0,
+    )
+    result = simulate(spec, b, {NQ.instrument_id: NQ}, wins, record_equity=False)
+    r = np.array([float(t.r_multiple or 0) for t in result.trades])
+    assert len(r) > 700
+    t_stat = r.mean() / (r.std() / np.sqrt(len(r)))
+    assert r.mean() < 0.05 and t_stat < 2.5, (r.mean(), t_stat)

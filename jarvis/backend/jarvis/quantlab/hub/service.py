@@ -164,7 +164,28 @@ class DataHubService:
                 "request a new quote to fetch the rest (cached days are free).",
             )
             await self._store.audit(PROVIDER, "job.interrupted", {"job_id": job["id"]})
+        await self._check_stored_key()
         self._worker = asyncio.create_task(self._work(), name="quantlab-hub")
+
+    async def _check_stored_key(self) -> None:
+        """Once per start: a connection whose key vanished from the keystore isn't connected."""
+        connection = await self._store.connection(PROVIDER)
+        if not connection or connection.get("status") != "CONNECTED":
+            return
+        try:
+            present = self._vault.get(ACCOUNT) is not None
+        except VaultError as exc:
+            present, reason = False, exc.message
+        else:
+            reason = "The key is no longer in the keystore — connect again."
+        if not present:
+            await self._store.save_connection(
+                PROVIDER,
+                status="NOT_CONNECTED",
+                key_hint=None,
+                error_code="KEY_MISSING",
+                error=reason,
+            )
 
     async def stop(self) -> None:
         if self._worker:

@@ -27,6 +27,29 @@ import type {
   QlSpecCheck,
   QlStrategy,
   QlStrategySpec,
+  QhAudit,
+  QhCacheRow,
+  QhCaps,
+  QhCatalog,
+  QhDataset,
+  QhJob,
+  QhQuote,
+  QhRequest,
+  QhResolution,
+  QhStatus,
+  QrChart,
+  QrCheck,
+  QrCompare,
+  QrDraft,
+  QrOverview,
+  QrRun,
+  QrRunRow,
+  QrSpec,
+  QrStrategy,
+  QrStrategyRow,
+  QrTemplate,
+  QrTradeDetail,
+  QrTrades,
   SettingsView,
   TrainingStatus,
   UlAgent,
@@ -58,6 +81,17 @@ interface ErrorDetail {
   code?: string;
   message?: string;
   suggestion?: string | null;
+}
+
+async function requestText(path: string): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}${path}`);
+  } catch {
+    throw new ApiError(0, "JARVIS backend is not reachable.");
+  }
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+  return response.text();
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -197,4 +231,89 @@ export const api = {
     post<UlConfig>("/ultron/config", values),
   qlReproduce: (id: string) =>
     post<QlReproduction>(`/quantlab/experiments/${encodeURIComponent(id)}/reproduce`),
+
+  // QuantLab Data Hub (Databento). The key goes in once and never comes back.
+  qhStatus: () => request<QhStatus>("/quantlab/connections/databento/status"),
+  qhConnect: (apiKey: string) => post<QhStatus>("/quantlab/connections/databento", { api_key: apiKey }),
+  qhTest: () => post<QhStatus>("/quantlab/connections/databento/test"),
+  qhDisconnect: () => request<QhStatus>("/quantlab/connections/databento", { method: "DELETE" }),
+  qhCatalog: (dataset?: string) =>
+    request<QhCatalog>(`/quantlab/data/catalog${dataset ? `?dataset=${encodeURIComponent(dataset)}` : ""}`),
+  qhResolve: (dataset: string, symbols: string[], stypeIn: string, start: string, end: string) =>
+    request<QhResolution>(
+      `/quantlab/data/instruments?dataset=${encodeURIComponent(dataset)}&symbols=${encodeURIComponent(symbols.join(","))}` +
+        `&stype_in=${encodeURIComponent(stypeIn)}&start=${start}&end=${end}`,
+    ),
+  qhQuote: (body: QhRequest) => post<QhQuote>("/quantlab/data/quote", body),
+  qhQuotes: () => request<QhQuote[]>("/quantlab/data/quotes"),
+  qhRejectQuote: (id: string) => post<QhQuote>(`/quantlab/data/quotes/${encodeURIComponent(id)}/reject`),
+  qhApprove: (quoteId: string, maxBudgetUsd: number) =>
+    post<QhJob>("/quantlab/data/requests", { quote_id: quoteId, max_budget_usd: maxBudgetUsd, confirm: true }),
+  qhJobs: () => request<QhJob[]>("/quantlab/data/jobs"),
+  qhJob: (id: string) => request<QhJob>(`/quantlab/data/jobs/${encodeURIComponent(id)}`),
+  qhCancelJob: (id: string) => post<QhJob>(`/quantlab/data/jobs/${encodeURIComponent(id)}/cancel`),
+  qhCache: () => request<QhCacheRow[]>("/quantlab/data/cache"),
+  qhDatasets: () => request<QhDataset[]>("/quantlab/data/datasets"),
+  qhDataset: (id: string) => request<QhDataset>(`/quantlab/data/datasets/${encodeURIComponent(id)}`),
+  qhBuild: (body: { dataset: string; schema: string; stype_in: string; symbol: string; start: string; end: string }) =>
+    post<QhDataset>("/quantlab/data/datasets", body),
+  qhPreview: (id: string) =>
+    request<{ points: { ts: number; close: number; instrument_id: number }[]; records: number }>(
+      `/quantlab/data/datasets/${encodeURIComponent(id)}/preview`,
+    ),
+  qhCaps: () => request<QhCaps>("/quantlab/data/settings"),
+  qhSetCaps: (caps: QhCaps) => post<QhCaps>("/quantlab/data/settings", caps),
+  qhAudit: () => request<QhAudit[]>("/quantlab/data/audit"),
+
+  // QuantLab futures research. Results come only from the deterministic engine.
+  qrOverview: () => request<QrOverview>("/quantlab/research/overview"),
+  qrTemplates: () => request<QrTemplate[]>("/quantlab/research/templates"),
+  qrCheck: (spec: QrSpec) => post<QrCheck>("/quantlab/research/strategies/check", { spec }),
+  qrInterpret: (text: string, current?: QrSpec) =>
+    post<QrDraft>("/quantlab/research/interpret", { text, current: current ?? null }),
+  qrStrategies: () => request<QrStrategyRow[]>("/quantlab/research/strategies"),
+  qrStrategy: (id: string) => request<QrStrategy>(`/quantlab/research/strategies/${encodeURIComponent(id)}`),
+  qrCreate: (spec: QrSpec, note?: string) => post<QrStrategy>("/quantlab/research/strategies", { spec, note }),
+  qrCreateFromAi: (spec: QrSpec, note: string, parentId?: string) =>
+    post<QrStrategy>("/quantlab/research/strategies/ai", { spec, note, parent_id: parentId ?? null }),
+  qrAddVersion: (id: string, spec: QrSpec, note?: string, parentId?: string) =>
+    post<QrStrategy>(`/quantlab/research/strategies/${encodeURIComponent(id)}/versions`, {
+      spec,
+      note,
+      parent_id: parentId ?? null,
+    }),
+  qrNote: (id: string, kind: "note" | "decision", text: string, runId?: string) =>
+    post<QrStrategy>(`/quantlab/research/strategies/${encodeURIComponent(id)}/notes`, {
+      kind,
+      text,
+      run_id: runId ?? null,
+    }),
+  qrRuns: () => request<QrRunRow[]>("/quantlab/research/runs"),
+  qrRun: (id: string) => request<QrRun>(`/quantlab/research/runs/${encodeURIComponent(id)}`),
+  qrStart: (body: {
+    version_id: string;
+    dataset_id: string;
+    kind: "backtest" | "validation";
+    include_holdout?: boolean;
+    confirm_holdout?: boolean;
+  }) => post<QrRun>("/quantlab/research/runs", body),
+  qrCancel: (id: string) => post<QrRun>(`/quantlab/research/runs/${encodeURIComponent(id)}/cancel`),
+  qrReproduce: (id: string) =>
+    post<{ identical: boolean; trades: number; results_sha256: string }>(
+      `/quantlab/research/runs/${encodeURIComponent(id)}/reproduce`,
+    ),
+  qrTrades: (id: string, offset = 0, limit = 200, segment?: string) =>
+    request<QrTrades>(
+      `/quantlab/research/runs/${encodeURIComponent(id)}/trades?offset=${offset}&limit=${limit}` +
+        (segment ? `&segment=${segment}` : ""),
+    ),
+  qrTrade: (id: string, number: number, segment?: string) =>
+    request<QrTradeDetail>(
+      `/quantlab/research/runs/${encodeURIComponent(id)}/trades/${number}${segment ? `?segment=${segment}` : ""}`,
+    ),
+  qrChart: (id: string) => request<QrChart>(`/quantlab/research/runs/${encodeURIComponent(id)}/chart`),
+  qrReport: (id: string) => requestText(`/quantlab/research/runs/${encodeURIComponent(id)}/report`),
+  qrCompare: (ids: string[]) =>
+    request<QrCompare>(`/quantlab/research/compare?ids=${encodeURIComponent(ids.join(","))}`),
+  qlStopAll: () => post<{ runs: string[]; downloads: string[] }>("/quantlab/stop-all"),
 };

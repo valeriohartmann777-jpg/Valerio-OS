@@ -2,11 +2,13 @@
 
 It answers the same metadata, symbology and timeseries calls and writes **real
 DBN files** (encoded with ``databento_dbn``), so the whole ingestion path is
-exercised with the SDK's own decoder. Its data is synthetic: a seeded random
-walk on CME Globex hours (exchange_calendars ``CMES``) for NQ, MNQ, ES and MES
-quarterly contracts, with a carry premium between contracts so a continuous
-symbol jumps at the roll exactly like real unadjusted data does. Its prices
-are made up too. Everything it produces is labelled FIXTURE in the hub.
+exercised with the SDK's own decoder. Its data is synthetic: a seeded, driftless
+random walk sampled 12 times a minute (so bars have real intrabar paths and
+failed breakouts), continuous across CME Globex sessions (exchange_calendars
+``CMES``), busier in New York regular hours, for NQ, MNQ, ES and MES quarterly
+contracts — with a carry premium between contracts so a continuous symbol jumps
+at the roll exactly like real unadjusted data does. Its prices are made up too.
+Everything it produces is labelled FIXTURE in the hub.
 
 Behaviour switches (by key text, for tests): a key containing ``REVOKED`` is
 rejected (401); ``NOLICENSE`` is valid but not licensed for GLBX.MDP3 (403);
@@ -21,7 +23,7 @@ import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from functools import cache
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -129,37 +131,75 @@ def _sessions() -> list[tuple[date, int, int]]:
     return out
 
 
+SUB_STEPS = 12  # price steps inside each minute: bars get real intrabar paths and wicks
+RTH_SIGMA = 0.00028  # per-minute log volatility in New York regular hours (≈ 6 NQ points)
+ETH_SIGMA = 0.00010  # overnight
+GAP_SIGMA = 0.0015  # the hour between Globex sessions
+
+
+def _rth_mask(minutes: np.ndarray, label: date) -> np.ndarray:
+    """New York 09:30–16:00 for this session's date (DST-correct)."""
+    from zoneinfo import ZoneInfo
+
+    offset = ZoneInfo("America/New_York").utcoffset(
+        datetime(label.year, label.month, label.day, 12)
+    )
+    shift = int(offset.total_seconds() // 60) if offset is not None else -300
+    et_minute = ((minutes // NANOS // 60) + shift) % (24 * 60)
+    return (et_minute >= 9 * 60 + 30) & (et_minute < 16 * 60)
+
+
+def _increments(family: str, label: date, minutes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Sub-minute log increments (minutes × SUB_STEPS) and the has-trades mask, seeded."""
+    rng = np.random.default_rng(_seed("path", family, label))
+    rth = _rth_mask(minutes, label)
+    trades = rth | (rng.random(minutes.size) > 0.12)
+    sigma = np.where(rth, RTH_SIGMA, ETH_SIGMA) / np.sqrt(SUB_STEPS)
+    steps = rng.normal(0.0, 1.0, (minutes.size, SUB_STEPS)) * sigma[:, None]
+    steps[~trades] = 0.0  # no trades in a minute: the price doesn't move
+    return steps, trades
+
+
+def _minutes(open_ns: int, close_ns: int) -> np.ndarray:
+    return np.arange(open_ns, close_ns, 60 * NANOS, dtype=np.int64)
+
+
 @cache
-def _day_levels(family: str) -> dict[date, float]:
-    """Daily opening index level per session: a seeded random walk."""
-    base = {"NDX": 21_000.0, "SPX": 6_000.0}[family]
-    rng = np.random.default_rng(_seed("levels", family))
-    level, out = base, {}
-    for label, _, _ in _sessions():
+def _session_starts(family: str) -> dict[date, float]:
+    """Each session opens where the previous one closed, plus a small overnight gap."""
+    level = {"NDX": 21_000.0, "SPX": 6_000.0}[family]
+    rng = np.random.default_rng(_seed("gaps", family))
+    out: dict[date, float] = {}
+    for label, open_ns, close_ns in _sessions():
         out[label] = level
-        level *= float(np.exp(rng.normal(0.0003, 0.011)))
+        steps, _ = _increments(family, label, _minutes(open_ns, close_ns))
+        level *= float(np.exp(steps.sum() + rng.normal(0.00005, GAP_SIGMA)))
     return out
 
 
-@cache
-def _session_path(family: str, label: date) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Per-minute (ts ns, index close, has-trades) for one session."""
-    session = next(s for s in _sessions() if s[0] == label)
-    _, open_ns, close_ns = session
-    minutes = np.arange(open_ns, close_ns, 60 * NANOS, dtype=np.int64)
-    rng = np.random.default_rng(_seed("path", family, label))
-    et_minute = ((minutes // NANOS // 60) - 4 * 60) % (24 * 60)  # rough ET clock for volatility
-    rth = (et_minute >= 9 * 60 + 30) & (et_minute < 16 * 60)
-    sigma = np.where(rth, 0.00055, 0.00022)
-    returns = rng.normal(0.0, 1.0, minutes.size) * sigma
-    level = _day_levels(family)[label] * np.exp(np.cumsum(returns))
-    trades = rth | (rng.random(minutes.size) > 0.12)
-    return minutes, level, trades
+@lru_cache(maxsize=256)
+def _session_path(
+    family: str, label: date
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Per minute: ts, index open/high/low/close from a continuous sub-minute path, has-trades."""
+    _, open_ns, close_ns = next(s for s in _sessions() if s[0] == label)
+    minutes = _minutes(open_ns, close_ns)
+    steps, trades = _increments(family, label, minutes)
+    path = _session_starts(family)[label] * np.exp(np.cumsum(steps.ravel())).reshape(steps.shape)
+    first = _session_starts(family)[label]
+    opens = np.concatenate(([first], path[:-1, -1]))
+    high = np.maximum(opens, path.max(axis=1))
+    low = np.minimum(opens, path.min(axis=1))
+    return minutes, opens, high, low, path[:, -1], trades
 
 
 def _premium(contract: Contract, ts_ns: np.ndarray) -> np.ndarray:
     days = (int(contract.expiration.timestamp() * NANOS) - ts_ns) / (86_400 * NANOS)
     return 1.0 + 0.045 * np.maximum(days, 0.0) / 365.0
+
+
+def _ticks(prices: np.ndarray, rounding: Any) -> np.ndarray:
+    return np.asarray(rounding(prices / 0.25), dtype=np.int64)
 
 
 def _bars(
@@ -171,31 +211,28 @@ def _bars(
     for label, open_ns, close_ns in _sessions():
         if close_ns <= start_ns or open_ns >= end_ns:
             continue
-        minutes, level, trades = _session_path(product.family, label)
-        price = level * _premium(contract, minutes)
-        ticks = np.round(price / 0.25).astype(np.int64)
-        prev = np.concatenate(([ticks[0]], ticks[:-1]))
-        rng = np.random.default_rng(_seed("wick", product.root, contract.raw_symbol, label))
-        up = np.abs(rng.normal(0, 3.0, ticks.size)).astype(np.int64)
-        down = np.abs(rng.normal(0, 3.0, ticks.size)).astype(np.int64)
-        high = np.maximum(prev, ticks) + up
-        low = np.minimum(prev, ticks) - down
-        et_minute = ((minutes // NANOS // 60) - 4 * 60) % (24 * 60)
-        rth = (et_minute >= 9 * 60 + 30) & (et_minute < 16 * 60)
+        minutes, o, h, lo, c, trades = _session_path(product.family, label)
+        premium = _premium(contract, minutes)
+
+        t_open, t_close = _ticks(o * premium, np.round), _ticks(c * premium, np.round)
+        t_high = np.maximum(_ticks(h * premium, np.ceil), np.maximum(t_open, t_close))
+        t_low = np.minimum(_ticks(lo * premium, np.floor), np.minimum(t_open, t_close))
+        rng = np.random.default_rng(_seed("volume", product.root, contract.raw_symbol, label))
+        rth = _rth_mask(minutes, label)
         volume = np.where(
             rth,
-            rng.integers(product.rth_volume // 3, product.rth_volume * 2, ticks.size),
-            rng.integers(1, max(2, product.rth_volume // 10), ticks.size),
+            rng.integers(product.rth_volume // 3, product.rth_volume * 2, minutes.size),
+            rng.integers(1, max(2, product.rth_volume // 10), minutes.size),
         )
         keep = trades & (minutes >= start_ns) & (minutes < end_ns)
         for i in np.flatnonzero(keep):
             rows.append(
                 (
                     int(minutes[i]),
-                    int(prev[i]) * TICK,
-                    int(high[i]) * TICK,
-                    int(low[i]) * TICK,
-                    int(ticks[i]) * TICK,
+                    int(t_open[i]) * TICK,
+                    int(t_high[i]) * TICK,
+                    int(t_low[i]) * TICK,
+                    int(t_close[i]) * TICK,
                     int(volume[i]),
                 )
             )
