@@ -305,6 +305,23 @@ class UltronSettings(BaseModel):
     scripted_model: str = ""
 
 
+class IntakeSettings(BaseModel):
+    """Idea intake: local speech/text recognition and what is kept of dropped media."""
+
+    # moonshine: Moonshine base (English), bundled, offline. whisper: faster-whisper
+    # (multilingual), weights downloaded once from Hugging Face when the user asks.
+    speech: Literal["moonshine", "whisper", "off"] = "moonshine"
+    whisper_model: Literal["tiny", "base", "small"] = "base"
+    default_language: str = "en"
+    ocr: bool = True
+    max_video_minutes: float = Field(15.0, gt=0, le=60)
+    # Originals of dropped media are deleted this many days after extraction (0 = right
+    # away); transcripts, keyframes and hashes stay for provenance until the user deletes them.
+    keep_media_days: int = Field(7, ge=0, le=365)
+    worker_timeout_factor: float = Field(6.0, ge=1, le=60)  # times the media duration, plus 90 s
+    auto_research: bool = True  # start a research mission when a source is ready
+
+
 class QuantLabSettings(BaseModel):
     # Tests and the E2E only, both labelled in the UI: "fixture" swaps Databento for the
     # offline fixture provider; "memory" swaps the OS keystore for process memory.
@@ -317,6 +334,7 @@ class QuantLabSettings(BaseModel):
     architect_timeout_seconds: float = 120.0
     # Tests and the E2E only: a JSON file of scripted architect replies (labelled in the UI).
     architect_script: str = ""
+    intake: IntakeSettings = Field(default_factory=IntakeSettings)
 
 
 class ModelRoleSettings(BaseModel):

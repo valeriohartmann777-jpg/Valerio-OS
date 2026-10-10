@@ -25,6 +25,12 @@ dependencies = [
   "keyring>=25.6",
   "exchange_calendars>=4.13",
   "sounddevice>=0.5",
+  # QuantLab idea intake: media decoding (bundled FFmpeg), local speech and text recognition
+  "av>=14",
+  "pillow>=11",
+  "moonshine-cpp==0.1.4",
+  "rapidocr>=3.4",
+  "faster-whisper>=1.1",
   "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
 ]
 
@@ -74,5 +80,5 @@ plugins = ["pydantic.mypy"]
 warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
-module = ["aiosqlite.*", "Quartz", "Quartz.*", "AppKit", "AppKit.*", "onnxruntime", "onnxruntime.*", "sounddevice", "sklearn", "sklearn.*", "threadpoolctl", "pyarrow", "pyarrow.*", "exchange_calendars", "exchange_calendars.*", "keyring", "keyring.*", "databento", "databento.*", "databento_dbn", "databento_dbn.*", "pandas", "pandas.*"]
+module = ["av", "av.*", "moonshine_cpp", "moonshine_cpp.*", "rapidocr", "rapidocr.*", "faster_whisper", "faster_whisper.*", "huggingface_hub", "huggingface_hub.*", "aiosqlite.*", "Quartz", "Quartz.*", "AppKit", "AppKit.*", "onnxruntime", "onnxruntime.*", "sounddevice", "sklearn", "sklearn.*", "threadpoolctl", "pyarrow", "pyarrow.*", "exchange_calendars", "exchange_calendars.*", "keyring", "keyring.*", "databento", "databento.*", "databento_dbn", "databento_dbn.*", "pandas", "pandas.*"]
 ignore_missing_imports = true

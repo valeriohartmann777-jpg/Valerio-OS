@@ -56,6 +56,8 @@ class EventType(StrEnum):
     QUANTLAB_HUB_JOB = "quantlab.hub.job"
     QUANTLAB_HUB_DATASET = "quantlab.hub.dataset"
     QUANTLAB_RESEARCH_RUN = "quantlab.research.run"
+    QUANTLAB_SOURCE = "quantlab.source"
+    QUANTLAB_MISSION = "quantlab.mission"
     ULTRON_MISSION_CHANGED = "ultron.mission.changed"
     ULTRON_TASK_CHANGED = "ultron.task.changed"
     ULTRON_ACTIVITY = "ultron.activity"

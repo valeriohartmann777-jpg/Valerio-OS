@@ -697,6 +697,147 @@ MIGRATIONS: list[list[str]] = [
         "CREATE INDEX idx_qr_runs_version ON qr_runs(version_id)",
         "CREATE INDEX idx_qr_trials_strategy ON qr_trials(strategy_id)",
     ],
+    # 13 — QuantLab Idea-to-Edge: sources (text, files, videos, links) with time-coded
+    # segments and keyframes, user notes, extracted claims, strategy blueprints, audit
+    [
+        """
+        CREATE TABLE qs_sources (
+            id                TEXT PRIMARY KEY,
+            fingerprint       TEXT NOT NULL UNIQUE,
+            kind              TEXT NOT NULL,
+            title             TEXT NOT NULL,
+            status            TEXT NOT NULL,
+            stage             TEXT,
+            capability        TEXT,
+            fallback          TEXT,
+            origin_url        TEXT,
+            filename          TEXT,
+            mime              TEXT,
+            size_bytes        INTEGER,
+            duration_ms       INTEGER,
+            language          TEXT,
+            meta              TEXT NOT NULL,
+            media_path        TEXT,
+            media_expires_at  TEXT,
+            media_deleted_at  TEXT,
+            linked_source_id  TEXT,
+            error             TEXT,
+            created_at        TEXT NOT NULL,
+            updated_at        TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qs_segments (
+            id          TEXT PRIMARY KEY,
+            source_id   TEXT NOT NULL REFERENCES qs_sources(id) ON DELETE CASCADE,
+            seq         INTEGER NOT NULL,
+            modality    TEXT NOT NULL,
+            start_ms    INTEGER,
+            end_ms      INTEGER,
+            page        INTEGER,
+            char_start  INTEGER,
+            char_end    INTEGER,
+            text        TEXT NOT NULL,
+            confidence  REAL,
+            quality     TEXT NOT NULL,
+            provider    TEXT NOT NULL,
+            frame_id    TEXT,
+            flags       TEXT NOT NULL,
+            UNIQUE (source_id, seq)
+        )
+        """,
+        """
+        CREATE TABLE qs_frames (
+            id           TEXT NOT NULL,
+            source_id    TEXT NOT NULL REFERENCES qs_sources(id) ON DELETE CASCADE,
+            t_ms         INTEGER,
+            path         TEXT NOT NULL,
+            sha256       TEXT NOT NULL,
+            width        INTEGER,
+            height       INTEGER,
+            scene_score  REAL,
+            text         TEXT,
+            PRIMARY KEY (source_id, id)
+        )
+        """,
+        """
+        CREATE TABLE qs_notes (
+            id          TEXT PRIMARY KEY,
+            source_id   TEXT NOT NULL REFERENCES qs_sources(id) ON DELETE CASCADE,
+            text        TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qs_extractions (
+            id           TEXT PRIMARY KEY,
+            source_id    TEXT NOT NULL REFERENCES qs_sources(id) ON DELETE CASCADE,
+            kind         TEXT NOT NULL,
+            agent        TEXT NOT NULL,
+            model        TEXT,
+            status       TEXT NOT NULL,
+            inputs_hash  TEXT NOT NULL,
+            data         TEXT,
+            error        TEXT,
+            cost_usd     REAL NOT NULL DEFAULT 0,
+            started_at   TEXT NOT NULL,
+            finished_at  TEXT
+        )
+        """,
+        """
+        CREATE TABLE qs_claims (
+            id                     TEXT PRIMARY KEY,
+            source_id              TEXT NOT NULL REFERENCES qs_sources(id) ON DELETE CASCADE,
+            extraction_id          TEXT NOT NULL,
+            seq                    INTEGER NOT NULL,
+            kind                   TEXT NOT NULL,
+            content                TEXT NOT NULL,
+            quote                  TEXT,
+            quote_verified         INTEGER NOT NULL,
+            segment_ids            TEXT NOT NULL,
+            field_mapping          TEXT NOT NULL,
+            extraction_confidence  TEXT NOT NULL,
+            claim_status           TEXT NOT NULL,
+            unresolved             TEXT NOT NULL,
+            trading_truth          TEXT NOT NULL,
+            origin                 TEXT NOT NULL,
+            created_at             TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qs_blueprints (
+            id            TEXT PRIMARY KEY,
+            source_id     TEXT REFERENCES qs_sources(id) ON DELETE SET NULL,
+            number        INTEGER NOT NULL,
+            parent_id     TEXT,
+            status        TEXT NOT NULL,
+            spec_json     TEXT NOT NULL,
+            spec_sha256   TEXT,
+            provenance    TEXT NOT NULL,
+            ambiguities   TEXT NOT NULL,
+            questions     TEXT NOT NULL,
+            unsupported   TEXT NOT NULL,
+            summary       TEXT,
+            origin        TEXT NOT NULL,
+            strategy_id   TEXT,
+            version_id    TEXT,
+            created_at    TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qs_audit (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id  TEXT,
+            action     TEXT NOT NULL,
+            detail     TEXT NOT NULL,
+            at         TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_qs_segments_source ON qs_segments(source_id, seq)",
+        "CREATE INDEX idx_qs_claims_source ON qs_claims(source_id)",
+        "CREATE INDEX idx_qs_blueprints_source ON qs_blueprints(source_id)",
+        "CREATE INDEX idx_qs_audit_source ON qs_audit(source_id)",
+    ],
 ]
 
 

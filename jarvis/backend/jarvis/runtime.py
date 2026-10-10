@@ -49,6 +49,7 @@ from jarvis.quantlab.hub.provider import DatabentoAdapter
 from jarvis.quantlab.hub.service import DataHubService
 from jarvis.quantlab.hub.store import HubStore
 from jarvis.quantlab.hub.vault import CredentialVault, MemoryKeyring
+from jarvis.quantlab.intake.service import SourceService
 from jarvis.quantlab.service import QuantLabService
 from jarvis.quantlab.store import QuantLabStore
 from jarvis.settings import PROJECT_ROOT, Settings
@@ -293,6 +294,12 @@ class Runtime:
         self._architect: tuple[str, ChatModel] | None = None
         self._architect_script: ChatModel | None = None
         self.architect = StrategyArchitect(self._architect_model, self._architect_label)
+        self.sources = SourceService(
+            db=self.db,
+            bus=self.bus,
+            root=settings.data_dir / "quantlab" / "intake",
+            settings=lab.intake,
+        )
 
         repo, subdir = _git_root(PROJECT_ROOT) if ultron_repo is None else (ultron_repo, "")
         self._ultron_models: dict[tuple[str, str], ChatModel] = {}
@@ -495,6 +502,7 @@ class Runtime:
         await self.quantlab.start()
         await self.hub.start()
         await self.research.start()
+        await self.sources.start()
         await self.ultron.start()
 
     async def _housekeep(self) -> None:
@@ -515,6 +523,7 @@ class Runtime:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._housekeeping
         await self.ultron.stop()
+        await self.sources.stop()
         await self.research.stop()
         await self.hub.stop()
         await self.quantlab.stop()

@@ -45,6 +45,8 @@ export const EVENT_TYPES = [
   "quantlab.hub.job",
   "quantlab.hub.dataset",
   "quantlab.research.run",
+  "quantlab.source",
+  "quantlab.mission",
   "ultron.mission.changed",
   "ultron.task.changed",
   "ultron.activity",
