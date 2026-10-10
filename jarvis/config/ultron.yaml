@@ -23,6 +23,9 @@ agents:
   axiom:    {model: claude-opus-5-5,   effort: high,   max_tokens: 16000}
   forge:    {model: claude-opus-5-5,   effort: medium, max_tokens: 16000}
   sentinel: {model: claude-sonnet-5-5, effort: medium, max_tokens: 16000}
+  # QuantLab research missions (Idea-to-Edge)
+  atlas:    {model: claude-sonnet-5-5, effort: medium, max_tokens: 8000}
+  cipher:   {model: claude-opus-5-5,   effort: high,   max_tokens: 8000}
 
 prices:  # USD per million tokens
   claude-opus-5-5: {input: 4.0, output: 20.0, cache_read: 0.2, cache_write: 5.0}

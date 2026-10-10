@@ -49,6 +49,7 @@ from jarvis.quantlab.hub.provider import DatabentoAdapter
 from jarvis.quantlab.hub.service import DataHubService
 from jarvis.quantlab.hub.store import HubStore
 from jarvis.quantlab.hub.vault import CredentialVault, MemoryKeyring
+from jarvis.quantlab.ideas.missions import MissionService
 from jarvis.quantlab.intake.service import SourceService
 from jarvis.quantlab.service import QuantLabService
 from jarvis.quantlab.store import QuantLabStore
@@ -300,6 +301,21 @@ class Runtime:
             root=settings.data_dir / "quantlab" / "intake",
             settings=lab.intake,
         )
+        self._quant_models: dict[tuple[str, str], ChatModel] = {}
+        self._quant_script: dict[str, ChatModel] = {}
+        self.quant_missions = MissionService(
+            db=self.db,
+            bus=self.bus,
+            sources=self.sources,
+            research=self.research,
+            hub=self.hub,
+            model=self._quant_model,
+            label=self._architect_label,
+            prices=settings.ultron.prices,
+            root=settings.data_dir / "quantlab" / "missions",
+            scripted=lambda: bool(self.settings.quantlab.architect_script),
+        )
+        self.sources.set_on_ready(self.quant_missions.on_source_ready)
 
         repo, subdir = _git_root(PROJECT_ROOT) if ultron_repo is None else (ultron_repo, "")
         self._ultron_models: dict[tuple[str, str], ChatModel] = {}
@@ -315,6 +331,7 @@ class Runtime:
             model_factory=ultron_model or self._ultron_model,
             model_label=self._ultron_label,
         )
+        self.ultron.set_research_tasks(lambda: self.quant_missions.store.tasks_in("RUNNING"))
 
         self.training = TrainingService(
             settings=settings.training,
@@ -403,6 +420,39 @@ class Runtime:
                 ),
             )
         return self._architect[1]
+
+    def _quant_model(self, role: str) -> ChatModel | None:
+        """Claude for a research-mission role (jarvis, atlas, cipher), or the test script."""
+        lab = self.settings.quantlab
+        if lab.architect_script:  # tests and the E2E only; labelled in the UI
+            if role not in self._quant_script:
+                from jarvis.ultron.scripted import ScriptedAgentModel
+
+                steps = json.loads(Path(lab.architect_script).read_text(encoding="utf-8"))
+                self._quant_script[role] = ScriptedAgentModel(role, list(steps.get(role, [])))
+            return self._quant_script[role]
+        secret = self.connector.settings.anthropic_api_key
+        if secret is None or not self.brain.available:
+            return None
+        key = secret.get_secret_value()
+        agent = self.settings.ultron.agents.get(role)
+        model_id = agent.model if agent else lab.architect_model
+        cache_key = (key, role)
+        if cache_key not in self._quant_models:
+            import anthropic
+
+            from jarvis.llm.anthropic_provider import AnthropicChatModel
+
+            self._quant_models = {k: v for k, v in self._quant_models.items() if k[0] == key}
+            self._quant_models[cache_key] = AnthropicChatModel(
+                client=anthropic.AsyncAnthropic(api_key=key),
+                model=model_id,
+                max_tokens=agent.max_tokens if agent else lab.architect_max_tokens,
+                effort=agent.effort if agent else lab.architect_effort,
+                timeout_seconds=lab.architect_timeout_seconds,
+                refusal_fallback=self.settings.models.refusal_fallback,
+            )
+        return self._quant_models[cache_key]
 
     def _architect_label(self) -> str:
         lab = self.settings.quantlab
@@ -503,6 +553,7 @@ class Runtime:
         await self.hub.start()
         await self.research.start()
         await self.sources.start()
+        await self.quant_missions.start()
         await self.ultron.start()
 
     async def _housekeep(self) -> None:
@@ -523,6 +574,7 @@ class Runtime:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._housekeeping
         await self.ultron.stop()
+        await self.quant_missions.stop()
         await self.sources.stop()
         await self.research.stop()
         await self.hub.stop()

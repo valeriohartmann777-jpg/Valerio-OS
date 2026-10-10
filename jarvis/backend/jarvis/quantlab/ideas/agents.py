@@ -201,6 +201,7 @@ async def _run(
         gate=gate,
         budget=budget,
         on_usage=on_usage,
+        final_tools=frozenset({tool.name}),
     )
     return StepResult(holder.get("value"), result)
 

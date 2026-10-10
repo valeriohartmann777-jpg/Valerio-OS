@@ -79,9 +79,11 @@ async def run_agent(
     gate: Callable[[], Awaitable[object]],
     budget: Budget,
     on_usage: UsageSink,
+    final_tools: frozenset[str] | None = None,
 ) -> AgentResult:
     result = AgentResult()
     names = {t.name for t in tools}
+    finals = FINAL_TOOLS if final_tools is None else final_tools
     messages: list[Any] = [model.user_message([opening])]
     nudges = 0
     while result.rounds < max_rounds:
@@ -112,7 +114,7 @@ async def run_agent(
         done: tuple[str, dict[str, Any]] | None = None
         for call in reply.tool_calls:
             result.tool_calls += 1
-            if call.name in FINAL_TOOLS:
+            if call.name in finals:
                 if call.name not in names:
                     outcomes.append(ToolOutcome(call.id, f"{call.name} isn't your tool.", True))
                     continue

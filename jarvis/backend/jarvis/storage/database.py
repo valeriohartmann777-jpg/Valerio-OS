@@ -838,6 +838,101 @@ MIGRATIONS: list[list[str]] = [
         "CREATE INDEX idx_qs_blueprints_source ON qs_blueprints(source_id)",
         "CREATE INDEX idx_qs_audit_source ON qs_audit(source_id)",
     ],
+    # 14 — QuantLab research missions: JARVIS + quant agents work on one source or one
+    # strategy family; typed task contracts, an activity log and the append-only trial
+    # ledger of the evolution loop (no row is ever updated or deleted)
+    [
+        """
+        CREATE TABLE qm_missions (
+            id             TEXT PRIMARY KEY,
+            kind           TEXT NOT NULL,
+            source_id      TEXT,
+            parent_id      TEXT,
+            title          TEXT NOT NULL,
+            state          TEXT NOT NULL,
+            stage          TEXT,
+            waiting        TEXT,
+            budget         TEXT NOT NULL,
+            budget_sha256  TEXT NOT NULL,
+            spent_usd      REAL NOT NULL DEFAULT 0,
+            refs           TEXT NOT NULL,
+            verdict        TEXT,
+            error          TEXT,
+            created_at     TEXT NOT NULL,
+            updated_at     TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qm_tasks (
+            id             TEXT PRIMARY KEY,
+            mission_id     TEXT NOT NULL REFERENCES qm_missions(id) ON DELETE CASCADE,
+            seq            INTEGER NOT NULL,
+            agent          TEXT NOT NULL,
+            kind           TEXT NOT NULL,
+            objective      TEXT NOT NULL,
+            inputs_hash    TEXT NOT NULL,
+            allowed_tools  TEXT NOT NULL,
+            budget         TEXT NOT NULL,
+            state          TEXT NOT NULL,
+            model          TEXT,
+            actions        TEXT NOT NULL,
+            artifacts      TEXT NOT NULL,
+            results        TEXT,
+            evidence_refs  TEXT NOT NULL,
+            limitations    TEXT NOT NULL,
+            cost_usd       REAL NOT NULL DEFAULT 0,
+            error          TEXT,
+            created_at     TEXT NOT NULL,
+            started_at     TEXT,
+            finished_at    TEXT
+        )
+        """,
+        """
+        CREATE TABLE qm_events (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            mission_id  TEXT NOT NULL,
+            task_id     TEXT,
+            agent       TEXT,
+            kind        TEXT NOT NULL,
+            message     TEXT NOT NULL,
+            data        TEXT,
+            at          TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qm_trials (
+            id                 TEXT PRIMARY KEY,
+            mission_id         TEXT NOT NULL,
+            family_id          TEXT NOT NULL,
+            iteration          INTEGER NOT NULL,
+            version_id         TEXT,
+            parent_version_id  TEXT,
+            spec_sha256        TEXT,
+            title              TEXT NOT NULL,
+            changes            TEXT NOT NULL,
+            mechanism          TEXT,
+            prediction         TEXT,
+            complexity         INTEGER NOT NULL,
+            run_id             TEXT,
+            outcome            TEXT NOT NULL,
+            metrics            TEXT,
+            audit              TEXT,
+            post_holdout       INTEGER NOT NULL,
+            created_at         TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER qm_trials_no_update BEFORE UPDATE ON qm_trials
+        BEGIN SELECT RAISE(ABORT, 'the trial ledger is append-only'); END
+        """,
+        """
+        CREATE TRIGGER qm_trials_no_delete BEFORE DELETE ON qm_trials
+        BEGIN SELECT RAISE(ABORT, 'the trial ledger is append-only'); END
+        """,
+        "CREATE INDEX idx_qm_tasks_mission ON qm_tasks(mission_id, seq)",
+        "CREATE INDEX idx_qm_events_mission ON qm_events(mission_id, id)",
+        "CREATE INDEX idx_qm_trials_family ON qm_trials(family_id)",
+    ],
 ]
 
 

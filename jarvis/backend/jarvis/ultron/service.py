@@ -1547,8 +1547,14 @@ class UltronService:
             )
         return out
 
+    def set_research_tasks(self, provider: Callable[[], Any] | None) -> None:
+        """QuantLab research missions report their running agent tasks here (real work only)."""
+        self._research_tasks = provider
+
     async def agents(self) -> list[dict[str, Any]]:
         running = await self._store.tasks_in("RUNNING", "VERIFYING")
+        provider = getattr(self, "_research_tasks", None)
+        research: list[dict[str, Any]] = await provider() if provider is not None else []
         counts = await self._store.run_counts()
         spend = await self._store.spend_by_agent()
         planning_now = [k.split(":", 1)[1] for k in self._running if k.startswith("plan:")]
@@ -1576,6 +1582,18 @@ class UltronService:
                     }
                     for m in planning_now
                 ]
+            quant = [
+                {
+                    "task_id": t["id"],
+                    "mission_id": t["mission_id"],
+                    "key": t["kind"],
+                    "title": f"QuantLab · {t['objective']}",
+                    "state": t["state"],
+                }
+                for t in research
+                if t["agent"] == profile.id
+            ]
+            current += quant
             model = self._settings.agents.get(profile.id)
             out.append(
                 {
@@ -1590,7 +1608,7 @@ class UltronService:
                     "release": profile.release,
                     "status": ("working" if current else "idle")
                     if profile.active
-                    else "not_active",
+                    else ("working" if quant else "not_active"),
                     "current": current,
                     "runs": counts.get(profile.id, {}),
                     "spent_usd": round(spend.get(profile.id, 0.0), 4),

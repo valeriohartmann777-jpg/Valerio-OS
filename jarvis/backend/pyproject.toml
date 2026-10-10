@@ -72,6 +72,8 @@ ignore = ["RUF012"]
 "jarvis/ultron/prompts.py" = ["E501"]
 "jarvis/quantlab/futures/architect.py" = ["E501", "RUF001", "RUF002", "RUF003"]
 "jarvis/quantlab/ideas/agents.py" = ["E501", "RUF001", "RUF002", "RUF003"]
+# user-facing mission, evolution and dossier text reads better unwrapped
+"jarvis/quantlab/ideas/{missions,evolution,dossier}.py" = ["E501"]
 "jarvis/ultron/*.py" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]

@@ -1022,6 +1022,27 @@ class ResearchService:
         await self._completed(run_id)
         return (self.root / run_id / "report.md").read_text(encoding="utf-8")
 
+    async def materials(self, run_id: str) -> dict[str, Any]:
+        """What a run was computed from — for independent checks (SENTINEL), no results."""
+        row = await self._completed(run_id)
+        spec = parse(row["manifest"]["spec"])
+        record, table, definitions = await self._hub.load(row["dataset_id"])
+        bars = Bars.from_table(table)
+        first_ts: dict[int, int] = {}
+        for iid, ts in zip(bars.iid.tolist(), bars.ts.tolist(), strict=True):
+            first_ts.setdefault(iid, ts)
+        contract_map, _ = ct.build(spec.instrument.product, first_ts, definitions)
+        windows = _windows(spec, record["start"], record["end"])
+        return {
+            "run": row,
+            "spec": spec,
+            "bars": bars,
+            "contracts": contract_map,
+            "windows": windows,
+            "split": validation.split(windows, spec),
+            "fixture": bool(record["fixture"]),
+        }
+
     async def reproduce(self, run_id: str) -> dict[str, Any]:
         """Recompute from the same manifest and compare result hashes (artifacts untouched)."""
         row = await self._completed(run_id)
