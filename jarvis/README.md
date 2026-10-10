@@ -58,6 +58,12 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   holdout only you see, prop-firm limits checked, and what account a $10k
   month would really need. Improved versions reach MetaTrader only when you
   click "Copy to MetaTrader".
+- **QuantLab Idea Inbox**: drop a saved TikTok/YouTube video, a screenshot, a PDF or just
+  text. JARVIS reads it on your Mac (speech with timecodes, on-screen text, keyframes), turns
+  it into exact rules with a source for every value, asks you only what is truly undefined,
+  backtests it on Databento data after your approval, has SENTINEL re-check every trade and
+  ends with an honest verdict and a dossier. "Evolve strategy" tests reasoned variants with
+  the holdout sealed; you open the holdout once.
 - **QuantLab**: research terminal for NQ/MNQ/ES/MES ideas on Databento data — key in the
   Keychain, cost estimate and your approval before any purchase, honest futures engine,
   validation lab with a sealed holdout and a verdict. Plus the earlier lab that tests a
@@ -157,6 +163,32 @@ $10k a month is not something to optimize a backtest for — it comes from
 account size × a real edge × risk. The Bots page shows what account a $10k
 month would need at prop-firm and own-account drawdown limits, from the
 months the EA wasn't tuned on. Settings: `config/bots.yaml`.
+
+### QuantLab Idea-to-Edge: from a video or text to a verdict
+
+QuantLab opens on the **Idea Inbox**.
+
+1. **Drop** a saved video (up to 15 minutes), a screen recording, a screenshot, a PDF or a
+   text file — or paste the strategy text, or a TikTok / YouTube link. A link only gives its
+   public title; save the video (if you're allowed to) and attach it to the link's card.
+   Files stay on your Mac; only the extracted words go to Claude. Originals are deleted
+   after 7 days (or whenever you click **Delete original file**).
+2. JARVIS reads it: speech with timecodes, on-screen text, keyframes. Click any line to jump
+   the video there. Text in the video that tries to instruct an AI is flagged and ignored;
+   "90% win rate" style claims are recorded as claims, never as results.
+3. A research mission starts by itself. In the **Research Room**:
+   - answer the one grouped question (e.g. which "New York open", what counts as a sweep),
+     or accept the research defaults — they stay labelled as defaults;
+   - if Databento isn't connected, connect it in the Data Hub; the mission continues;
+   - approve the data purchase (cost, period, your maximum, a tick box) — or decline;
+   - read the verdict, SENTINEL's checks and the dossier (Markdown / JSON).
+4. **Evolve strategy** lets CIPHER propose variants (each with a mechanism and a prediction);
+   every one is tested with the holdout sealed and kept in the trial ledger. Pick one
+   candidate to open the holdout once — any later look is marked contaminated.
+
+Needs: Claude connected (Settings) for ATLAS, CIPHER and JARVIS; Databento for real data.
+For speech in German or other languages, install the multilingual speech model once from
+the inbox (free download).
 
 ### QuantLab: futures research on Databento data
 

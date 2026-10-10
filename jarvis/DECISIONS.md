@@ -160,6 +160,46 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-029 — QuantLab 3.0 Idea-to-Edge: sources → blueprint → research missions → evolution
+
+- **Decision:** QuantLab opens on an **Idea Inbox**. A strategy idea arrives as a saved
+  video, audio, screenshot, PDF, text or a TikTok/YouTube link and becomes a research
+  mission that ends in an A11 verdict and a dossier:
+  - intake (`quantlab/intake/`): magic-byte detection and caps, SHA-256 dedupe, private
+    storage with retention, a sandboxed worker (speech with Moonshine, Whisper for other
+    languages; OCR on every sampled frame; keyframes); links give public oEmbed metadata
+    only and ask for the saved file;
+  - claims and blueprint (`quantlab/ideas/`): the model proposes, code checks every quote
+    word for word, boasts and instructions-to-AI are always recorded as claims; per-field
+    provenance classes; ambiguous terms resolved only to catalog alternatives; one grouped
+    question; deterministic resolution;
+  - missions: fixed stages with one typed task each, immutable hashed budgets checked
+    before every model call, explicit waiting states, restart recovery; ATLAS, CIPHER and
+    JARVIS only have their submit tools; SENTINEL, VECTOR and ARCHIVE are code;
+  - paid data only through the Data Hub's quote and the owner's approval in the UI;
+  - SENTINEL audits every run with an independent second engine and a narrative guard;
+  - evolution: reasoned variants on allowed paths only, each a frozen version tested with
+    the holdout sealed and appended to an append-only trial ledger; Pareto comparison; one
+    owner-locked holdout look; later looks are contaminated and downgrade the verdict.
+- **Reason:** The owner's master prompt (`docs/quantlab/IDEA_TO_EDGE_DIRECTIVE.md`): from
+  a TikTok-style idea to an honest research result without manual development work, with
+  strict safety, cost, data-quality and holdout rules.
+- **Alternatives:**
+  - downloading TikTok/YouTube media from a URL (rejected: no lawful universal API; would
+    bypass platform protections);
+  - letting the model write the strategy as Python (rejected: no execution of generated
+    code; the DSL is data);
+  - sending video frames to a cloud model (rejected for now: media stays local; only
+    extracted text goes to Claude, logged as `TEXT_SENT_TO_MODEL`);
+  - PocketSphinx for offline speech (rejected: unusable accuracy on the test video).
+- **Consequences:**
+  - New dependencies: `av`, `pillow`, `moonshine-cpp`, `rapidocr`, `faster-whisper`.
+  - Real TikTok oEmbed, Whisper downloads, Claude, Databento and the macOS sandbox profile
+    could not run in the build container; tests use mock HTTP, a scripted model (labelled)
+    and the fixture provider. First real run is on the MacBook.
+  - Status per release: `docs/quantlab/IDEA_TO_EDGE_RELEASE_STATUS.md`.
+- **Date:** 2026-10-10
+
 ## D-028 — QuantLab Institutional Edition: Databento, futures engine, validation lab
 
 - **Decision:** QuantLab gains a Data Hub (`backend/jarvis/quantlab/hub/`) and a futures

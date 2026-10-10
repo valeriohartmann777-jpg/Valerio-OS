@@ -296,7 +296,7 @@ def _diagnosis(run: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any
         f"{len(rows)} development trades; costs are {costs / gross:.0%} of gross movement",
         "By side: "
         + "; ".join(f"{k} {v['trades']} trades, net {v['net']}" for k, v in by_side.items()),
-        f"Exit reasons: {reasons}",
+        "Exit reasons: " + ", ".join(f"{k} {n}" for k, n in sorted(reasons.items())),
         f"Top 5 trades carry {top:.2f} of {total:.2f} net",
         "Tests: " + ", ".join(f"{k} {v}" for k, v in tests.items() if v != "PASSED"),
     ]

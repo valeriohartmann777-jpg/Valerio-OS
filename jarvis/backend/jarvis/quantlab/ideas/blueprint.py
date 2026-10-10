@@ -528,6 +528,17 @@ def resolve(blueprint: dict[str, Any], answers: dict[str, Any]) -> dict[str, Any
         raise BlueprintError(exc.message) from exc
 
 
+def explain(bp: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A stored blueprint plus its derived plain-language rules and worked example."""
+    if not bp or not bp.get("spec"):
+        return bp
+    try:
+        spec = parse(bp["spec"])
+    except FuturesSpecError:
+        return {**bp, "what_it_does": [], "illustration": []}
+    return {**bp, "what_it_does": describe(spec), "illustration": illustrate(spec)}
+
+
 def illustrate(spec: FuturesSpec) -> list[str]:
     """A worked example with made-up prices — shows the mechanics, proves nothing."""
     rule = spec.rule

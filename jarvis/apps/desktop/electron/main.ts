@@ -80,7 +80,9 @@ function contentSecurityPolicy(): string {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    "img-src 'self' data:",
+    // Keyframes and the owner's own uploaded video are served by the local backend only.
+    `img-src 'self' data: ${backend.origin}`,
+    `media-src ${backend.origin}`,
     `connect-src 'self' ${backend.origin} ${ws}`,
     "object-src 'none'",
     "base-uri 'none'",

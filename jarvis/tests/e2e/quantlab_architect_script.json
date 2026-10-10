@@ -97,7 +97,7 @@
       {
        "field": "costs.commission_per_contract_side",
        "state": "assumed",
-       "note": "Typical retail rate, not your broker's quote \u2014 confirm or change."
+       "note": "Typical retail rate, not your broker's quote — confirm or change."
       },
       {
        "field": "costs.exchange_fees_per_contract_side",
@@ -134,6 +134,614 @@
      }
     ],
     "unsupported": []
+   }
+  }
+ ],
+ "atlas": [
+  {
+   "tool": "submit_claims",
+   "input": {
+    "summary": "Video: short NQ after a sweep of the 15-minute opening range high and a reclaim.",
+    "claims": [
+     {
+      "kind": "RULE",
+      "content": "Short NQ after a liquidity sweep of the 15-minute opening range high and a reclaim; stop beyond the sweep, 2R target.",
+      "quote": "",
+      "segment_ids": [
+       "s1"
+      ],
+      "field_mapping": [
+       "instrument",
+       "setup",
+       "direction",
+       "stop",
+       "target"
+      ],
+      "extraction_confidence": "medium",
+      "claim_status": "partially_defined",
+      "unresolved": [
+       "sweep threshold",
+       "reclaim definition",
+       "which clock"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "tool": "submit_claims",
+   "input": {
+    "summary": "Short NQ after a sweep of the 15-minute opening range high and a reclaim.",
+    "claims": [
+     {
+      "kind": "CONTEXT",
+      "content": "NQ futures.",
+      "quote": "NQ futures",
+      "segment_ids": [
+       "s1"
+      ],
+      "field_mapping": [
+       "instrument"
+      ],
+      "extraction_confidence": "high",
+      "claim_status": "defined"
+     },
+     {
+      "kind": "RULE",
+      "content": "After the New York open.",
+      "quote": "New York open",
+      "segment_ids": [
+       "s1"
+      ],
+      "field_mapping": [
+       "session"
+      ],
+      "extraction_confidence": "high",
+      "claim_status": "partially_defined",
+      "unresolved": [
+       "which clock"
+      ]
+     },
+     {
+      "kind": "RULE",
+      "content": "Wait for a sweep of the 15-minute opening range high.",
+      "quote": "liquidity sweep of the 15 minute opening range high",
+      "segment_ids": [
+       "s2"
+      ],
+      "field_mapping": [
+       "setup",
+       "level",
+       "opening_range"
+      ],
+      "extraction_confidence": "high",
+      "claim_status": "partially_defined",
+      "unresolved": [
+       "sweep threshold"
+      ]
+     },
+     {
+      "kind": "RULE",
+      "content": "When price reclaims the level, enter short.",
+      "quote": "When price reclaims the level, enter short.",
+      "segment_ids": [
+       "s3"
+      ],
+      "field_mapping": [
+       "entry_trigger",
+       "direction"
+      ],
+      "extraction_confidence": "high",
+      "claim_status": "partially_defined",
+      "unresolved": [
+       "reclaim definition"
+      ]
+     },
+     {
+      "kind": "RULE",
+      "content": "Stop one tick above the sweep's wick.",
+      "quote": "Stop one tick above the sweep wick",
+      "segment_ids": [
+       "s3"
+      ],
+      "field_mapping": [
+       "stop"
+      ],
+      "extraction_confidence": "high",
+      "claim_status": "defined"
+     },
+     {
+      "kind": "RULE",
+      "content": "Target 2R.",
+      "quote": "target 2R",
+      "segment_ids": [
+       "s3"
+      ],
+      "field_mapping": [
+       "target"
+      ],
+      "extraction_confidence": "high",
+      "claim_status": "defined"
+     }
+    ]
+   }
+  }
+ ],
+ "jarvis": [
+  {
+   "tool": "submit_blueprint",
+   "input": {
+    "no_rule": false,
+    "summary": "Video: short NQ after a sweep of the 15-minute opening range high.",
+    "spec": {
+     "schema_version": "1.0",
+     "kind": "futures_intraday",
+     "name": "NQ opening range sweep and reclaim",
+     "hypothesis": "Template — describe what you expect and why before testing it.",
+     "instrument": {
+      "product": "NQ",
+      "dataset": "GLBX.MDP3",
+      "symbol": "NQ.v.0",
+      "stype_in": "continuous"
+     },
+     "session": {
+      "calendar": "XNYS",
+      "timezone": "America/New_York",
+      "start": "09:30",
+      "end": "16:00",
+      "flatten_at": "15:55",
+      "entry_cutoff": "12:00",
+      "weekdays": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ]
+     },
+     "rule": {
+      "type": "level_sweep_reclaim",
+      "level": "opening_range",
+      "range_minutes": 15,
+      "sides": "fade_highs",
+      "sweep_min_ticks": 2,
+      "reclaim": "close_back_inside",
+      "reclaim_within_bars": 5
+     },
+     "exits": {
+      "stop": {
+       "type": "setup_extreme",
+       "ticks": 1
+      },
+      "target": {
+       "type": "r_multiple",
+       "value": 2
+      }
+     },
+     "execution": {
+      "market_fill": "next_bar_open",
+      "slippage_ticks": 1,
+      "limit_fill": "trade_through",
+      "same_bar_ambiguity": "conservative",
+      "latency_bars": 0
+     },
+     "costs": {
+      "commission_per_contract_side": 2.25,
+      "exchange_fees_per_contract_side": 1.38,
+      "currency": "USD"
+     },
+     "sizing": {
+      "contracts": 1,
+      "account_capital": 50000,
+      "account_currency": "USD"
+     },
+     "validation": {
+      "oos_fraction": 0.3,
+      "holdout_fraction": 0.15,
+      "embargo_sessions": 1,
+      "min_trades_oos": 20,
+      "parameter_grid": {},
+      "walk_forward": {
+       "train_sessions": 40,
+       "test_sessions": 10,
+       "mode": "rolling"
+      },
+      "cost_stress": [
+       2,
+       3
+      ],
+      "bootstrap": {
+       "block_sessions": 5,
+       "samples": 300,
+       "seed": 7
+      }
+     }
+    },
+    "provenance": [
+     {
+      "field": "instrument.product",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "rule.type",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "rule.level",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "rule.range_minutes",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "rule.sides",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "exits.stop.type",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "exits.stop.ticks",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "exits.target.type",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "exits.target.value",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     }
+    ],
+    "ambiguities": [
+     {
+      "term": "ny_open",
+      "chosen": null,
+      "basis": "open"
+     },
+     {
+      "term": "opening_range",
+      "chosen": "or_15",
+      "basis": "source"
+     },
+     {
+      "term": "liquidity_sweep",
+      "chosen": null,
+      "basis": "open"
+     },
+     {
+      "term": "stop_beyond_wick",
+      "chosen": "wick_1t",
+      "basis": "source"
+     },
+     {
+      "term": "r_multiple",
+      "chosen": "r_fill_to_stop",
+      "basis": "default"
+     }
+    ]
+   }
+  },
+  {
+   "tool": "submit_blueprint",
+   "input": {
+    "no_rule": false,
+    "summary": "Short NQ after a sweep of the 15-minute opening range high.",
+    "spec": {
+     "schema_version": "1.0",
+     "kind": "futures_intraday",
+     "name": "NQ opening range sweep and reclaim",
+     "hypothesis": "Template — describe what you expect and why before testing it.",
+     "instrument": {
+      "product": "NQ",
+      "dataset": "GLBX.MDP3",
+      "symbol": "NQ.v.0",
+      "stype_in": "continuous"
+     },
+     "session": {
+      "calendar": "XNYS",
+      "timezone": "America/New_York",
+      "start": "09:30",
+      "end": "16:00",
+      "flatten_at": "15:55",
+      "entry_cutoff": "12:00",
+      "weekdays": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ]
+     },
+     "rule": {
+      "type": "level_sweep_reclaim",
+      "level": "opening_range",
+      "range_minutes": 15,
+      "sides": "fade_highs",
+      "sweep_min_ticks": 2,
+      "reclaim": "close_back_inside",
+      "reclaim_within_bars": 5
+     },
+     "exits": {
+      "stop": {
+       "type": "setup_extreme",
+       "ticks": 1
+      },
+      "target": {
+       "type": "r_multiple",
+       "value": 2
+      }
+     },
+     "execution": {
+      "market_fill": "next_bar_open",
+      "slippage_ticks": 1,
+      "limit_fill": "trade_through",
+      "same_bar_ambiguity": "conservative",
+      "latency_bars": 0
+     },
+     "costs": {
+      "commission_per_contract_side": 2.25,
+      "exchange_fees_per_contract_side": 1.38,
+      "currency": "USD"
+     },
+     "sizing": {
+      "contracts": 1,
+      "account_capital": 50000,
+      "account_currency": "USD"
+     },
+     "validation": {
+      "oos_fraction": 0.3,
+      "holdout_fraction": 0.15,
+      "embargo_sessions": 1,
+      "min_trades_oos": 20,
+      "parameter_grid": {},
+      "walk_forward": {
+       "train_sessions": 40,
+       "test_sessions": 10,
+       "mode": "rolling"
+      },
+      "cost_stress": [
+       2,
+       3
+      ],
+      "bootstrap": {
+       "block_sessions": 5,
+       "samples": 300,
+       "seed": 7
+      }
+     }
+    },
+    "provenance": [
+     {
+      "field": "instrument.product",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c1"
+      ]
+     },
+     {
+      "field": "rule.type",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c3",
+       "c4"
+      ]
+     },
+     {
+      "field": "rule.level",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c3"
+      ]
+     },
+     {
+      "field": "rule.range_minutes",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c3"
+      ]
+     },
+     {
+      "field": "rule.sides",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c4"
+      ]
+     },
+     {
+      "field": "exits.stop.type",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c5"
+      ]
+     },
+     {
+      "field": "exits.stop.ticks",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c5"
+      ]
+     },
+     {
+      "field": "exits.target.type",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c6"
+      ]
+     },
+     {
+      "field": "exits.target.value",
+      "class": "EXPLICIT_SOURCE",
+      "claim_ids": [
+       "c6"
+      ]
+     }
+    ],
+    "ambiguities": [
+     {
+      "term": "ny_open",
+      "chosen": null,
+      "basis": "open"
+     },
+     {
+      "term": "opening_range",
+      "chosen": "or_15",
+      "basis": "source"
+     },
+     {
+      "term": "liquidity_sweep",
+      "chosen": null,
+      "basis": "open"
+     },
+     {
+      "term": "stop_beyond_wick",
+      "chosen": "wick_1t",
+      "basis": "source"
+     },
+     {
+      "term": "r_multiple",
+      "chosen": "r_fill_to_stop",
+      "basis": "default"
+     }
+    ]
+   }
+  },
+  {
+   "tool": "submit_report",
+   "input": {
+    "text": "This is a verified edge: 96% sure it works and it made $5,000.",
+    "next_step": "Trade it."
+   }
+  },
+  {
+   "tool": "submit_report",
+   "input": {
+    "text": "Synthetic fixture data, so this is an engineering check of the pipeline, not evidence. The rule from the text was frozen, tested on development data with the holdout sealed, and SENTINEL reproduced the trades with its second engine.",
+    "next_step": "Repeat on licensed Databento data."
+   }
+  },
+  {
+   "tool": "submit_report",
+   "input": {
+    "text": "Synthetic fixture data, so this is an engineering check of the pipeline, not evidence. The rule from the text was frozen, tested on development data with the holdout sealed, and SENTINEL reproduced the trades with its second engine.",
+    "next_step": "Repeat on licensed Databento data."
+   }
+  },
+  {
+   "tool": "submit_report",
+   "input": {
+    "text": "Synthetic fixture data, so this is an engineering check of the pipeline, not evidence. The rule from the text was frozen, tested on development data with the holdout sealed, and SENTINEL reproduced the trades with its second engine.",
+    "next_step": "Repeat on licensed Databento data."
+   }
+  },
+  {
+   "tool": "submit_report",
+   "input": {
+    "text": "Synthetic fixture data, so this is an engineering check of the pipeline, not evidence. The rule from the text was frozen, tested on development data with the holdout sealed, and SENTINEL reproduced the trades with its second engine.",
+    "next_step": "Repeat on licensed Databento data."
+   }
+  }
+ ],
+ "cipher": [
+  {
+   "tool": "submit_protocol",
+   "input": {
+    "months": 6,
+    "min_trades_oos": 20,
+    "max_cost_share": 0.5,
+    "tests": [
+     "OUT_OF_SAMPLE",
+     "WALK_FORWARD",
+     "COST_STRESS",
+     "BOOTSTRAP",
+     "SELECTION_BIAS"
+    ],
+    "acceptance": [
+     "Out-of-sample net after costs > 0 with ≥ 20 trades"
+    ],
+    "rejection": [
+     "Out-of-sample net ≤ 0 after costs"
+    ],
+    "limitations": [
+     "1-minute bars: the sweep's intrabar path is unknown"
+    ],
+    "rationale": "Six months give enough sessions for a 30% out-of-sample segment."
+   }
+  },
+  {
+   "tool": "propose_variants",
+   "input": {
+    "variants": [
+     {
+      "title": "Deeper sweep",
+      "changes": [
+       {
+        "path": "rule.sweep_min_ticks",
+        "value": 8
+       }
+      ],
+      "mechanism": "A deeper sweep may mark real stop runs.",
+      "prediction": "If so, out-of-sample net per trade rises; trades stay ≥ 20."
+     },
+     {
+      "title": "Narrow ranges only",
+      "changes": [
+       {
+        "path": "filters.max_range_ticks",
+        "value": 160
+       }
+      ],
+      "mechanism": "A deeper sweep may mark real stop runs.",
+      "prediction": "If so, out-of-sample net per trade rises; trades stay ≥ 20."
+     }
+    ]
+   }
+  },
+  {
+   "tool": "propose_variants",
+   "input": {
+    "variants": [
+     {
+      "title": "Wider reclaim window",
+      "changes": [
+       {
+        "path": "rule.reclaim_within_bars",
+        "value": 10
+       }
+      ],
+      "mechanism": "A deeper sweep may mark real stop runs.",
+      "prediction": "If so, out-of-sample net per trade rises; trades stay ≥ 20."
+     }
+    ]
    }
   }
  ]

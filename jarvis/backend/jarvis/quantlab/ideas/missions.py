@@ -602,7 +602,7 @@ class MissionService:
         m["stages"] = list(IDEA_STAGES) if m["kind"] == "idea" else list(EVOLUTION_STAGES)
         m["model_label"] = self._label()
         bid = m["refs"].get("blueprint_id")
-        m["blueprint"] = await self.sources.store.blueprint(bid) if bid else None
+        m["blueprint"] = bp.explain(await self.sources.store.blueprint(bid)) if bid else None
         return m
 
     async def agents(self) -> list[dict[str, Any]]:
@@ -1419,6 +1419,8 @@ class MissionService:
             "reasons": reasons,
             "note": note,
             "never": "No verdict here means a strategy will make money.",
+            # Synthetic fixture prices: an engineering check, shown as such everywhere.
+            "fixture": bool(summary and summary.get("fixture")),
         }
         await self._set_refs(m, verdict=verdict)
         await self.store.update(m["id"], verdict=label)

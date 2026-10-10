@@ -4,7 +4,11 @@ Updated: 2026-10-10
 Repo location: `Valerio-OS/jarvis` (the repo root holds an unrelated Next.js project, untouched)
 Branch: `claude/jarvis-foundation-mxnsz4`
 
-QuantLab has two parts:
+QuantLab has three parts:
+
+0. **Idea-to-Edge (QuantLab 3.0)** — the Idea Inbox, research missions and evolution, built
+   from `IDEA_TO_EDGE_DIRECTIVE.md`. Decision D-029; spec `IDEA_TO_EDGE_SPEC.md`; status per
+   release `IDEA_TO_EDGE_RELEASE_STATUS.md`; evidence `IDEA_TO_EDGE_TEST_EVIDENCE.md`.
 
 1. **Institutional Edition** — the futures research terminal (Databento Data Hub, NQ / MNQ /
    ES / MES, Strategy Studio, validation). It is built from the directive in

@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { EquityLab } from "../components/quantlab/EquityLab";
 import { DataHub } from "../components/quantlab/hub/DataHub";
+import { IdeaInbox } from "../components/quantlab/ideas/IdeaInbox";
+import { ResearchRoom } from "../components/quantlab/ideas/ResearchRoom";
+import { SourceView } from "../components/quantlab/ideas/SourceView";
 import { FixtureBadge, useQuantLabTick, type Mode } from "../components/quantlab/research/common";
 import { Experiments, TradeExplorer } from "../components/quantlab/research/Explorer";
 import { Overview, type Section } from "../components/quantlab/research/Overview";
@@ -14,11 +17,14 @@ import { ApiError, api } from "../lib/api";
 import { useJarvis } from "../store/store";
 
 /**
- * QuantLab — the research terminal: idea → rules → verified data → honest simulation →
- * validation → evidence → report. Research only: nothing here can place an order.
+ * QuantLab — the research terminal: idea (video, text, link) → claims → blueprint → verified
+ * data → honest simulation → validation → audit → dossier. Research only: nothing here can
+ * place an order.
  */
 
 const SECTIONS: { id: Section; modes: Mode[] }[] = [
+  { id: "Idea Inbox", modes: ["Simple", "Research", "Institutional"] },
+  { id: "Research Room", modes: ["Simple", "Research", "Institutional"] },
   { id: "Overview", modes: ["Simple", "Research", "Institutional"] },
   { id: "Strategy Studio", modes: ["Simple", "Research", "Institutional"] },
   { id: "Data Hub", modes: ["Simple", "Research", "Institutional"] },
@@ -45,7 +51,9 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 
 export function QuantLab() {
   const [mode, setModeState] = useState<Mode>(savedMode);
-  const [section, setSection] = useState<Section>("Overview");
+  const [section, setSection] = useState<Section>("Idea Inbox");
+  const [sourceId, setSourceId] = useState<string | null>(null);
+  const [missionId, setMissionId] = useState<string | null>(null);
   const [overview, setOverview] = useState<QrOverview | null>(null);
   const [runs, setRuns] = useState<QrRunRow[]>([]);
   const [datasets, setDatasets] = useState<QhDataset[]>([]);
@@ -63,7 +71,7 @@ export function QuantLab() {
     } catch {
       /* per-viewer convenience only */
     }
-    if (!SECTIONS.find((s) => s.id === section)?.modes.includes(m)) setSection("Overview");
+    if (!SECTIONS.find((s) => s.id === section)?.modes.includes(m)) setSection("Idea Inbox");
   };
 
   const refresh = useCallback(async () => {
@@ -87,6 +95,14 @@ export function QuantLab() {
     setRunId(id);
     setTradeFocus(null);
     setSection(target);
+  };
+  const openSource = (id: string) => {
+    setSourceId(id);
+    setSection("Idea Inbox");
+  };
+  const openMission = (id: string) => {
+    setMissionId(id);
+    setSection("Research Room");
   };
   const busy = runs.some((r) => r.status === "QUEUED" || r.status === "RUNNING") || (overview?.hub.jobs_running ?? 0) > 0;
   const hub = overview?.hub;
@@ -146,7 +162,10 @@ export function QuantLab() {
             <button
               key={s.id}
               type="button"
-              onClick={() => setSection(s.id)}
+              onClick={() => {
+                setSection(s.id);
+                if (s.id === "Idea Inbox") setSourceId(null);
+              }}
               className={cx(
                 "flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] transition-colors",
                 section === s.id ? "bg-ql-raised text-fg" : "text-fg-faint hover:text-fg-muted",
@@ -161,6 +180,22 @@ export function QuantLab() {
         {error && <p className="mb-4 text-[13px] text-ql-danger">{error}</p>}
         {stopped && <p className="mb-4 text-[13px] text-fg-muted" role="status">{stopped}</p>}
 
+        {section === "Idea Inbox" &&
+          (sourceId ? (
+            <SourceView sourceId={sourceId} tick={tick} mode={mode} onBack={() => setSourceId(null)} onOpenMission={openMission} />
+          ) : (
+            <IdeaInbox tick={tick} onOpenSource={openSource} onOpenMission={openMission} />
+          ))}
+        {section === "Research Room" && (
+          <ResearchRoom
+            tick={tick}
+            mode={mode}
+            missionId={missionId}
+            onPick={setMissionId}
+            onOpenSource={openSource}
+            onDataHub={() => setSection("Data Hub")}
+          />
+        )}
         {section === "Overview" && <Overview overview={overview} runs={runs} go={setSection} open={openRun} />}
         {section === "Strategy Studio" && (
           <StrategyStudio mode={mode} tick={tick} datasets={datasets} onRun={(id) => { void refresh(); openRun(id); }} />

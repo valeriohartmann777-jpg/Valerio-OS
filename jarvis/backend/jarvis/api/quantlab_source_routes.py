@@ -16,6 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 
+from jarvis.quantlab.ideas.blueprint import explain
+from jarvis.quantlab.ideas.missions import OPEN
 from jarvis.quantlab.intake.detect import IntakeError
 from jarvis.runtime import Runtime
 
@@ -111,9 +113,11 @@ async def sources_audit(rt: RuntimeDep) -> list[dict[str, Any]]:
 @router.get("/quantlab/sources/{source_id}")
 async def source(source_id: str, rt: RuntimeDep) -> dict[str, Any]:
     try:
-        return await rt.sources.source(source_id)
+        detail = await rt.sources.source(source_id)
     except IntakeError as exc:
         raise _error(exc) from exc
+    detail["blueprints"] = [explain(bp) for bp in detail["blueprints"]]
+    return detail
 
 
 @router.post("/quantlab/sources/{source_id}/extract")
@@ -168,6 +172,11 @@ async def delete_media(source_id: str, rt: RuntimeDep) -> dict[str, Any]:
 
 @router.delete("/quantlab/sources/{source_id}")
 async def delete_source(source_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    # An open research mission would lose its evidence mid-run: cancel it first. Its tasks,
+    # activity and trial ledger stay (append-only records).
+    for mission in await rt.quant_missions.store.for_source(source_id):
+        if mission["state"] in OPEN:
+            await rt.quant_missions.cancel(mission["id"])
     try:
         await rt.sources.delete(source_id)
     except IntakeError as exc:

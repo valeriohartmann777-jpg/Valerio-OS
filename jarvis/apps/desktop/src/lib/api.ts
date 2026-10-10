@@ -16,6 +16,16 @@ import type {
   ChatAccepted,
   Mission,
   PermissionRequest,
+  QmAgent,
+  QmDossier,
+  QmEvent,
+  QmMission,
+  QmMissionRow,
+  QmTrial,
+  QsAudit,
+  QsSource,
+  QsSourceRow,
+  QsSpeechModel,
   QlDataset,
   QlEquity,
   QlExperiment,
@@ -316,4 +326,65 @@ export const api = {
   qrCompare: (ids: string[]) =>
     request<QrCompare>(`/quantlab/research/compare?ids=${encodeURIComponent(ids.join(","))}`),
   qlStopAll: () => post<{ runs: string[]; downloads: string[] }>("/quantlab/stop-all"),
+  qsSources: () => request<QsSourceRow[]>("/quantlab/sources"),
+  qsSource: (id: string) => request<QsSource>(`/quantlab/sources/${encodeURIComponent(id)}`),
+  qsIntakeText: (text: string, note?: string) =>
+    post<QsSourceRow>("/quantlab/sources/intake", { text, note: note || null }),
+  qsIntakeLink: (url: string, note?: string) =>
+    post<QsSourceRow>("/quantlab/sources/intake", { url, note: note || null }),
+  qsUpload: (file: File, opts: { note?: string; language?: string; linkSource?: string } = {}) => {
+    // Raw body: the backend streams it to disk with a size cap; header values are percent-encoded.
+    const headers: Record<string, string> = {
+      "content-type": "application/octet-stream",
+      "x-filename": encodeURIComponent(file.name || "upload"),
+    };
+    if (opts.note) headers["x-note"] = encodeURIComponent(opts.note);
+    if (opts.language) headers["x-language"] = encodeURIComponent(opts.language);
+    if (opts.linkSource) headers["x-link-source"] = encodeURIComponent(opts.linkSource);
+    return request<QsSourceRow>("/quantlab/sources/intake/file", { method: "POST", body: file, headers });
+  },
+  qsExtract: (id: string) => post<QsSourceRow>(`/quantlab/sources/${encodeURIComponent(id)}/extract`),
+  qsCancel: (id: string) => post<QsSourceRow>(`/quantlab/sources/${encodeURIComponent(id)}/cancel`),
+  qsNote: (id: string, text: string) =>
+    post<{ id: string; text: string }>(`/quantlab/sources/${encodeURIComponent(id)}/notes`, { text }),
+  qsDeleteMedia: (id: string) =>
+    request<QsSourceRow>(`/quantlab/sources/${encodeURIComponent(id)}/media`, { method: "DELETE" }),
+  qsDelete: (id: string) =>
+    request<{ deleted: string }>(`/quantlab/sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  qsAudit: () => request<QsAudit[]>("/quantlab/sources/audit"),
+  qsSpeechModel: () => request<QsSpeechModel>("/quantlab/sources/speech-model"),
+  qsInstallSpeechModel: () => post<QsSpeechModel>("/quantlab/sources/speech-model"),
+  qsFrameUrl: (id: string, frameId: string) =>
+    `${BACKEND_URL}/quantlab/sources/${encodeURIComponent(id)}/frames/${encodeURIComponent(frameId)}`,
+  qsMediaUrl: (id: string) => `${BACKEND_URL}/quantlab/sources/${encodeURIComponent(id)}/media`,
+  qmMissions: () => request<QmMissionRow[]>("/quantlab/research/missions"),
+  qmMission: (id: string) => request<QmMission>(`/quantlab/research/missions/${encodeURIComponent(id)}`),
+  qmCreate: (sourceId: string, budget?: Record<string, number>) =>
+    post<QmMissionRow>("/quantlab/research/missions", { source_id: sourceId, budget: budget ?? null }),
+  qmAgents: () => request<QmAgent[]>("/quantlab/research/agents"),
+  qmActivity: () => request<QmEvent[]>("/quantlab/research/activity"),
+  qmTrials: (id: string) => request<QmTrial[]>(`/quantlab/research/missions/${encodeURIComponent(id)}/trials`),
+  qmAnswer: (
+    id: string,
+    body: { accept_defaults: boolean; choices: Record<string, string>; values: Record<string, unknown> },
+  ) => post<QmMissionRow>(`/quantlab/research/missions/${encodeURIComponent(id)}/answers`, body),
+  qmApproveData: (id: string, maxUsd: number) =>
+    post<QmMissionRow>(`/quantlab/research/missions/${encodeURIComponent(id)}/data-approval`, {
+      max_usd: maxUsd,
+      confirm: true,
+    }),
+  qmDeclineData: (id: string) =>
+    post<QmMissionRow>(`/quantlab/research/missions/${encodeURIComponent(id)}/data-decline`),
+  qmControl: (id: string, action: "pause" | "resume" | "cancel") =>
+    post<QmMissionRow>(`/quantlab/research/missions/${encodeURIComponent(id)}/${action}`),
+  qmEvolve: (id: string, budget?: Record<string, number>) =>
+    post<QmMissionRow>(`/quantlab/research/missions/${encodeURIComponent(id)}/evolution`, {
+      budget: budget ?? null,
+    }),
+  qmLock: (id: string, versionId: string) =>
+    post<QmMissionRow>(`/quantlab/research/missions/${encodeURIComponent(id)}/holdout-lock`, {
+      version_id: versionId,
+      confirm: true,
+    }),
+  qmDossier: (id: string) => request<QmDossier>(`/quantlab/research/missions/${encodeURIComponent(id)}/dossier`),
 };

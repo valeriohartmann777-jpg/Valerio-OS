@@ -125,3 +125,53 @@ def test_settings_and_tools_are_secret_free(client: TestClient) -> None:
     tools = {t["name"]: t for t in client.get("/tools").json()}
     assert tools["open_application"]["side_effects"] is True
     assert tools["get_system_info"]["permission_level"] == 0
+
+
+def test_upload_headers_pass_cors_and_deleting_a_source_cancels_its_mission(
+    client: TestClient,
+) -> None:
+    import time
+    from urllib.parse import quote
+
+    allowed = {"origin": "app://jarvis"}
+    pre = client.options(
+        "/quantlab/sources/intake/file",
+        headers={
+            **allowed,
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "content-type, x-filename, x-note, x-language",
+        },
+    )
+    assert pre.status_code == 200
+    granted = pre.headers["access-control-allow-headers"].lower()
+    for header in ("x-filename", "x-note", "x-language", "x-link-source"):
+        assert header in granted
+
+    # Header values are percent-encoded by the app: non-ASCII names and notes survive.
+    response = client.post(
+        "/quantlab/sources/intake/file",
+        content=b"Short NQ when price sweeps the 15 minute opening range high.\n",
+        headers={
+            **allowed,
+            "content-type": "application/octet-stream",
+            "x-filename": quote("Strategie Ä.txt"),
+            "x-note": quote("gemeint ist NQ, Größe 1 Kontrakt"),
+        },
+    )
+    assert response.status_code == 200, response.text
+    source = response.json()
+    assert source["filename"] == "Strategie Ä.txt"
+    for _ in range(100):
+        detail = client.get(f"/quantlab/sources/{source['id']}").json()
+        if detail["status"] in ("EXTRACTED", "PARTIAL"):
+            break
+        time.sleep(0.05)
+    assert detail["status"] in ("EXTRACTED", "PARTIAL")
+    assert [n["text"] for n in detail["notes"]] == ["gemeint ist NQ, Größe 1 Kontrakt"]
+
+    mission = client.post(
+        "/quantlab/research/missions", json={"source_id": source["id"]}, headers=allowed
+    ).json()
+    assert client.delete(f"/quantlab/sources/{source['id']}", headers=allowed).status_code == 200
+    after = client.get(f"/quantlab/research/missions/{mission['id']}").json()
+    assert after["state"] in ("CANCELED", "COMPLETE", "FAILED")

@@ -700,6 +700,38 @@ futures/service.py    runs as persistent jobs (manifest hash = run id), artifact
   - The R1 lab lives on as `EquityLab.tsx`.
 - Detail: `docs/quantlab/ARCHITECTURE.md`.
 
+## 13i. QuantLab 3.0 Idea-to-Edge (`backend/jarvis/quantlab/{intake,ideas}/`)
+
+```
+intake/detect.py     magic bytes → kind/mime/container; size caps; archives refused
+intake/urls.py       TikTok/YouTube link parsing, oEmbed metadata only, SSRF guard, ≤ 3 redirects
+intake/worker.py     subprocess (sandbox + rlimits): probe · speech · frames (OCR) · image · pdf
+intake/media.py      PyAV probe/decode/frame sampling;  asr.py  Moonshine (C API) / Whisper
+intake/ocr.py        RapidOCR;  text.py  exact spans;  injection.py  instruction tripwire
+intake/store.py      qs_* tables;  service.py  intake, queue, retention, deletion, ready hook
+ideas/catalog.py     ambiguous terms with fixed alternatives; unsupported concepts
+ideas/claims.py      quoted evidence block; claim validation (verbatim quotes); augment()
+ideas/blueprint.py   FuturesSpec + provenance classes, questions, deterministic resolve()
+ideas/agents.py      ATLAS / JARVIS / CIPHER prompts and submit tools (run_agent final_tools)
+ideas/sentinel.py    boundary + audit reports, independent second engine, narrative guard
+ideas/missions.py    MissionService: stages, typed tasks, budgets, waits, approvals, verdict
+ideas/evolution.py   diagnose · propose · test · compare (Pareto) · holdout lock
+ideas/dossier.py     Markdown + JSON dossier (source facts / test facts / interpretation)
+```
+
+- Tables: `qs_*` (migration 13), `qm_*` (migration 14; `qm_trials`/`qm_events` append-only).
+- Events: `quantlab.source`, `quantlab.mission`.
+- API: `/quantlab/sources*`, `/quantlab/research/missions*`, `/quantlab/research/agents`,
+  `/quantlab/strategies/from-source/{id}`. Purchases only via `…/data-approval`
+  (`confirm: true`), holdout only via `…/holdout-lock` (`confirm: true`).
+- Runtime: `rt.sources`, `rt.quant_missions` (`rt.missions` stays the core MissionEngine);
+  `_quant_model(role)` gives Claude per role from `config/ultron.yaml` or the labelled script.
+- UI: `components/quantlab/ideas/*` — IdeaInbox (default section), SourceView, BlueprintView,
+  ResearchRoom, EvolutionView, DossierView.
+- Electron CSP allows keyframe images and the owner's own video from the local backend only.
+- Detail: `docs/quantlab/IDEA_TO_EDGE_SPEC.md`, `SOURCE_PROVENANCE_CONTRACT.md`,
+  `ULTRON_QUANT_PROTOCOL.md`.
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

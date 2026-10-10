@@ -312,6 +312,8 @@ try {
   await step("QuantLab: broken data refused, synthetic data passported, a spec frozen, a run judged critically", async () => {
     const top = () => page.getByTestId("quantlab-page").evaluate((el) => el.scrollTo(0, 0));
     await page.getByRole("button", { name: "QuantLab", exact: true }).click();
+    await page.getByTestId("idea-inbox").waitFor(); // QuantLab opens on the Idea Inbox
+    await page.getByTestId("ql-nav-overview").click();
     await page.getByTestId("qr-getting-started").waitFor(); // no number before a real run
     await page.getByTestId("ql-mode-research").click();
     await page.getByTestId("ql-nav-equity-lab-r1").click();
@@ -446,6 +448,125 @@ try {
     await page.waitForTimeout(300);
     await shot("11r-quantlab-overview");
     await page.getByTestId("ql-mode-simple").click();
+    await page.getByRole("button", { name: "Home" }).click();
+  });
+
+  await step("QuantLab Idea-to-Edge: video → speech, on-screen text, keyframes, claims, blueprint, questions", async () => {
+    const lab = () => page.getByTestId("quantlab-page");
+    const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
+    await page.getByRole("button", { name: "QuantLab", exact: true }).click();
+    await page.getByTestId("ql-nav-idea-inbox").click();
+    await page.getByTestId("idea-inbox").waitFor();
+    await page.getByTestId("idea-empty").waitFor();
+    await page.waitForTimeout(250);
+    await shot("12a-idea-inbox");
+    // A saved strategy video (synthetic speech + overlays, incl. a boast and an injected instruction).
+    await page.getByTestId("idea-file-input").setInputFiles(
+      path.join(root, "backend", "tests", "fixtures", "quantlab", "idea_sweep_nq.mp4"),
+    );
+    await page.getByTestId("idea-message").filter({ hasText: "Reading" }).waitFor();
+    const card = page.getByTestId("idea-source").first();
+    await card.getByTestId("qs-status").filter({ hasText: /Read|Partly read/ }).waitFor({ timeout: 240_000 });
+    // The research mission starts by itself and stops at the first real question.
+    await card.getByTestId("idea-mission-chip").filter({ hasText: "Needs you" }).waitFor({ timeout: 120_000 });
+    await card.locator("button").first().click();
+    const view = page.getByTestId("source-view");
+    await view.waitFor();
+    await page.getByTestId("source-segments").getByText("enter short", { exact: false }).first().waitFor();
+    await page.getByTestId("source-segments").getByText("90% WIN RATE").first().waitFor();
+    assert.ok((await page.getByTestId("source-frames").locator("img").count()) > 0, "keyframes are shown");
+    await page.getByTestId("source-injection").waitFor(); // the injected instruction is flagged, not obeyed
+    await page.getByTestId("source-performance").waitFor(); // the boast is a claim, NOT TESTED
+    assert.ok(
+      (await page.locator('[data-testid="source-claim"][data-kind="INSTRUCTION_TO_AI"]').count()) > 0,
+      "the injected text is recorded as an instruction to AI",
+    );
+    await page.getByTestId("source-video").waitFor();
+    await top();
+    await page.waitForTimeout(500);
+    await shot("12b-idea-source-video");
+    await page.getByTestId("blueprint-view").scrollIntoViewIfNeeded();
+    await page.locator('[data-testid="blueprint-provenance"] tr[data-class="DEFAULT_RESEARCH_ASSUMPTION"], [data-testid="blueprint-provenance"] tr[data-class="EXPLICIT_SOURCE"]').first().waitFor();
+    await page.waitForTimeout(250);
+    await shot("12c-idea-blueprint");
+    await top();
+    await page.getByTestId("source-open-mission").click();
+    await page.getByTestId("qm-wait-questions").waitFor();
+    await page.getByTestId("qm-wait-questions").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(250);
+    await shot("12d-research-questions");
+    // This walkthrough continues with a text idea; the video's mission is cancelled from the room.
+    await page.getByTestId("qm-cancel").click();
+    await page.locator('[data-testid="qm-detail"][data-state="CANCELED"]').waitFor();
+  });
+
+  await step("QuantLab Idea-to-Edge: text → answers → paid-data approval → backtest → SENTINEL audit → verdict → dossier", async () => {
+    const lab = () => page.getByTestId("quantlab-page");
+    const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
+    await page.getByTestId("ql-nav-idea-inbox").click();
+    await page.getByTestId("idea-text").fill(
+      "NQ futures, New York open.\n\nWait for a liquidity sweep of the 15 minute opening range high.\n\n" +
+        "When price reclaims the level, enter short. Stop one tick above the sweep wick, target 2R.\n\n" +
+        "This strategy wins 90% of the time.",
+    );
+    await page.getByTestId("idea-note").fill("Only the short side, as in the text.");
+    await page.getByTestId("idea-submit").click();
+    const card = page.getByTestId("idea-source").first();
+    await card.getByTestId("idea-mission-chip").filter({ hasText: "Needs you" }).waitFor({ timeout: 120_000 });
+    await card.getByTestId("idea-mission-chip").click();
+    const detail = page.getByTestId("qm-detail");
+    await detail.waitFor();
+    await detail.getByText("Scripted test model", { exact: false }).first().waitFor(); // labelled, always
+    await page.getByTestId("qm-q-ny_open").waitFor();
+    await page.getByTestId("qm-q-liquidity_sweep").waitFor();
+    await page.getByTestId("qm-accept-defaults").click();
+    // Databento is connected (Data Hub step): VECTOR asks before buying anything.
+    await page.getByTestId("qm-wait-purchase").waitFor({ timeout: 120_000 });
+    assert.match(await page.getByTestId("qm-quote-cost").innerText(), /^\$\d/);
+    assert.equal(await page.getByTestId("qm-approve").isDisabled(), true, "no purchase without explicit approval");
+    await page.getByTestId("qm-wait-purchase").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(250);
+    await shot("12e-research-approval");
+    await page.getByTestId("qm-confirm").check();
+    await page.getByTestId("qm-approve").click();
+    await page.locator('[data-testid="qm-detail"][data-state="COMPLETE"]').waitFor({ timeout: 400_000 });
+    await page.getByTestId("qm-verdict-card").getByText("Insufficient evidence").waitFor(); // synthetic: capped
+    await page.getByTestId("qm-verdict-card").getByTestId("qr-fixture").waitFor();
+    await page.getByTestId("qm-verdict-card").getByText("SENTINEL audit passed").waitFor();
+    assert.ok((await page.locator('[data-testid="qm-task"][data-agent="sentinel"]').count()) >= 2, "SENTINEL audited");
+    await top();
+    await page.waitForTimeout(400);
+    await shot("12f-research-verdict");
+    await page.getByTestId("qm-dossier-toggle").click();
+    await page.getByTestId("qm-dossier-text").getByText("SYNTHETIC FIXTURE DATA", { exact: false }).first().waitFor();
+    await page.getByTestId("qm-dossier").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(250);
+    await shot("12g-research-dossier");
+  });
+
+  await step("QuantLab strategy evolution: reasoned variants, append-only trials, Pareto, one-time holdout lock", async () => {
+    const lab = () => page.getByTestId("quantlab-page");
+    const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
+    await top();
+    await page.getByTestId("qm-evolve").click();
+    await page.locator('[data-testid="qm-detail"]').getByText("Strategy evolution", { exact: false }).first().waitFor();
+    await page.getByTestId("qm-wait-lock").waitFor({ timeout: 600_000 });
+    const trials = await page.getByTestId("qm-trial").count();
+    assert.ok(trials >= 3, `baseline + variants are all kept (got ${trials})`);
+    await page.getByTestId("qm-pareto").waitFor();
+    await page.getByTestId("qm-evolution").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await shot("12h-evolution");
+    assert.equal(await page.getByTestId("qm-lock").isDisabled(), true, "the holdout isn't opened without a choice");
+    await page.getByTestId("qm-wait-lock").locator('input[type="radio"]').first().check();
+    await page.getByTestId("qm-lock-confirm").check();
+    await page.getByTestId("qm-lock").click();
+    await page.locator('[data-testid="qm-detail"][data-state="COMPLETE"]').waitFor({ timeout: 300_000 });
+    await page.getByTestId("qm-holdout").getByText("First look", { exact: false }).waitFor();
+    await page.getByTestId("qm-holdout").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("12i-evolution-holdout");
+    await page.getByTestId("ql-nav-idea-inbox").click();
     await page.getByRole("button", { name: "Home" }).click();
   });
 

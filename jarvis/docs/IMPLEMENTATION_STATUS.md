@@ -1,6 +1,6 @@
 # Implementation status
 
-_Last updated: 2026-10-04_
+_Last updated: 2026-10-10_
 
 ## DONE
 
@@ -382,6 +382,30 @@ _Last updated: 2026-10-04_
   architect model (scripted) — all labelled in the UI; no real key, Keychain or model run yet
 - Screenshots: `docs/screenshots/quantlab-{hub-quote,dataset,studio,backtest,validation,trade,overview}.png`
 
+### QuantLab 3.0 Idea-to-Edge (D-029) — details in `docs/quantlab/IDEA_TO_EDGE_*.md`
+- Idea Inbox (QuantLab's default section): saved video / audio / screenshot / PDF / text /
+  TikTok or YouTube link; magic-byte detection, caps, SHA-256 dedupe, private storage with
+  retention and deletion; sandboxed worker: Moonshine speech with timecodes (Whisper for other
+  languages), OCR on every sampled frame, keyframes, PDF text; injection tripwire; links give
+  public metadata only and ask for the saved file
+- Claims with verbatim-checked quotes (boasts and instructions-to-AI always recorded);
+  blueprint with per-field provenance, ambiguity catalog, one grouped question, deterministic
+  resolution; DSL: sweep-and-reclaim, opening-range retest, higher-timeframe MA, filters
+- Research missions (ATLAS, CIPHER, JARVIS on Claude; SENTINEL, VECTOR, ARCHIVE as code):
+  fixed stages, typed tasks, immutable budgets, waits for answers / Databento / purchase
+  approval, restart recovery; SENTINEL second engine + narrative guard; A11 verdicts; dossier
+- Evolution: reasoned variants on allowed paths, append-only trial ledger, Pareto comparison,
+  one owner-locked holdout look, contamination downgrade
+- UI: Idea Inbox, source view (player, timecodes, keyframes, claims), blueprint view, Research
+  Room (stages, roster from real tasks, approvals, verdict, checks, evolution chart, dossier)
+- Tests: backend 534 passed (new: intake 13, ideas 8, DSL 10, SENTINEL 31, missions 4, API 1);
+  vitest 37; **29/29 E2E steps** incl. video → questions, text → approval → verdict → dossier,
+  evolution → holdout lock
+- Mocked here: model replies (scripted), Databento (fixture, synthetic prices), oEmbed (mock
+  transport) — all labelled; not verified: real TikTok oEmbed, Whisper download, macOS sandbox
+  for the worker, Claude, Databento
+- Screenshots: `docs/screenshots/quantlab-{idea-*,research-*,evolution*}.png`
+
 ## IN PROGRESS
 - —
 
@@ -394,6 +418,8 @@ _Last updated: 2026-10-04_
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
 0. QuantLab on the MacBook: connect Databento (Keychain), quote one month of NQ.v.0 1-minute bars,
    approve, build the dataset, run the opening-range template once — first real data
+0. QuantLab Idea Inbox on the MacBook: drop a saved TikTok video, connect Claude, answer the
+   question, approve the Databento quote — first real Idea-to-Edge verdict
 0. ULTRON on the MacBook: first real-model mission (e.g. a CSV → JSON CLI with tests, $3 budget)
 
 ### Phase 2 — remaining
