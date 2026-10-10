@@ -132,7 +132,8 @@ class Brain:
                 error=ToolError(
                     code="model_unavailable",
                     message=self._models.unavailable_reason or "No model is configured.",
-                    suggestion="Open Settings → Brain and paste your Anthropic API key.",
+                    suggestion="Open Settings → AI & Billing: connect your Claude plan or "
+                    "approve the paid API fallback.",
                 ),
             )
         user_blocks = [self._context_block(), text]
@@ -150,7 +151,9 @@ class Brain:
         except ModelError as exc:
             log.warning("model call failed: %s", exc.detail or exc.message, extra=ctx.log_fields())
             reply = Reply(
-                text="I couldn't complete that."
+                text="My AI is paused right now."
+                if exc.code == "ai_paused"
+                else "I couldn't complete that."
                 if turn.handle
                 else "I couldn't think that through.",
                 success=False,

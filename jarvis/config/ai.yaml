@@ -1,0 +1,35 @@
+# AI routing & billing (docs/AI_ROUTING_ARCHITECTURE.md, DECISIONS D-030).
+#
+# Order: 1. your Claude plan (through Claude Code, officially allowed for `claude -p`),
+#        2. the Claude API with your key — only after you approve paid fallback with a budget,
+#        3. a local model (if you set one up) for plain conversation, otherwise a safe pause.
+#
+# Your choices (strategy, Claude plan on/off, paid fallback and budgets, local model) are
+# made in Settings → AI & Billing and stored in the database. Nothing here is secret.
+
+# Path to Claude Code's `claude` binary; "" = find it on PATH and the usual install places.
+cli_path: ""
+plan_timeout_seconds: 600   # one model call through Claude Code
+plan_max_turns: 4           # structured answers take two turns inside Claude Code
+
+# Temporary errors (overload, 429, network) are retried on the same route with backoff;
+# they are never a reason to switch to the paid API.
+max_attempts: 3
+backoff_seconds: 2
+max_backoff_seconds: 60
+cooldown_seconds: 120       # then the route rests and paused work resumes after this
+plan_retry_minutes: 60      # plan limit reached but no reset time reported
+probe_seconds: 300          # free status checks: Claude Code sign-in, local model server
+
+# USD per million tokens, used to estimate API costs against your budget (list prices;
+# your bill may differ, e.g. when Max/Team monthly API credits apply first).
+prices:
+  claude-opus-5-5: {input: 4.0, output: 20.0, cache_read: 0.2, cache_write: 5.0}
+  claude-sonnet-5-5: {input: 2.0, output: 10.0, cache_read: 0.2, cache_write: 2.5}
+  claude-haiku-5-5: {input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125}
+
+# Work profiles swap models per task. Budgets and policies always apply.
+profiles:
+  economy: {claude-opus-5-5: claude-sonnet-5-5}
+  balanced: {}
+  deep: {claude-sonnet-5-5: claude-opus-5-5}

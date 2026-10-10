@@ -2,6 +2,7 @@ import type { UlArtifact, UlEvent, UlMission, UlTask } from "@jarvis/protocol";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { ApiError, api } from "../../lib/api";
+import { dispatch } from "../../store/store";
 import { Badge, Hash, ago, compactInputClass, inputClass } from "../quantlab/ui";
 import { Button, cx } from "../ui/primitives";
 import { MissionGraph } from "./MissionGraph";
@@ -166,7 +167,15 @@ function Blocker({ mission }: { mission: UlMission }) {
   const tone = b.kind === "cancelled" ? "border-ql-border" : "border-ql-danger/40 bg-ql-danger/5";
   return (
     <section className={cx("rounded-2xl border p-5", tone)} data-testid="ul-blocker">
-      <p className="label">{b.kind === "questions" ? "JARVIS needs your answer" : b.kind === "cancelled" ? "Stopped" : `Blocked · ${b.kind}`}</p>
+      <p className="label">
+        {b.kind === "questions"
+          ? "JARVIS needs your answer"
+          : b.kind === "cancelled"
+            ? "Stopped"
+            : b.kind === "ai_route"
+              ? "Paused · no AI route"
+              : `Blocked · ${b.kind}`}
+      </p>
       {b.message && <p className="mt-2 text-[13px] text-fg">{b.message}</p>}
       {b.questions && (
         <ul className="mt-2 space-y-1 text-[13px] text-fg">
@@ -201,6 +210,15 @@ function Blocker({ mission }: { mission: UlMission }) {
         <Button className="mt-3" onClick={() => run(() => api.ulControl(mission.id, "resume"))}>
           {b.kind === "model" ? "Try again" : "Grant another round of attempts"}
         </Button>
+      )}
+      {b.kind === "ai_route" && mission.state === "BLOCKED" && (
+        <div className="mt-3 flex flex-wrap items-center gap-3" data-testid="ul-ai-paused">
+          <span className="text-[12px] text-fg-muted">
+            Checkpoint kept — continues by itself when a route is back; no tool runs twice.
+          </span>
+          <Button onClick={() => run(() => api.ulControl(mission.id, "resume"))}>Try now</Button>
+          <Button onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}>AI & Billing</Button>
+        </div>
       )}
       {error && <p className="mt-2 text-[13px] text-ql-danger">{error}</p>}
     </section>

@@ -27,6 +27,9 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
 - **Desktop command center** (Electron + React): JARVIS Core visual with explicit
   states, active mission with live steps, approval requests, context, agents,
   missions, activity stream, command bar, mission detail, settings.
+- **Smart AI routing & billing**: Claude plan first (official Claude Code under your own
+  sign-in), paid Claude API only within a budget you approve, then local / pause — missions
+  pause and resume without repeating a tool; a top-bar chip shows the active route.
 - **Always on**: closing the window keeps JARVIS running in the menu bar —
   learning, training and the morning briefing go on. The Mac app starts at
   login (Settings → Always on). A crashed backend is restarted by itself, and
@@ -96,8 +99,9 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
 - **Reasoning (Claude)**: anything beyond the built-in commands goes to Claude
   Sonnet 5.5, which plans and calls the same tools through the same
   Operator → approval → Sentinel chain (side effects become verified missions).
-  Prefix `think:` / `denk nach:` for Claude Opus 5.5. Needs an Anthropic API
-  key (Settings → Brain); without it the dashboard shows *Brain: Offline*.
+  Prefix `think:` / `denk nach:` for Claude Opus 5.5. Needs a Claude route
+  (Settings → AI & Billing: your Claude plan, or the paid API within your approved
+  budget); without one the dashboard shows *Brain: Offline*.
 - **Instant commands (no model call)**: `open <app>` / `open <app> and <app>`
   (also German *öffne*, *starte*), `what's the active window`,
   `list running apps`, `system status`, `hello`, `help`.
@@ -121,7 +125,7 @@ replies to typed commands too, and plays a sample. Voice and model are in
 
 ## Let JARVIS learn
 
-1. Connect Claude (below) — learning uses the same key.
+1. Connect Claude (below) — learning uses the same route.
 2. Open **Learning** in the top bar and click **Start learning**.
 3. The first start downloads about five years of free minute data for NQ and
    XAUUSD from Dukascopy (a few minutes). Then a research round runs every
@@ -298,17 +302,29 @@ settings in `config/training.yaml`.
 
 ## Connect Claude
 
-1. Create an API key at <https://console.anthropic.com> (Settings → API keys).
-2. In JARVIS click *Brain: Offline — connect* (or open **Settings → Brain**),
-   paste the key, press **Connect**.
-3. JARVIS checks the key with Anthropic (free models endpoint, no tokens),
-   stores it in `jarvis/.env` (git-ignored, owner-only) and switches the brain
-   on immediately — no restart. The context panel shows *Brain: Claude Sonnet 5.5*.
+JARVIS uses your **Claude plan first**, the **paid Claude API only within a budget you
+approve**, then an optional local model. If none of these is available, it pauses. Everything
+is set up in **Settings → AI & Billing**; the chip in the top bar shows the active route.
+Step-by-step: [`docs/AI_FALLBACK_RUNBOOK.md`](docs/AI_FALLBACK_RUNBOOK.md).
 
-Alternatively put `ANTHROPIC_API_KEY=sk-ant-...` into `jarvis/.env` (or the
-environment) and restart; the key is verified at startup and a rejected key
-shows up as *Offline* with the reason. Models, effort and limits are in
-`config/models.yaml`.
+1. **Claude plan (Pro / Max), recommended.**
+   1. Install Claude Code (*Install Claude Code…*).
+   2. Sign in with your claude.ai account (*Sign in with Claude…* runs `claude auth login`).
+   3. Tick the personal-use confirmation and press **Use my Claude plan**.
+
+   No API bill: JARVIS runs the official `claude -p` under your sign-in and never passes an
+   API key to it.
+2. **Paid API fallback (optional).** Paste an API key from <https://console.anthropic.com>. It
+   is checked for free and stored in the macOS Keychain. Then set a monthly budget and a
+   per-mission cap, tick the confirmation and press **Approve paid fallback**. It is off by
+   default, and JARVIS never raises the limits itself.
+3. **Local model (optional).** An Ollama model, for conversation only.
+
+A key left in `jarvis/.env` (`ANTHROPIC_API_KEY=…`) from earlier versions is moved into the
+Keychain on the next start. Billing rules: [`docs/AI_BILLING_POLICY.md`](docs/AI_BILLING_POLICY.md);
+architecture: [`docs/AI_ROUTING_ARCHITECTURE.md`](docs/AI_ROUTING_ARCHITECTURE.md). Models,
+effort and limits are in `config/models.yaml`; prices and routing settings are in
+`config/ai.yaml`.
 
 ## Requirements
 
@@ -368,7 +384,7 @@ This creates `~/Applications/JARVIS.app` (Dock, Spotlight — no terminal
 needed afterwards). It starts JARVIS from this folder, so it stays current:
 when a new version is available, the top bar shows **Update** — one click
 downloads it, installs changed packages, rebuilds and restarts JARVIS. Your
-key in `jarvis/.env` and all data stay where they are. macOS asks once more
+keys (Keychain, `jarvis/.env`) and all data stay where they are. macOS asks once more
 for folder and music permissions, now for "JARVIS" instead of Terminal.
 
 On macOS JARVIS controls the real desktop: `open textedit`, `open safari`,

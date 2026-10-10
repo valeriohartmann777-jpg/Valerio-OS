@@ -1,4 +1,6 @@
 import type {
+  AiStatus,
+  AiUsage,
   BotDetail,
   BotLabStatus,
   BotSettings,
@@ -387,4 +389,32 @@ export const api = {
       confirm: true,
     }),
   qmDossier: (id: string) => request<QmDossier>(`/quantlab/research/missions/${encodeURIComponent(id)}/dossier`),
+  aiStatus: () => request<AiStatus>("/ai/status"),
+  aiUsage: () => request<AiUsage>("/ai/usage"),
+  aiStrategy: (strategy: AiStatus["strategy"], profile?: AiStatus["profile"]) =>
+    post<AiStatus>("/ai/strategy", { strategy, profile: profile ?? null }),
+  aiPlan: (enabled: boolean, personalUse = false) =>
+    post<AiStatus>("/ai/plan", { enabled, personal_use: personalUse }),
+  aiPlanCheck: () => post<AiStatus>("/ai/plan/check"),
+  aiPlanTest: () =>
+    post<{ result: { ok: boolean; message: string; latency_ms?: number; failure?: string }; status: AiStatus }>(
+      "/ai/plan/test",
+    ),
+  aiTerminal: (action: "login" | "install") => post<{ command: string }>("/ai/plan/terminal", { action }),
+  aiPaid: (terms: {
+    monthly_budget_usd: number;
+    per_mission_cap_usd: number;
+    warn_at: number[];
+    max_concurrent: number;
+    stop_at_budget: boolean;
+  }) => post<AiStatus>("/ai/paid", { ...terms, confirm: true }),
+  aiPaidDisable: () => post<AiStatus>("/ai/paid/disable"),
+  aiKey: (apiKey: string) => post<AiStatus>("/ai/api-key", { api_key: apiKey }),
+  aiKeyDelete: () => request<AiStatus>("/ai/api-key", { method: "DELETE" }),
+  aiApiCheck: () => post<AiStatus>("/ai/api/check"),
+  aiLocal: (enabled: boolean, baseUrl: string, model: string) =>
+    post<AiStatus>("/ai/local", { enabled, base_url: baseUrl, model }),
+  aiLocalCheck: () => post<AiStatus>("/ai/local/check"),
+  aiCurrency: (display: "USD" | "CHF", usdToChf: number | null) =>
+    post<AiStatus>("/ai/currency", { display, usd_to_chf: usdToChf }),
 };

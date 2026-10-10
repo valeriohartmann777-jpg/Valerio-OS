@@ -406,6 +406,45 @@ _Last updated: 2026-10-10_
   for the worker, Claude, Databento
 - Screenshots: `docs/screenshots/quantlab-{idea-*,research-*,evolution*}.png`
 
+### Smart AI routing & billing (D-030) — details in `docs/AI_*.md`
+- One `SmartRouter` for every model call (brain, Learning, Bot Lab, QuantLab architect and
+  missions, all ULTRON agents). Route order: Claude plan → Claude API → local / pause.
+  Strategies: plan first, plan only, API only. Profiles: Economy, Balanced, Deep.
+- Claude plan route: official `claude -p` under the owner's claude.ai sign-in only, with a
+  personal-use confirmation. The environment is allow-listed, so no API key or token reaches
+  Claude Code. Claude Code's tools, MCP and sessions are off; JARVIS executes the tools behind
+  its own permission gates. Any other sign-in method shows as "Not supported".
+- Paid API fallback: OFF by default; turned on by one explicit approval with:
+  - a monthly budget;
+  - a per-mission cap;
+  - warnings at 50 / 80 / 100 %;
+  - a concurrency limit;
+  - stop-at-budget.
+
+  Before each call the router checks the worst case; afterwards it books the actual cost.
+  Approvals and usage are append-only. The key lives in the OS keystore and moves from `.env`
+  once.
+- Failure taxonomy: temporary errors (overload, rate limit, network) are retried with
+  backoff and Retry-After and never trigger a paid switch. Plan limit, sign-in, key, credit
+  and policy errors fail over. Capability mismatches go back to the caller.
+- Pause and resume: ULTRON checkpoints plus a tool ledger (no tool runs twice) and automatic
+  resume when a route is back; QuantLab stages re-run; the brain says it is paused.
+- UI: Settings → AI & Billing (route and reason, strategy, plan, API, local, paid form and
+  meter, month usage, currency with rate assumption, events) and a top-bar route chip.
+  ULTRON shows "Paused · no AI route" with "Try now".
+- Tests:
+  - backend: 34 router scenario tests (all 15 DoD scenarios plus extras) and 17 connector
+    tests; 568 backend tests in total;
+  - vitest: 40;
+  - E2E step: plan via a labelled Claude Code stand-in → limit → pause → paid approval
+    without a key → nothing billed; 30/30 E2E steps pass.
+
+  Evidence: `docs/AI_ROUTER_TEST_RESULTS.md`. Screenshots: `docs/screenshots/ai-billing-*.png`.
+- Mocked here: Claude Code (stand-in binary and in-process runner), the API (fake model),
+  the keystore (memory). All of them are labelled.
+- Not verified: a real claude.ai sign-in with a plan call, a real API call, Ollama, the macOS
+  Keychain.
+
 ## IN PROGRESS
 - —
 
@@ -420,6 +459,8 @@ _Last updated: 2026-10-10_
    approve, build the dataset, run the opening-range template once — first real data
 0. QuantLab Idea Inbox on the MacBook: drop a saved TikTok video, connect Claude, answer the
    question, approve the Databento quote — first real Idea-to-Edge verdict
+0. AI routing on the MacBook: install Claude Code, `claude auth login` (claude.ai), Settings →
+   AI & Billing → "Use my Claude plan", press Test; optionally approve a small paid budget
 0. ULTRON on the MacBook: first real-model mission (e.g. a CSV → JSON CLI with tests, $3 budget)
 
 ### Phase 2 — remaining

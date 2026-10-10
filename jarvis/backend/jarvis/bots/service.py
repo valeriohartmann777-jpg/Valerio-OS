@@ -77,7 +77,15 @@ from jarvis.util import utcnow, wait_wall
 log = logging.getLogger("jarvis.bots")
 
 IMPROVING = "bots.improving"
-_RETRYABLE = {"rate_limited", "overloaded", "timeout", "connection", "server_error"}
+# ai_paused: no AI route right now (jarvis.ai) — look again in 5 minutes.
+_RETRYABLE = {
+    "rate_limited",
+    "overloaded",
+    "timeout",
+    "connection",
+    "server_error",
+    "ai_paused",
+}
 # Never in a version JARVIS writes (unless the user's original already has it).
 _FORBIDDEN = ("#import", "WebRequest", "SocketCreate", "SocketConnect", "FileOpen",
               "FileWrite", "FileDelete", "ShellExecute", "SendMail", "SendFTP")  # fmt: skip
@@ -850,7 +858,9 @@ class BotLabService:
                 reply: ModelReply = await model.complete(
                     system=SYSTEM_PROMPT, messages=messages, tools=TOOLS
                 )
-                await self._store.add_cost(round_id, self._cost(reply.usage))
+                await self._store.add_cost(
+                    round_id, self._cost(reply.usage) if reply.route == "api" else 0.0
+                )
                 messages.append(reply.assistant_message)
                 if not reply.tool_calls:
                     summary = summary or reply.text[:400]

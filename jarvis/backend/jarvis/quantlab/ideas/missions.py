@@ -34,6 +34,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from jarvis.ai.types import AIPaused, ai_scope
 from jarvis.events.bus import EventBus
 from jarvis.events.types import Event, EventType, Severity
 from jarvis.llm.base import ChatModel
@@ -551,6 +552,12 @@ class MissionService:
             self._spawn(mission_id)
         return await self.mission(mission_id)
 
+    async def on_ai_available(self) -> None:
+        """An AI route is back: missions paused for it continue at their stage."""
+        for m in await self.store.in_state("BLOCKED"):
+            if str(m.get("error") or "").startswith("AI_PAUSED"):
+                await self.resume(m["id"])
+
     async def cancel(self, mission_id: str) -> dict[str, Any]:
         m = await self._open(mission_id)
         if m["state"] in DONE:
@@ -778,12 +785,22 @@ class MissionService:
         last = ""
         for attempt in range(tries):
             try:
-                result = await fn(
-                    model, budget=budget, gate=lambda: self._gate(m["id"]), on_usage=sink, **kwargs
-                )
+                with ai_scope("quantlab", mission_id=m["id"], task_id=task.id, agent=role):
+                    result = await fn(
+                        model,
+                        budget=budget,
+                        gate=lambda: self._gate(m["id"]),
+                        on_usage=sink,
+                        **kwargs,
+                    )
             except BudgetExceeded as exc:
                 await task.fail(str(exc), state="BLOCKED")
                 raise Blocked("BUDGET", f"The mission's model budget is used up ({exc}).") from exc
+            except AIPaused as exc:
+                # No route right now: the stage waits and reruns when a route is back.
+                # Model steps here have no side effects; data purchases are separate.
+                await task.fail(exc.message, state="BLOCKED")
+                raise Blocked("AI_PAUSED", exc.message) from exc
             if result.value is not None:
                 await task.act(
                     f"{role.upper()} submitted a checked result"

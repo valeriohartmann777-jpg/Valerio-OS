@@ -32,6 +32,11 @@ def make_settings(tmp_path: Path, **runtime_overrides: object) -> Settings:
     briefing = settings.briefing.model_copy(update={"enabled": False})
     # So would model training.
     training = settings.training.model_copy(update={"enabled": False})
+    # No OS keystore in CI: the AI key store lives in process memory (labelled as test-only),
+    # and no real Claude Code binary is ever started by a test.
+    ai = settings.ai.model_copy(
+        update={"keystore": "memory", "cli_path": str(tmp_path / "no-claude")}
+    )
     # root_dir = tmp_path: nothing a test does can touch the real jarvis/.env.
     return settings.model_copy(
         update={
@@ -41,6 +46,7 @@ def make_settings(tmp_path: Path, **runtime_overrides: object) -> Settings:
             "storage": storage,
             "briefing": briefing,
             "training": training,
+            "ai": ai,
         }
     )
 

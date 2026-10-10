@@ -188,7 +188,7 @@ async def chat(body: ChatRequest, rt: RuntimeDep) -> ChatAccepted:
 
 @router.post("/brain/key")
 async def connect_brain(body: ApiKeyRequest, rt: RuntimeDep) -> BrainView:
-    """Verify an Anthropic API key, store it in jarvis/.env and switch the brain on."""
+    """Verify an Anthropic API key and store it in the OS keystore (Settings → AI & Billing)."""
     try:
         await rt.connector.connect(body.api_key)
     except ModelError as exc:

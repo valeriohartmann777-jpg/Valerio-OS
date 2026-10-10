@@ -62,6 +62,7 @@ class ScriptedAgentModel:
             assistant_message={"role": "assistant", "content": blocks},
             model=self.model_id,
             usage=Usage(),
+            route="test",
         )
 
     def user_message(self, blocks: list[str]) -> dict[str, Any]:

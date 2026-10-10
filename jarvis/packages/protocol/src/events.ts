@@ -52,6 +52,7 @@ export const EVENT_TYPES = [
   "ultron.activity",
   "ultron.approval.changed",
   "context.updated",
+  "ai.route",
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];

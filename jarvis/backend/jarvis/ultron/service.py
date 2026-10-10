@@ -21,6 +21,8 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
+from jarvis.ai.checkpoint import RunCheckpoint
+from jarvis.ai.types import AIPaused, ai_scope
 from jarvis.events.bus import EventBus
 from jarvis.events.types import Event, EventType, Severity
 from jarvis.llm.base import ChatModel, ModelError, Usage
@@ -83,8 +85,10 @@ class UltronService:
         preferences: Preferences,
         model_factory: ModelFactory,
         model_label: Callable[[], str],
+        checkpoints: Callable[[str], RunCheckpoint] | None = None,
     ) -> None:
         self._settings = settings
+        self._checkpoints = checkpoints
         self._store = store
         self._bus = bus
         self._root = root
@@ -437,18 +441,28 @@ class UltronService:
             return None
 
         try:
-            result = await run_agent(
-                model=model,
-                system=prompts.PLANNER.format(project=self._project_brief(mission)),
-                opening=opening,
-                tools=[SUBMIT_PLAN],
-                broker=None,
-                validate=validate,
-                max_rounds=6,
-                gate=self._gate(mission_id).wait,
-                budget=await self._budget(mission_id, "jarvis"),
-                on_usage=self._usage_sink(mission_id, None, run_id),
+            with ai_scope("ultron", mission_id=mission_id, agent="jarvis"):
+                result = await run_agent(
+                    model=model,
+                    system=prompts.PLANNER.format(project=self._project_brief(mission)),
+                    opening=opening,
+                    tools=[SUBMIT_PLAN],
+                    broker=None,
+                    validate=validate,
+                    max_rounds=6,
+                    gate=self._gate(mission_id).wait,
+                    budget=await self._budget(mission_id, "jarvis"),
+                    on_usage=self._usage_sink(mission_id, None, run_id),
+                )
+        except AIPaused as exc:
+            await self._store.finish_run(run_id, state="INTERRUPTED", error=exc.message)
+            await self._mission_state(
+                mission_id,
+                MissionState.BLOCKED,
+                f"Planning paused: {exc.message}",
+                blocker={"kind": "ai_route", "message": exc.message},
             )
+            return
         except asyncio.CancelledError:
             await self._store.finish_run(run_id, state="INTERRUPTED", error="stopped")
             raise
@@ -639,7 +653,10 @@ class UltronService:
         if task is None or task["state"] != TaskState.READY:
             return
         mission = await self._get(task["mission_id"])
-        attempt = int(task["attempts"]) + 1
+        resuming = await self._resumable(task_id)
+        # A run that paused (AI route, restart) continues its attempt; it isn't a new one.
+        counted = not (resuming and int(task["attempts"]))
+        attempt = int(task["attempts"]) + (1 if counted else 0)
         await self._store.update_task(task_id, attempts=attempt, started_at=utcnow().isoformat())
         task["attempts"] = attempt
         await self._task_state(
@@ -669,6 +686,14 @@ class UltronService:
                 "budget",
                 f"The next step {exc}. Raise the mission budget to continue.",
             )
+        except AIPaused as exc:
+            # Checkpoint kept: the run continues where it stopped once a route is back. A pause
+            # is not a failed attempt, so the attempt counter goes back.
+            if counted:
+                await self._store.update_task(task_id, attempts=attempt - 1)
+                task["attempts"] = attempt - 1
+            await self._task_state(task, TaskState.READY, f"{task['key']} waits: AI route")
+            await self._block(mission["id"], "ai_route", f"AI paused — {exc.message}")
         except ModelError as exc:
             if exc.retryable:
                 await self._failed_attempt(task, f"Model call failed ({exc.message}).")
@@ -775,25 +800,34 @@ class UltronService:
                 return "criteria must be a list"
             return None
 
+        checkpoint = self._checkpoints(f"ultron:{task['id']}") if self._checkpoints else None
         try:
-            result = await run_agent(
-                model=model,
-                system=system,
-                opening=opening,
-                tools=definitions(scope.tools),
-                broker=broker,
-                validate=validate,
-                max_rounds=self.config()["max_rounds_per_run"],
-                gate=self._gate(mission["id"]).wait,
-                budget=await self._budget(mission["id"], agent),
-                on_usage=self._usage_sink(mission["id"], task["id"], run_id),
-            )
-        except asyncio.CancelledError:
-            await self._store.finish_run(run_id, state="INTERRUPTED", error="stopped")
+            with ai_scope("ultron", mission_id=mission["id"], task_id=task["id"], agent=agent):
+                result = await run_agent(
+                    model=model,
+                    system=system,
+                    opening=opening,
+                    tools=definitions(scope.tools),
+                    broker=broker,
+                    validate=validate,
+                    max_rounds=self.config()["max_rounds_per_run"],
+                    gate=self._gate(mission["id"]).wait,
+                    budget=await self._budget(mission["id"], agent),
+                    on_usage=self._usage_sink(mission["id"], task["id"], run_id),
+                    checkpoint=checkpoint,
+                )
+        except (asyncio.CancelledError, AIPaused) as exc:
+            # Paused or stopped: the checkpoint stays, the run continues later.
+            note = "stopped" if isinstance(exc, asyncio.CancelledError) else exc.message
+            await self._store.finish_run(run_id, state="INTERRUPTED", error=note)
             raise
         except Exception as exc:
             await self._store.finish_run(run_id, state="FAILED", error=str(exc)[:500])
+            if checkpoint is not None:
+                await checkpoint.clear()
             raise
+        if checkpoint is not None:
+            await checkpoint.clear()  # the run is over; another attempt starts fresh
         summary = str((result.final or {}).get("summary", ""))[:2000] or None
         await self._store.finish_run(
             run_id,
@@ -867,9 +901,11 @@ class UltronService:
         ws = self._workspace(mission)
         key, owner, contract = task["key"], task["owner"], task["contract"]
         tree = await ws.task_tree(key)
-        await ws.reset(key)
-        if int(task["attempts"]) > 1:
-            await ws.catch_up(key)
+        if not await self._resumable(task["id"]):
+            # A fresh attempt starts clean; a resumed run keeps the files its tools wrote.
+            await ws.reset(key)
+            if int(task["attempts"]) > 1:
+                await ws.catch_up(key)
         start = (await text(tree, "rev-parse", "HEAD")).strip()
         base = (await text(tree, "merge-base", "HEAD", ws.integration)).strip()
         extra = []
@@ -1346,6 +1382,7 @@ class UltronService:
         if mission["state"] == MissionState.BLOCKED and blocker.get("kind") in (
             "budget",
             "model",
+            "ai_route",
             "retries",
             "review_failed",
         ):
@@ -1365,6 +1402,18 @@ class UltronService:
         if not tasks and f"plan:{mission_id}" not in self._running:
             self._spawn(f"plan:{mission_id}", self._plan(mission_id))
         return await self.mission(mission_id)
+
+    async def on_ai_available(self) -> None:
+        """An AI route is back: missions paused for it continue from their checkpoints."""
+        for mission in await self._store.missions_in(MissionState.BLOCKED):
+            if (mission.get("blocker") or {}).get("kind") == "ai_route":
+                with contextlib.suppress(UltronError):
+                    await self.resume(mission["id"])
+
+    async def _resumable(self, task_id: str) -> bool:
+        if self._checkpoints is None:
+            return False
+        return await self._checkpoints(f"ultron:{task_id}").exists()
 
     async def set_budget(self, mission_id: str, usd: float) -> dict[str, Any]:
         mission = await self._get(mission_id)

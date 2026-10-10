@@ -1,9 +1,9 @@
 """Connects the brain to Claude while JARVIS runs — no file editing, no restart.
 
-``connect`` takes a pasted key, checks it against the provider, stores it in
-``jarvis/.env`` (owner-only) and swaps the brain's models. ``check`` verifies a
-key that came from the environment at startup, so a mistyped key shows up as
-*rejected* in the dashboard instead of failing on the first question.
+``connect`` takes a pasted key, checks it with a free model call, stores it in the OS
+keystore and rebuilds the brain's models through the AI router. ``check`` verifies a
+saved key at startup, so a mistyped key shows up as *rejected* in the dashboard instead
+of failing on the first question.
 
 The key itself is never logged, emitted or returned — only its last four
 characters (``key_hint``).
@@ -13,27 +13,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import asdict
-from pathlib import Path
-
-from pydantic import SecretStr
+from typing import TYPE_CHECKING
 
 from jarvis.core.brain import Brain, BrainStatus
 from jarvis.events.bus import EventBus
 from jarvis.events.types import EventType, Severity
 from jarvis.llm.base import ModelError
-from jarvis.llm.registry import ModelSet, anthropic_models, build_models
-from jarvis.settings import ModelSettings, write_dotenv_value
+from jarvis.llm.registry import ModelSet
+
+if TYPE_CHECKING:
+    from jarvis.ai.router import SmartRouter
 
 log = logging.getLogger("jarvis.brain")
 
-Verifier = Callable[[str, list[str]], Awaitable[None]]
-
 KEY_PREFIX = "sk-ant-"
 ENV_NAME = "ANTHROPIC_API_KEY"
-# Errors that say the key itself is unusable (vs. a network hiccup).
-_KEY_PROBLEMS = {"authentication", "permission", "model_not_found"}
 _QUOTES = "\"'\u201c\u201d\u2018\u2019"  # incl. smart quotes
 
 
@@ -59,99 +55,68 @@ def check_format(key: str) -> None:
         )
 
 
-async def _verify_with_anthropic(key: str, models: list[str]) -> None:
-    from jarvis.llm.anthropic_provider import verify_key
-
-    await verify_key(key, models)
-
-
 class BrainConnector:
+    """Connects the brain through the AI router (Settings → Brain and AI & Billing).
+
+    ``connect`` verifies a pasted key with a free model check and stores it in the OS
+    keystore (never in a file); the brain then uses whatever route the router allows —
+    the Claude plan first, the API only after paid fallback is approved.
+    """
+
     def __init__(
         self,
         *,
-        settings: ModelSettings,
+        router: SmartRouter,
         brain: Brain,
         bus: EventBus,
-        env_file: Path,
-        verifier: Verifier | None = None,
-        build: Callable[[ModelSettings], ModelSet] = build_models,
+        models: Callable[[], ModelSet],
     ) -> None:
-        self._settings = settings
+        self._router = router
         self._brain = brain
         self._bus = bus
-        self._env_file = env_file
-        self._verify = verifier or _verify_with_anthropic
-        self._build = build
+        self._models = models
         self._lock = asyncio.Lock()
 
-    @property
-    def env_file(self) -> Path:
-        return self._env_file
-
-    @property
-    def settings(self) -> ModelSettings:
-        """Current model settings, including a key connected while running."""
-        return self._settings
-
     async def connect(self, raw_key: str) -> BrainStatus:
-        """Verify, persist and activate a key. Raises ``ModelError`` and changes
-        nothing when the key is malformed, rejected or cannot be stored."""
+        """Verify, store and activate a key. Raises ``ModelError`` and changes nothing
+        when the key is malformed, rejected or cannot be stored."""
         key = normalize_key(raw_key)
         check_format(key)
-        model_ids = anthropic_models(self._settings)
-        if not model_ids:
-            raise ModelError(
-                "not_configured",
-                "No Claude model is configured.",
-                suggestion="Set the fast and reasoning models in config/models.yaml.",
-            )
-        async with self._lock:
-            await self._verify(key, model_ids)
-            try:
-                write_dotenv_value(self._env_file, ENV_NAME, key)
-            except OSError as exc:
-                raise ModelError(
-                    "save_failed",
-                    f"The key works, but I couldn't save it to {self._env_file}.",
-                    suggestion="Check that the folder is writable, then try again.",
-                    detail=str(exc),
-                ) from exc
-            self._settings = self._settings.model_copy(update={"anthropic_api_key": SecretStr(key)})
-            models = self._build(self._settings)
-            self._brain.set_models(models)
+        async with self._lock:  # one key change at a time
+            await self._router.connect_key(key)
+        self._brain.set_models(self._models())
         status = self._brain.status
-        model = models.for_mode("fast")
         log.info("API key connected", extra={"key_hint": status.key_hint})
-        await self._announce(
-            f"Brain connected — {model.label if model else 'Claude'}", Severity.IMPORTANT, status
+        message = (
+            "Brain connected"
+            if status.available
+            else "API key saved — approve paid fallback or connect your Claude plan"
         )
+        await self._announce(message, Severity.IMPORTANT, status)
         return status
 
     async def check(self) -> None:
-        """Verify the key loaded at startup. A key the provider rejects takes the
-        brain offline with the reason; network problems leave it as is."""
-        secret = self._settings.anthropic_api_key
-        if secret is None or not self._brain.available:
-            return
+        """Verify a saved key in the background (free model check). A rejected key shows
+        up as such; network problems change nothing."""
         try:
-            await self._verify(secret.get_secret_value(), anthropic_models(self._settings))
-        except ModelError as exc:
-            if exc.code not in _KEY_PROBLEMS:
-                log.warning("could not verify the API key: %s", exc.message)
-                return
-            async with self._lock:
-                if self._settings.anthropic_api_key is not secret:
-                    return  # a new key was connected meanwhile
-                hint = self._brain.status.key_hint
-                reason = f"{exc.message} {exc.suggestion or ''}".strip()
-                self._brain.set_models(ModelSet(None, None, reason, key_hint=hint))
-            log.warning("reasoning offline: %s", exc.message, extra={"key_hint": hint})
-            await self._announce(exc.message, Severity.WARNING, self._brain.status)
-            return
+            await self._router.check("api")
         except Exception as exc:  # never let a background check crash anything
             log.warning("could not verify the API key: %s", type(exc).__name__)
             return
-        log.info("API key verified", extra={"key_hint": self._brain.status.key_hint})
+        await self.refresh()
+
+    async def refresh(self) -> None:
+        """Rebuild the brain's models after a routing change; announce real changes."""
+        # No lock: called from routing events, possibly while connect() holds it.
+        before = self._brain.status
+        self._brain.set_models(self._models())
+        after = self._brain.status
+        if asdict(before) != asdict(after):
+            await self._announce(
+                "Brain online" if after.available else (after.reason or "Brain offline"),
+                Severity.INFO,
+                after,
+            )
 
     async def _announce(self, message: str, severity: Severity, status: BrainStatus) -> None:
         await self._bus.emit(

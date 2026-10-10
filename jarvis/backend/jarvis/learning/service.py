@@ -50,7 +50,15 @@ ENABLED = "learning.enabled"
 STALL_SINCE = "learning.stall_since"
 FOCUS = "learning.focus"
 MAX_FOCUS = 1500
-_RETRYABLE = {"rate_limited", "overloaded", "timeout", "connection", "server_error"}
+# ai_paused: no AI route right now (jarvis.ai) — look again in 5 minutes.
+_RETRYABLE = {
+    "rate_limited",
+    "overloaded",
+    "timeout",
+    "connection",
+    "server_error",
+    "ai_paused",
+}
 _SYNC_EVERY = 12 * 3600
 _NOTE_REF = re.compile(r"^[Nn]?(\d+)$")
 WEB_SEARCH_TOOL = "web_search_20250305"
@@ -450,7 +458,7 @@ class LearningService:
                 searches += reply.usage.web_searches
                 await self._journal.add_usage(
                     round_id,
-                    cost=self._cost(reply.usage),
+                    cost=self._cost(reply.usage) if reply.route == "api" else 0.0,
                     input_tokens=reply.usage.input_tokens
                     + reply.usage.cache_read_tokens
                     + reply.usage.cache_write_tokens,
@@ -548,6 +556,11 @@ class LearningService:
                 system=SYSTEM_PROMPT, messages=messages, tools=TOOLS, server_tools=server_tools
             )
         except ModelError as exc:
+            if server_tools and exc.code == "capability":
+                # This route (e.g. the Claude plan) can't search: this call goes without it.
+                return await model.complete(
+                    system=SYSTEM_PROMPT, messages=messages, tools=TOOLS, server_tools=[]
+                )
             if server_tools and exc.code in ("bad_request", "permission") and _mentions_search(exc):
                 log.warning("web search isn't available for this key; continuing without it")
                 self._web_search = False

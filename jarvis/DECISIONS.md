@@ -160,6 +160,48 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-030 — Smart AI routing: Claude plan first, paid API only within approved caps, then local / pause
+
+- **Decision:** All model calls go through one `SmartRouter` (`backend/jarvis/ai/`). This covers
+  the brain, Learning, Bot Lab, the QuantLab architect and missions, and all ULTRON agents.
+  - **Routes, in the owner's order:**
+    1. The **Claude plan** via the official Claude Code CLI (`claude -p`) under the owner's own
+       claude.ai sign-in, with an allow-listed environment and Claude Code's own tools, MCP and
+       sessions switched off. JARVIS executes tools itself, behind its permission gates.
+    2. The **Claude API** via the official SDK, with the key in the OS keystore. Only after an
+       explicit one-time approval with a monthly budget, a per-mission cap, warnings, a
+       concurrency limit and stop-at-budget.
+    3. A **local model** (Ollama), for conversation only.
+  - **Otherwise the work pauses.** ULTRON tasks keep a checkpoint and a tool ledger and resume
+    without repeating a tool; QuantLab stages re-run; the brain says it is paused.
+  - **Failure handling.** Temporary errors are retried with backoff and never trigger paid use.
+    Plan limit, sign-in, key, credit and policy errors fail over. Capability mismatches are not
+    degraded silently.
+  - **Accounting.** Every call is booked in an append-only usage ledger. Approvals are
+    append-only. `ai.route` events drive a top-bar chip and Settings → AI & Billing.
+- **Reason:** The owner's brief (`docs/AI_ROUTING_DIRECTIVE.md`): keep working on the plan
+  they already pay for, fall back to the API only within limits they set, never invent
+  balances, and stay within Anthropic's terms. Anthropic documents `claude -p` and the Agent
+  SDK as usable with plan limits, but forbids identity misrepresentation and third-party
+  traffic on plans. Hence the official binary only, the `claude.ai` sign-in only, and a
+  personal-use confirmation.
+- **Alternatives considered:**
+  - Reading Claude Code's OAuth token and calling the API with it. Rejected: token copying and
+    client imitation are prohibited.
+  - The Agent SDK as a Python dependency. Rejected: it adds a bundled CLI and a second auth
+    path for the same official binary.
+  - Auto-enabling API fallback. Rejected: the owner wants explicit approval.
+  - Showing plan usage as a percentage. Rejected: there is no official interface.
+- **Consequences:**
+  - After this update the brain is offline until the plan route is turned on or paid fallback
+    is approved.
+  - An API key in `jarvis/.env` moves into the Keychain at the first start. The connect form
+    stores keys there too.
+  - Images and web search are API-only, so on the plan they are a capability mismatch.
+  - The plan route needs Claude Code installed and signed in on the Mac.
+  - Per-mission budgets of ULTRON and QuantLab now count only billed (API) calls.
+- **Date:** 2026-10-10
+
 ## D-029 — QuantLab 3.0 Idea-to-Edge: sources → blueprint → research missions → evolution
 
 - **Decision:** QuantLab opens on an **Idea Inbox**. A strategy idea arrives as a saved

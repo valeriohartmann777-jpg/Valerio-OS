@@ -933,6 +933,98 @@ MIGRATIONS: list[list[str]] = [
         "CREATE INDEX idx_qm_events_mission ON qm_events(mission_id, id)",
         "CREATE INDEX idx_qm_trials_family ON qm_trials(family_id)",
     ],
+    # 15 — AI routing & billing: the owner's routing settings, append-only approvals,
+    # usage ledger and routing events; checkpoints and a tool-action ledger so paused or
+    # interrupted agent runs continue without repeating a tool call
+    [
+        """
+        CREATE TABLE ai_settings (
+            id          INTEGER PRIMARY KEY CHECK (id = 1),
+            data        TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE ai_approvals (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind    TEXT NOT NULL,
+            detail  TEXT NOT NULL,
+            at      TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE ai_usage (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            at                  TEXT NOT NULL,
+            month               TEXT NOT NULL,
+            provider            TEXT NOT NULL,
+            model               TEXT NOT NULL,
+            consumer            TEXT NOT NULL,
+            agent               TEXT,
+            mission_id          TEXT,
+            task_id             TEXT,
+            input_tokens        INTEGER NOT NULL DEFAULT 0,
+            output_tokens       INTEGER NOT NULL DEFAULT 0,
+            cache_read_tokens   INTEGER NOT NULL DEFAULT 0,
+            cache_write_tokens  INTEGER NOT NULL DEFAULT 0,
+            cost_usd            REAL NOT NULL DEFAULT 0,
+            billed              INTEGER NOT NULL DEFAULT 0,
+            list_cost_usd       REAL,
+            outcome             TEXT NOT NULL,
+            failure             TEXT,
+            latency_ms          INTEGER
+        )
+        """,
+        """
+        CREATE TABLE ai_events (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            at        TEXT NOT NULL,
+            kind      TEXT NOT NULL,
+            provider  TEXT,
+            message   TEXT NOT NULL,
+            data      TEXT
+        )
+        """,
+        """
+        CREATE TABLE ai_checkpoints (
+            key         TEXT PRIMARY KEY,
+            messages    TEXT NOT NULL,
+            rounds      INTEGER NOT NULL,
+            updated_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE ai_tool_ledger (
+            key           TEXT NOT NULL,
+            call_id       TEXT NOT NULL,
+            name          TEXT NOT NULL,
+            input_sha256  TEXT NOT NULL,
+            content       TEXT NOT NULL,
+            is_error      INTEGER NOT NULL,
+            at            TEXT NOT NULL,
+            PRIMARY KEY (key, call_id)
+        )
+        """,
+        """
+        CREATE TRIGGER ai_approvals_no_update BEFORE UPDATE ON ai_approvals
+        BEGIN SELECT RAISE(ABORT, 'approvals are append-only'); END
+        """,
+        """
+        CREATE TRIGGER ai_approvals_no_delete BEFORE DELETE ON ai_approvals
+        BEGIN SELECT RAISE(ABORT, 'approvals are append-only'); END
+        """,
+        """
+        CREATE TRIGGER ai_usage_no_update BEFORE UPDATE ON ai_usage
+        BEGIN SELECT RAISE(ABORT, 'the usage ledger is append-only'); END
+        """,
+        """
+        CREATE TRIGGER ai_usage_no_delete BEFORE DELETE ON ai_usage
+        BEGIN SELECT RAISE(ABORT, 'the usage ledger is append-only'); END
+        """,
+        "CREATE INDEX idx_ai_usage_month ON ai_usage(month, provider)",
+        "CREATE INDEX idx_ai_usage_mission ON ai_usage(mission_id)",
+        "CREATE INDEX idx_ai_events_at ON ai_events(id)",
+    ],
 ]
 
 

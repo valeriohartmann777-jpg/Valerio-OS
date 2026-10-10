@@ -2,8 +2,9 @@ import { HAS_TITLEBAR_OVERLAY, HAS_TRAFFIC_LIGHTS } from "../lib/config";
 import { clock } from "../lib/format";
 import type { View } from "../store/reducer";
 import { dispatch, useJarvis, useNow } from "../store/store";
+import { ROUTE_VIEW, useAiStatus } from "./settings/AiBilling";
 import { UpdateButton } from "./UpdateControls";
-import { StatusDot, cx } from "./ui/primitives";
+import { StatusDot, cx, textTone } from "./ui/primitives";
 
 const CONNECTION = {
   online: { text: "System online", tone: "success" as const },
@@ -66,6 +67,7 @@ export function TopBar() {
 
       <div className="ml-auto flex items-center gap-5">
         <UpdateButton />
+        <AiRouteChip />
         {simulated && (
           <span
             className="rounded-md border border-warning/30 px-2 py-0.5 font-mono text-2xs tracking-wider text-warning uppercase"
@@ -96,6 +98,29 @@ function NavItem({ active, view, children }: { active: boolean; view: View; chil
       )}
     >
       {children}
+    </button>
+  );
+}
+
+/** Which route AI work takes right now (Claude plan / API / local / paused) — opens AI & Billing. */
+function AiRouteChip() {
+  const [status] = useAiStatus();
+  if (!status) return null;
+  const view = ROUTE_VIEW[status.current.route];
+  return (
+    <button
+      type="button"
+      onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
+      title={`${status.current.label}: ${status.current.reason}`}
+      data-testid="ai-route-chip"
+      data-route={status.current.route}
+      className={cx(
+        "no-drag inline-flex items-center gap-1.5 rounded-md border border-current/25 px-2 py-0.5 font-mono text-2xs tracking-wider uppercase",
+        textTone(view.tone),
+      )}
+    >
+      <span aria-hidden>{view.icon}</span>
+      AI · {view.text}
     </button>
   );
 }

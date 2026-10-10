@@ -732,6 +732,31 @@ ideas/dossier.py     Markdown + JSON dossier (source facts / test facts / interp
 - Detail: `docs/quantlab/IDEA_TO_EDGE_SPEC.md`, `SOURCE_PROVENANCE_CONTRACT.md`,
   `ULTRON_QUANT_PROTOCOL.md`.
 
+## 13j. AI routing & billing (`backend/jarvis/ai/`)
+
+Every model request goes through `SmartRouter` (D-030). The route order is:
+
+1. Claude plan (official `claude -p` under the owner's claude.ai sign-in, isolated environment,
+   tools executed by JARVIS);
+2. Claude API (key in the OS keystore, only within approved caps);
+3. local model (conversation only);
+4. pause.
+
+Consumers declare a capability via `RoleSpec`. The router handles the following:
+
+- Errors are classified as temporary (retry, never pay) or failover reasons; capability
+  mismatches go back to the caller.
+- A run is pinned to the route it failed over to.
+- Every call is booked in `ai_usage`; approvals go to `ai_approvals` (append-only).
+- `ai.route` events are emitted.
+
+ULTRON runs keep checkpoints and a tool ledger (`ai_checkpoints`, `ai_tool_ledger`), so a paused
+task resumes without repeating a tool. ULTRON and QuantLab missions block on `ai_route` /
+`AI_PAUSED` and resume automatically when the probe loop sees a route again.
+
+UI: Settings → AI & Billing and the top-bar route chip. Details:
+`docs/AI_ROUTING_ARCHITECTURE.md`, `docs/AI_BILLING_POLICY.md`, `docs/AI_FALLBACK_RUNBOOK.md`.
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

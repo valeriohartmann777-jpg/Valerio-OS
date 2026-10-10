@@ -7,7 +7,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from jarvis.llm.base import ChatModel, ToolDefinition, ToolOutcome, Usage
+from jarvis.ai import messages as msg
+from jarvis.ai.checkpoint import RunCheckpoint
+from jarvis.llm.base import ChatModel, ToolCall, ToolDefinition, ToolOutcome, Usage
 from jarvis.settings import ModelPrice
 from jarvis.ultron.tools import FINAL_TOOLS, Broker
 
@@ -67,6 +69,26 @@ Validator = Callable[[str, dict[str, Any]], str | None]
 UsageSink = Callable[[Usage, float], Awaitable[None]]
 
 
+def _will_pay(model: ChatModel, messages: list[Any]) -> bool:
+    """Routed models know whether the next call goes to the paid API; others always pay."""
+    probe = getattr(model, "will_pay", None)
+    return True if probe is None else bool(probe(messages))
+
+
+def _pending(messages: list[Any]) -> list[ToolCall]:
+    """Tool calls of a saved last assistant turn whose results were never appended."""
+    if not messages:
+        return []
+    role, blocks = msg.blocks_of(messages[-1])
+    if role != "assistant":
+        return []
+    return [
+        ToolCall(id=str(b.get("id")), name=str(b.get("name")), input=dict(b.get("input") or {}))
+        for b in blocks
+        if b.get("type") == "tool_use"
+    ]
+
+
 async def run_agent(
     *,
     model: ChatModel,
@@ -80,39 +102,28 @@ async def run_agent(
     budget: Budget,
     on_usage: UsageSink,
     final_tools: frozenset[str] | None = None,
+    checkpoint: RunCheckpoint | None = None,
 ) -> AgentResult:
+    """With a ``checkpoint`` the run survives pauses and restarts: the conversation is saved
+    after every reply and every round of results, and tool calls that already ran are
+    answered from the tool-action ledger instead of running again."""
     result = AgentResult()
     names = {t.name for t in tools}
     finals = FINAL_TOOLS if final_tools is None else final_tools
     messages: list[Any] = [model.user_message([opening])]
+    saved = await checkpoint.load() if checkpoint is not None else None
+    if saved is not None:
+        messages, result.rounds = saved
     nudges = 0
-    while result.rounds < max_rounds:
-        await gate()  # a paused mission waits here, between steps
-        await budget.check(system, messages)
-        reply = await model.complete(system=system, messages=messages, tools=tools)
-        result.rounds += 1
-        cost = budget.cost(reply.usage)
-        result.usage = result.usage + reply.usage
-        result.cost += cost
-        await on_usage(reply.usage, cost)
-        messages.append(reply.assistant_message)
-        if reply.text:
-            result.text = reply.text
-        if not reply.tool_calls:
-            nudges += 1
-            if nudges > 2:
-                result.error = "stopped without submitting a result"
-                return result
-            hint = (
-                "Your reply was cut off; continue in smaller steps."
-                if reply.stop_reason == "max_tokens"
-                else "Continue with your tools; finish by calling your submit tool."
-            )
-            messages.append(model.user_message([hint]))
-            continue
+
+    async def save() -> None:
+        if checkpoint is not None:
+            await checkpoint.save(messages, result.rounds)
+
+    async def handle(calls: list[ToolCall]) -> tuple[str, dict[str, Any]] | None:
         outcomes: list[ToolOutcome] = []
         done: tuple[str, dict[str, Any]] | None = None
-        for call in reply.tool_calls:
+        for call in calls:
             result.tool_calls += 1
             if call.name in finals:
                 if call.name not in names:
@@ -127,9 +138,52 @@ async def run_agent(
             elif broker is None:
                 outcomes.append(ToolOutcome(call.id, f"{call.name} isn't available here.", True))
             else:
-                content, is_error = await broker.execute(call)
+                recorded = await checkpoint.recorded(call.id) if checkpoint is not None else None
+                if recorded is not None:
+                    content, is_error = recorded  # ran before the pause: never twice
+                else:
+                    content, is_error = await broker.execute(call)
+                    if checkpoint is not None:
+                        await checkpoint.record(call.id, call.name, call.input, content, is_error)
                 outcomes.append(ToolOutcome(call.id, content, is_error))
         messages.append(model.tool_results(outcomes))
+        await save()
+        return done
+
+    if saved is not None and (pending := _pending(messages)):
+        done = await handle(pending)
+        if done is not None:
+            result.final_tool, result.final = done
+            return result
+    while result.rounds < max_rounds:
+        await gate()  # a paused mission waits here, between steps
+        if _will_pay(model, messages):
+            await budget.check(system, messages)
+        reply = await model.complete(system=system, messages=messages, tools=tools)
+        result.rounds += 1
+        # Only the Claude API is billed per token; plan, local and test routes cost nothing.
+        cost = budget.cost(reply.usage) if reply.route == "api" else 0.0
+        result.usage = result.usage + reply.usage
+        result.cost += cost
+        await on_usage(reply.usage, cost)
+        messages.append(reply.assistant_message)
+        await save()
+        if reply.text:
+            result.text = reply.text
+        if not reply.tool_calls:
+            nudges += 1
+            if nudges > 2:
+                result.error = "stopped without submitting a result"
+                return result
+            hint = (
+                "Your reply was cut off; continue in smaller steps."
+                if reply.stop_reason == "max_tokens"
+                else "Continue with your tools; finish by calling your submit tool."
+            )
+            messages.append(model.user_message([hint]))
+            await save()
+            continue
+        done = await handle(reply.tool_calls)
         if done is not None:
             result.final_tool, result.final = done
             return result

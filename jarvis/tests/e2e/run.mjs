@@ -15,7 +15,7 @@
  */
 
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -30,6 +30,24 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 process.env.JARVIS_BRIEFING = "off";
 process.env.JARVIS_TRAINING = "off";
 const appDir = path.join(root, "apps", "desktop");
+const python = path.join(
+  root, "backend", ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
+);
+// AI routing: a memory keystore (labelled in the UI; never the OS keychain here) and a
+// stand-in for Claude Code's `claude` binary (tests/fixtures/ai/fake_claude.py, labelled as a
+// custom binary) — no JARVIS started here can reach a real Claude plan or the paid API.
+process.env.JARVIS_AI_KEYSTORE = "memory";
+const fakeClaudeHome = mkdtempSync(path.join(tmpdir(), "jarvis-e2e-claude-"));
+const fakeClaude = path.join(fakeClaudeHome, "claude");
+const fakeClaudeConfig = (config) =>
+  writeFileSync(path.join(fakeClaudeHome, ".fake-claude.json"), JSON.stringify(config));
+fakeClaudeConfig({ mode: "ok" });
+writeFileSync(
+  fakeClaude,
+  `#!/bin/sh\nHOME='${fakeClaudeHome}' exec '${python}' '${path.join(root, "backend", "tests", "fixtures", "ai", "fake_claude.py")}' "$@"\n`,
+  { mode: 0o755 },
+);
+process.env.JARVIS_AI_CLI = fakeClaude;
 const outDir = path.resolve(process.argv[2] ?? path.join(root, "tests", "e2e", "output"));
 const backendUrl = "http://127.0.0.1:8799";
 mkdirSync(outDir, { recursive: true });
@@ -47,9 +65,6 @@ const step = async (name, fn) => {
 };
 
 // A backend from an "older version" already occupies the port — the app must replace it.
-const python = path.join(
-  root, "backend", ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
-);
 const stale = spawn(python, ["-m", "jarvis"], {
   cwd: path.join(root, "backend"),
   env: {
@@ -626,6 +641,79 @@ try {
     await page.getByTestId("briefing-next").filter({ hasText: ":00" }).waitFor();
     await page.getByTestId("briefing-toggle").click(); // back off: no real market data here
     await page.getByTestId("briefing-toggle").and(page.locator('[aria-checked="false"]')).waitFor();
+    await page.getByRole("button", { name: "Home" }).click();
+  });
+
+  await step("AI & Billing: plan first (test stand-in), its limit pauses the brain, paid fallback only with explicit caps", async () => {
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("ai-billing").waitFor();
+    // Defaults: nothing connected, paid fallback OFF, test keystore and stand-in binary labelled.
+    await page.getByTestId("ai-route-chip").and(page.locator('[data-route="paused"]')).waitFor();
+    await page.getByTestId("ai-paid-state").filter({ hasText: "Off" }).waitFor();
+    await page.getByTestId("ai-test-keystore").waitFor();
+    await page.getByTestId("ai-plan-binary").filter({ hasText: "JARVIS_AI_CLI" }).waitFor();
+    assert.equal(await page.getByTestId("ai-plan-enable").isDisabled(), true, "personal use must be confirmed first");
+    await page.getByTestId("ai-paid-budget").fill("20");
+    await page.getByTestId("ai-paid-cap").fill("5");
+    assert.equal(await page.getByTestId("ai-paid-approve").isDisabled(), true, "paid needs the explicit confirmation");
+
+    // The owner confirms personal use → the plan route (stand-in "claude" signed in via claude.ai).
+    await page.getByTestId("ai-plan-personal").check();
+    await page.getByTestId("ai-plan-enable").click();
+    await page.getByTestId("ai-plan-status").and(page.locator('[data-state="CONNECTED"]')).waitFor();
+    await page.getByTestId("ai-route-chip").and(page.locator('[data-route="plan"]')).waitFor();
+    await page.getByTestId("ai-current").filter({ hasText: "Claude plan" }).waitFor();
+    await page.getByTestId("brain-status").filter({ hasText: "via Claude plan" }).waitFor();
+    await page.waitForTimeout(300);
+    await shot("10g-ai-billing-plan");
+
+    await page.getByRole("button", { name: "Home" }).click();
+    fakeClaudeConfig({ mode: "ok", structured: { text: "Answered on your Claude plan (test stand-in).", tool_calls: [] } });
+    await command("plan my evening");
+    await reply("Answered on your Claude plan (test stand-in).").waitFor();
+
+    // The plan's usage limit: paid fallback isn't approved, local is off → the brain pauses honestly.
+    fakeClaudeConfig({ mode: "limit" });
+    await command("plan my weekend");
+    await reply("My AI is paused right now.").waitFor();
+    await page.getByTestId("ai-route-chip").and(page.locator('[data-route="paused"]')).waitFor();
+    const log = readFileSync(path.join(fakeClaudeHome, ".fake-claude-log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    for (const call of log) {
+      for (const name of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]) {
+        assert.ok(!call.env.includes(name), `${name} reached Claude Code`);
+      }
+    }
+    const asks = log.filter((call) => call.args[0] === "-p");
+    assert.ok(asks.length >= 2 && asks.every((call) => call.args.includes("--safe-mode") && call.args.includes("--no-session-persistence")));
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("ai-plan-status").and(page.locator('[data-state="LIMIT_REACHED"]')).waitFor();
+    await page.getByTestId("ai-current-reason").filter({ hasText: "usage limit" }).waitFor();
+    await page.getByTestId("ai-events").filter({ hasText: "limit" }).waitFor();
+    await page.getByTestId("ai-billing").evaluate((el) => el.scrollIntoView({ block: "start" }));
+    await page.waitForTimeout(300);
+    await shot("10h-ai-billing-limit");
+    // Approve paid fallback with caps — still no API key, so nothing can be billed.
+    await page.getByTestId("ai-paid-budget").fill("20");
+    await page.getByTestId("ai-paid-cap").fill("5");
+    await page.getByTestId("ai-paid-confirm").check();
+    await page.getByTestId("ai-paid-approve").click();
+    await page.getByTestId("ai-paid-state").filter({ hasText: "On" }).waitFor();
+    await page.getByTestId("ai-paid-meter").filter({ hasText: "$0.00 of $20.00" }).waitFor();
+    await page.getByTestId("ai-current-reason").filter({ hasText: "no API key" }).waitFor();
+    await page.getByTestId("ai-paid-state").evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await page.waitForTimeout(300);
+    await shot("10i-ai-billing-paid");
+    const usage = await fetch(`${backendUrl}/ai/usage`).then((r) => r.json());
+    assert.ok(usage.approvals.some((a) => a.kind === "paid_approved"), "the approval is logged");
+    assert.ok(usage.calls.every((c) => c.billed === 0), "nothing was billed");
+
+    // Back to the defaults for the rest of the run.
+    await page.getByTestId("ai-paid-disable").click();
+    await page.getByTestId("ai-paid-state").filter({ hasText: "Off" }).waitFor();
+    await page.getByTestId("ai-plan-disable").click();
+    await page.getByTestId("ai-plan-enable").waitFor();
+    fakeClaudeConfig({ mode: "ok" });
     await page.getByRole("button", { name: "Home" }).click();
   });
 

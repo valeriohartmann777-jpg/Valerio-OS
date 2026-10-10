@@ -1,9 +1,7 @@
-"""Connecting the brain from the dashboard: verify → store in .env → switch on."""
+"""Connecting the brain from the dashboard: verify → OS keystore → route (D-030)."""
 
 from __future__ import annotations
 
-import stat
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +11,8 @@ from pydantic import SecretStr
 
 from jarvis.api.app import create_app
 from jarvis.core.connector import normalize_key
-from jarvis.events.types import EventType, Severity
+from jarvis.events.types import EventType
 from jarvis.llm.base import ModelError
-from jarvis.llm.registry import ModelSet, build_models
 from jarvis.runtime import Runtime
 from jarvis.settings import Settings, read_dotenv, write_dotenv_value
 from tests.conftest import Recorder, make_settings
@@ -59,9 +56,19 @@ def test_normalize_accepts_what_people_paste(raw: str) -> None:
     assert normalize_key(raw) == KEY
 
 
-async def test_connect_verifies_stores_and_switches_the_brain_on(settings: Settings) -> None:
+PAID = {"monthly_budget_usd": 20.0, "per_mission_cap_usd": 5.0}
+
+
+async def approve(rt: Runtime) -> None:
+    await rt.ai.approve_paid(PAID, confirm=True)
+    await rt.refresh_brain()
+
+
+async def test_connect_verifies_stores_in_the_keystore_and_needs_approval(
+    settings: Settings,
+) -> None:
     env = settings.env_file
-    env.write_text("# mine\nJARVIS_LOG_LEVEL=DEBUG\nANTHROPIC_API_KEY=sk-ant-old\n")
+    env.write_text("# mine\nJARVIS_LOG_LEVEL=DEBUG\n")
     verifier = FakeVerifier()
     rt = await started(settings, verifier)
     try:
@@ -71,19 +78,18 @@ async def test_connect_verifies_stores_and_switches_the_brain_on(settings: Setti
         status = await rt.connector.connect(f"ANTHROPIC_API_KEY={KEY}")
 
         assert verifier.calls == [(KEY, ["claude-sonnet-5-5", "claude-opus-5-5"])]
-        assert status.available and status.fast_model == "claude-sonnet-5-5"
-        assert status.key_hint == "AbCd"
-        assert rt.brain.available
-        # Old definition replaced in place, everything else kept.
-        assert env.read_text() == f"# mine\nJARVIS_LOG_LEVEL=DEBUG\nANTHROPIC_API_KEY={KEY}\n"
-        assert read_dotenv(env)["ANTHROPIC_API_KEY"] == KEY
-        if sys.platform != "win32":
-            assert stat.S_IMODE(env.stat().st_mode) == 0o600
+        # Stored in the keystore, never in a file; the .env file is untouched.
+        assert rt.ai_keys.source() == "keystore" and rt.ai_keys.get() == KEY
+        assert env.read_text() == "# mine\nJARVIS_LOG_LEVEL=DEBUG\n"
+        # A saved key alone never spends money: paid fallback needs the owner's approval.
+        assert not status.available and status.key_hint == "AbCd"
+        assert "isn't approved" in (status.reason or "")
 
-        [event] = events.of(EventType.BRAIN_CHANGED)
-        assert event.message == "Brain connected — Claude Sonnet 5.5"
-        assert event.payload["brain"]["available"] is True
-        assert KEY not in event.model_dump_json()
+        await approve(rt)
+        assert rt.brain.available
+        assert rt.brain.status.fast_model == "claude-sonnet-5-5"
+        changed = events.of(EventType.BRAIN_CHANGED)
+        assert changed and all(KEY not in e.model_dump_json() for e in events.events)
     finally:
         await rt.stop()
 
@@ -95,6 +101,7 @@ async def test_rejected_key_changes_nothing(settings: Settings) -> None:
             await rt.connector.connect(KEY)
         assert info.value.code == "authentication"
         assert not settings.env_file.exists()
+        assert rt.ai_keys.get() is None
         assert not rt.brain.available
     finally:
         await rt.stop()
@@ -115,40 +122,41 @@ async def test_malformed_keys_are_refused_before_any_network_call(
         await rt.stop()
 
 
-def keyed_models(settings: Settings) -> ModelSet:
-    return build_models(settings.models.model_copy(update={"anthropic_api_key": SecretStr(KEY)}))
+def with_env_key(tmp_path: Path) -> Settings:
+    settings = make_settings(tmp_path)
+    return settings.model_copy(
+        update={"models": settings.models.model_copy(update={"anthropic_api_key": SecretStr(KEY)})}
+    )
 
 
 async def test_startup_check_takes_a_rejected_key_offline(tmp_path: Path) -> None:
-    settings = make_settings(tmp_path)
-    settings = settings.model_copy(
-        update={"models": settings.models.model_copy(update={"anthropic_api_key": SecretStr(KEY)})}
-    )
-    rt = Runtime(settings, key_verifier=FakeVerifier(REJECTED))
-    events = Recorder(rt.bus)
-    assert rt.brain.available
+    verifier = FakeVerifier()
+    rt = Runtime(with_env_key(tmp_path), key_verifier=verifier)
     await rt.start()
     try:
+        await approve(rt)
+        assert rt.brain.available
+        events = Recorder(rt.bus)
+        verifier.error = REJECTED
         await rt.connector.check()
         status = rt.brain.status
         assert not status.available
         assert status.key_hint == "AbCd"
-        assert status.reason == "The API key was rejected. Paste a new one."
-        [event] = events.of(EventType.BRAIN_CHANGED)
-        assert event.severity == Severity.WARNING
+        assert "rejected" in (status.reason or "")
+        assert events.of(EventType.BRAIN_CHANGED)
     finally:
         await rt.stop()
 
 
 async def test_startup_check_keeps_the_brain_when_offline(tmp_path: Path) -> None:
-    settings = make_settings(tmp_path)
-    settings = settings.model_copy(
-        update={"models": settings.models.model_copy(update={"anthropic_api_key": SecretStr(KEY)})}
-    )
-    no_network = ModelError("connection", "I can't reach the model provider.", retryable=True)
-    rt = Runtime(settings, key_verifier=FakeVerifier(no_network))
+    verifier = FakeVerifier()
+    rt = Runtime(with_env_key(tmp_path), key_verifier=verifier)
     await rt.start()
     try:
+        await approve(rt)
+        verifier.error = ModelError(
+            "connection", "I can't reach the model provider.", retryable=True
+        )
         await rt.connector.check()
         assert rt.brain.available
     finally:
@@ -180,8 +188,12 @@ def test_api_connects_and_explains_failures(settings: Settings) -> None:
         ok = client.post("/brain/key", json={"api_key": KEY})
         assert ok.status_code == 200
         body = ok.json()
-        assert body["available"] is True and body["key_hint"] == "AbCd"
+        assert body["key_hint"] == "AbCd" and body["available"] is False  # not approved yet
         assert KEY not in ok.text
+        # Paid fallback needs confirm: true — and only the owner's UI sends it.
+        assert client.post("/ai/paid", json=PAID).status_code == 422
+        approved = client.post("/ai/paid", json={**PAID, "confirm": True})
+        assert approved.status_code == 200 and KEY not in approved.text
         assert client.get("/snapshot").json()["brain"]["available"] is True
 
 

@@ -62,6 +62,11 @@ class ModelReply:
     assistant_message: Any  # provider-native, appended to the conversation verbatim
     model: str
     usage: Usage = field(default_factory=Usage)
+    # Which route served the call: "api" (billed per token), "plan" (Claude subscription via
+    # Claude Code), "local" (a model on this computer) or "test" (scripted).
+    route: str = "api"
+    # What the call would cost at API list prices (informational; only "api" is billed).
+    list_cost_usd: float | None = None
 
 
 ModelErrorCode = Literal[
@@ -78,6 +83,13 @@ ModelErrorCode = Literal[
     "server_error",
     "timeout",
     "connection",
+    # AI routing (jarvis.ai): subscription limit, sign-in, capability and pause reasons.
+    "plan_limit",
+    "not_logged_in",
+    "policy",
+    "capability",
+    "budget",
+    "ai_paused",
 ]
 
 
@@ -92,6 +104,7 @@ class ModelError(Exception):
         suggestion: str | None = None,
         retryable: bool = False,
         detail: str | None = None,
+        retry_after: float | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -99,6 +112,7 @@ class ModelError(Exception):
         self.suggestion = suggestion
         self.retryable = retryable
         self.detail = detail
+        self.retry_after = retry_after  # seconds, when the provider said so (Retry-After)
 
 
 class ChatModel(Protocol):

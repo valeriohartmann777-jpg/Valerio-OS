@@ -63,6 +63,7 @@ class EventType(StrEnum):
     ULTRON_ACTIVITY = "ultron.activity"
     ULTRON_APPROVAL_CHANGED = "ultron.approval.changed"
     CONTEXT_UPDATED = "context.updated"
+    AI_ROUTE = "ai.route"
 
 
 class Severity(StrEnum):

@@ -15,13 +15,18 @@ from jarvis import __version__
 from jarvis.agents.base import AgentRegistry
 from jarvis.agents.catalog import AGENT_SPECS
 from jarvis.agents.workers import OperatorAgent, SentinelAgent
+from jarvis.ai.checkpoint import RunCheckpoint
+from jarvis.ai.keys import ApiKeyStore
+from jarvis.ai.plan import ClaudeCli, Runner
+from jarvis.ai.router import ApiFactory, RoleSpec, RoutedChatModel, SmartRouter, Verifier
+from jarvis.ai.store import AiStore
 from jarvis.bots.mt5 import Mt5Paths
 from jarvis.bots.service import BotLabService, Tester
 from jarvis.bots.store import BotStore
 from jarvis.briefing.service import BriefingService
 from jarvis.build import build_id
 from jarvis.core.brain import Brain
-from jarvis.core.connector import BrainConnector, Verifier
+from jarvis.core.connector import BrainConnector
 from jarvis.core.context import EnvironmentContextService, platform_label
 from jarvis.core.jarvis import JarvisCore
 from jarvis.core.persona import build_system_prompt
@@ -35,7 +40,7 @@ from jarvis.learning.journal import LearningJournal
 from jarvis.learning.market import MarketData
 from jarvis.learning.service import LearningService, ResearchModel
 from jarvis.llm.base import ChatModel
-from jarvis.llm.registry import ModelSet, build_models
+from jarvis.llm.registry import ModelSet, anthropic_models
 from jarvis.memory.store import MemoryStore
 from jarvis.missions.engine import MissionEngine
 from jarvis.missions.planner import DeterministicPlanner
@@ -101,6 +106,9 @@ class Runtime:
         bot_tester: Callable[[Mt5Paths], Tester] | None = None,
         ultron_model: Callable[[str], ChatModel | None] | None = None,
         ultron_repo: Path | None = None,
+        ai_cli_runner: Runner | None = None,
+        ai_api_factory: ApiFactory | None = None,
+        ai_local_transport: object | None = None,
     ) -> None:
         self.settings = settings
         self.started_at = time.time()
@@ -181,11 +189,44 @@ class Runtime:
             self.catalog,
             interval=settings.runtime.context_poll_seconds,
         )
-        # Injected models (tests) are used as-is; models built from a key get
-        # that key verified in the background at startup.
-        self._verify_key_on_start = models is None
+        # Every model call goes through the AI router: Claude plan first, the API only
+        # within an approved budget, then a local model or a safe pause (D-030).
+        secret = settings.models.anthropic_api_key
+        self.ai_keys = ApiKeyStore(
+            memory=settings.ai.keystore == "memory",
+            env_file=settings.env_file,
+            env_key=secret.get_secret_value() if secret else None,
+        )
+
+        async def verify(key: str, model_ids: list[str]) -> None:
+            if key_verifier is not None:
+                await key_verifier(key, model_ids)
+                return
+            from jarvis.llm.anthropic_provider import verify_key
+
+            await verify_key(key, model_ids)
+
+        self.ai = SmartRouter(
+            store=AiStore(self.db),
+            bus=self.bus,
+            settings=settings.ai,
+            keys=self.ai_keys,
+            cli=ClaudeCli(
+                path=settings.ai.cli_path,
+                workdir=settings.data_dir / "ai" / "claude-code",
+                runner=ai_cli_runner,
+                timeout_seconds=settings.ai.plan_timeout_seconds,
+            ),
+            models_for_check=anthropic_models(settings.models),
+            refusal_fallback=settings.models.refusal_fallback,
+            api_factory=ai_api_factory,
+            api_verify=verify,
+            local_transport=ai_local_transport,
+        )
+        # Injected models (tests) are used as-is; otherwise the brain's models are routed.
+        self._injected_models = models
         self.brain = Brain(
-            models=models or build_models(settings.models),
+            models=models or ModelSet(None, None, "Starting…"),
             tools=self.tools,
             operator=self.operator,
             missions=self.missions,
@@ -200,11 +241,7 @@ class Runtime:
             memory=self.memory,
         )
         self.connector = BrainConnector(
-            settings=settings.models,
-            brain=self.brain,
-            bus=self.bus,
-            env_file=settings.env_file,
-            verifier=key_verifier,
+            router=self.ai, brain=self.brain, bus=self.bus, models=self._brain_models
         )
         self._key_check: asyncio.Task[None] | None = None
         self._housekeeping: asyncio.Task[None] | None = None
@@ -233,7 +270,6 @@ class Runtime:
             provider_factory=voice_provider or elevenlabs_provider,
         )
 
-        self._research: tuple[str, ResearchModel] | None = None
         self.learning = LearningService(
             settings=settings.learning,
             bus=self.bus,
@@ -255,7 +291,6 @@ class Runtime:
             model_line=lambda: self.training.briefing_line(),
         )
 
-        self._bot_research: tuple[str, ResearchModel] | None = None
         self.bots = BotLabService(
             settings=settings.bots,
             prices=settings.learning.prices,
@@ -292,7 +327,6 @@ class Runtime:
             root=settings.data_dir / "quantlab" / "research",
             code_revision=self.build,
         )
-        self._architect: tuple[str, ChatModel] | None = None
         self._architect_script: ChatModel | None = None
         self.architect = StrategyArchitect(self._architect_model, self._architect_label)
         self.sources = SourceService(
@@ -301,7 +335,6 @@ class Runtime:
             root=settings.data_dir / "quantlab" / "intake",
             settings=lab.intake,
         )
-        self._quant_models: dict[tuple[str, str], ChatModel] = {}
         self._quant_script: dict[str, ChatModel] = {}
         self.quant_missions = MissionService(
             db=self.db,
@@ -311,14 +344,13 @@ class Runtime:
             hub=self.hub,
             model=self._quant_model,
             label=self._architect_label,
-            prices=settings.ultron.prices,
+            prices={**settings.ai.prices, **settings.ultron.prices},
             root=settings.data_dir / "quantlab" / "missions",
             scripted=lambda: bool(self.settings.quantlab.architect_script),
         )
         self.sources.set_on_ready(self.quant_missions.on_source_ready)
 
         repo, subdir = _git_root(PROJECT_ROOT) if ultron_repo is None else (ultron_repo, "")
-        self._ultron_models: dict[tuple[str, str], ChatModel] = {}
         self._ultron_script: dict[str, ChatModel] | None = None
         self.ultron = UltronService(
             settings=settings.ultron,
@@ -330,6 +362,7 @@ class Runtime:
             preferences=self.preferences,
             model_factory=ultron_model or self._ultron_model,
             model_label=self._ultron_label,
+            checkpoints=lambda key: RunCheckpoint(self.ai.store, key),
         )
         self.ultron.set_research_tasks(lambda: self.quant_missions.store.tasks_in("RUNNING"))
 
@@ -343,54 +376,92 @@ class Runtime:
             preferences=self.preferences,
         )
 
-    def _research_model(self) -> ResearchModel | None:
-        """Claude for learning, with the key the brain currently uses."""
-        secret = self.connector.settings.anthropic_api_key
-        if secret is None or not self.brain.available:
-            return None
-        key = secret.get_secret_value()
-        if self._research is None or self._research[0] != key:
-            import anthropic
+    def _routed(self, spec: RoleSpec) -> RoutedChatModel | None:
+        """A routed model, or None while no route is set up at all (the service then
+        shows what it needs instead of failing on its first call)."""
+        return RoutedChatModel(self.ai, spec) if self.ai.configured() else None
 
-            from jarvis.llm.anthropic_provider import AnthropicChatModel
+    def _brain_models(self) -> ModelSet:
+        if self._injected_models is not None:
+            return self._injected_models
+        hint = self.ai_keys.hint()
+        if not self.ai.configured():
+            api = self.ai.snapshot_sync("api")
+            if hint and api.state == "INVALID_KEY":
+                reason = f"{api.detail} Paste a new key in Settings → AI & Billing."
+            elif hint:
+                reason = (
+                    "Your Claude API key is saved, but paid API use isn't approved. Connect "
+                    "your Claude plan or approve a budget in Settings → AI & Billing."
+                )
+            else:
+                reason = (
+                    "No AI route yet. Connect your Claude plan or add a Claude API key in "
+                    "Settings → AI & Billing."
+                )
+            return ModelSet(None, None, reason, key_hint=hint)
+        m = self.settings.models
 
-            learning = self.settings.learning
-            model = AnthropicChatModel(
-                client=anthropic.AsyncAnthropic(api_key=key),
-                model=learning.model,
-                max_tokens=learning.max_tokens,
-                effort=learning.effort,
-                timeout_seconds=learning.timeout_seconds,
-                refusal_fallback=self.settings.models.refusal_fallback,
+        def role(name: str, cfg: object, capability: str) -> RoutedChatModel | None:
+            from jarvis.settings import ModelRoleSettings
+
+            assert isinstance(cfg, ModelRoleSettings)
+            if cfg.provider != "anthropic" or not cfg.model:
+                return None
+            return RoutedChatModel(
+                self.ai,
+                RoleSpec(
+                    "brain",
+                    name,
+                    capability,  # type: ignore[arg-type]
+                    cfg.model,
+                    cfg.effort,
+                    cfg.max_tokens,
+                    cfg.timeout_seconds,
+                ),
             )
-            self._research = (key, model)
-        return self._research[1]
+
+        return ModelSet(
+            fast=role("fast", m.fast, "chat"),
+            reasoning=role("reasoning", m.reasoning, "planning"),
+            key_hint=hint,
+        )
+
+    async def refresh_brain(self) -> None:
+        await self.connector.refresh()
+
+    def _research_model(self) -> ResearchModel | None:
+        """Claude for learning, through the AI router."""
+        learning = self.settings.learning
+        return self._routed(
+            RoleSpec(
+                "learning",
+                "learning",
+                "research",
+                learning.model,
+                learning.effort,
+                learning.max_tokens,
+                learning.timeout_seconds,
+            )
+        )
 
     def _bot_model(self) -> ResearchModel | None:
-        """Claude for the Bot Lab: the brain's key, the Bot Lab's model settings."""
-        secret = self.connector.settings.anthropic_api_key
-        if secret is None or not self.brain.available:
-            return None
-        key = secret.get_secret_value()
-        if self._bot_research is None or self._bot_research[0] != key:
-            import anthropic
-
-            from jarvis.llm.anthropic_provider import AnthropicChatModel
-
-            research = self.settings.bots.research
-            model = AnthropicChatModel(
-                client=anthropic.AsyncAnthropic(api_key=key),
-                model=research.model,
-                max_tokens=research.max_tokens,
-                effort=research.effort,
-                timeout_seconds=research.timeout_seconds,
-                refusal_fallback=self.settings.models.refusal_fallback,
+        """Claude for the Bot Lab (MQL5 changes), through the AI router."""
+        research = self.settings.bots.research
+        return self._routed(
+            RoleSpec(
+                "bots",
+                "research",
+                "coding",
+                research.model,
+                research.effort,
+                research.max_tokens,
+                research.timeout_seconds,
             )
-            self._bot_research = (key, model)
-        return self._bot_research[1]
+        )
 
     def _architect_model(self) -> ChatModel | None:
-        """Claude for the QuantLab Strategy Architect (the brain's key), or the test script."""
+        """Claude for the QuantLab Strategy Architect (routed), or the test script."""
         lab = self.settings.quantlab
         if lab.architect_script:  # tests and the E2E only; labelled in the UI
             if self._architect_script is None:
@@ -399,27 +470,17 @@ class Runtime:
                 steps = json.loads(Path(lab.architect_script).read_text(encoding="utf-8"))
                 self._architect_script = ScriptedAgentModel("architect", steps["architect"])
             return self._architect_script
-        secret = self.connector.settings.anthropic_api_key
-        if secret is None or not self.brain.available:
-            return None
-        key = secret.get_secret_value()
-        if self._architect is None or self._architect[0] != key:
-            import anthropic
-
-            from jarvis.llm.anthropic_provider import AnthropicChatModel
-
-            self._architect = (
-                key,
-                AnthropicChatModel(
-                    client=anthropic.AsyncAnthropic(api_key=key),
-                    model=lab.architect_model,
-                    max_tokens=lab.architect_max_tokens,
-                    effort=lab.architect_effort,
-                    timeout_seconds=lab.architect_timeout_seconds,
-                    refusal_fallback=self.settings.models.refusal_fallback,
-                ),
+        return self._routed(
+            RoleSpec(
+                "architect",
+                "architect",
+                "research",
+                lab.architect_model,
+                lab.architect_effort,
+                lab.architect_max_tokens,
+                lab.architect_timeout_seconds,
             )
-        return self._architect[1]
+        )
 
     def _quant_model(self, role: str) -> ChatModel | None:
         """Claude for a research-mission role (jarvis, atlas, cipher), or the test script."""
@@ -431,28 +492,18 @@ class Runtime:
                 steps = json.loads(Path(lab.architect_script).read_text(encoding="utf-8"))
                 self._quant_script[role] = ScriptedAgentModel(role, list(steps.get(role, [])))
             return self._quant_script[role]
-        secret = self.connector.settings.anthropic_api_key
-        if secret is None or not self.brain.available:
-            return None
-        key = secret.get_secret_value()
         agent = self.settings.ultron.agents.get(role)
-        model_id = agent.model if agent else lab.architect_model
-        cache_key = (key, role)
-        if cache_key not in self._quant_models:
-            import anthropic
-
-            from jarvis.llm.anthropic_provider import AnthropicChatModel
-
-            self._quant_models = {k: v for k, v in self._quant_models.items() if k[0] == key}
-            self._quant_models[cache_key] = AnthropicChatModel(
-                client=anthropic.AsyncAnthropic(api_key=key),
-                model=model_id,
-                max_tokens=agent.max_tokens if agent else lab.architect_max_tokens,
-                effort=agent.effort if agent else lab.architect_effort,
-                timeout_seconds=lab.architect_timeout_seconds,
-                refusal_fallback=self.settings.models.refusal_fallback,
+        return self._routed(
+            RoleSpec(
+                "quantlab",
+                role,
+                "research",
+                agent.model if agent else lab.architect_model,
+                agent.effort if agent else lab.architect_effort,
+                agent.max_tokens if agent else lab.architect_max_tokens,
+                lab.architect_timeout_seconds,
             )
-        return self._quant_models[cache_key]
+        )
 
     def _architect_label(self) -> str:
         lab = self.settings.quantlab
@@ -463,7 +514,7 @@ class Runtime:
         return lab.architect_model
 
     def _ultron_model(self, agent: str) -> ChatModel | None:
-        """Claude for an ULTRON agent: the brain's key, the agent's model from ultron.yaml."""
+        """Claude for an ULTRON agent through the AI router (model from ultron.yaml)."""
         ultron = self.settings.ultron
         if ultron.scripted_model:  # tests and the E2E only; labelled in the UI
             if self._ultron_script is None:
@@ -471,27 +522,21 @@ class Runtime:
 
                 self._ultron_script = dict(scripted.load(Path(ultron.scripted_model)))
             return self._ultron_script.get(agent)
-        secret = self.connector.settings.anthropic_api_key
         role = ultron.agents.get(agent)
-        if secret is None or not self.brain.available or role is None:
+        if role is None:
             return None
-        key = secret.get_secret_value()
-        cache_key = (key, agent)
-        if cache_key not in self._ultron_models:
-            import anthropic
-
-            from jarvis.llm.anthropic_provider import AnthropicChatModel
-
-            self._ultron_models = {k: v for k, v in self._ultron_models.items() if k[0] == key}
-            self._ultron_models[cache_key] = AnthropicChatModel(
-                client=anthropic.AsyncAnthropic(api_key=key),
-                model=role.model,
-                max_tokens=role.max_tokens,
-                effort=role.effort,
-                timeout_seconds=ultron.model_timeout_seconds,
-                refusal_fallback=self.settings.models.refusal_fallback,
+        capability = {"forge": "coding", "sentinel": "review"}.get(agent, "planning")
+        return self._routed(
+            RoleSpec(
+                "ultron",
+                agent,
+                capability,  # type: ignore[arg-type]
+                role.model,
+                role.effort,
+                role.max_tokens,
+                ultron.model_timeout_seconds,
             )
-        return self._ultron_models[cache_key]
+        )
 
     def _ultron_label(self) -> str:
         if self.settings.ultron.scripted_model:
@@ -508,6 +553,9 @@ class Runtime:
     async def start(self) -> None:
         await self.db.connect()
         self.events.attach(self.bus)
+        await self.ai.start()
+        self.brain.set_models(self._brain_models())
+        self.bus.subscribe(str(EventType.AI_ROUTE), self._on_ai_route)
         await self.memory.load()
         # The chat on screen is still the brain's context after a restart or update.
         since = utcnow() - timedelta(hours=self.settings.models.history_restore_hours)
@@ -537,12 +585,8 @@ class Runtime:
             },
         )
         if not self.brain.available:
-            log.warning(
-                "reasoning offline: %s (looked for ANTHROPIC_API_KEY in the environment and %s)",
-                self.brain.status.reason,
-                self.settings.env_file,
-            )
-        elif self._verify_key_on_start:
+            log.warning("reasoning offline: %s", self.brain.status.reason)
+        if self._injected_models is None and self.ai_keys.get() is not None:
             self._key_check = asyncio.create_task(self.connector.check(), name="key-check")
         await self.voice.start()
         await self.learning.start()
@@ -555,6 +599,12 @@ class Runtime:
         await self.sources.start()
         await self.quant_missions.start()
         await self.ultron.start()
+        self.ai.on_available(self.ultron.on_ai_available)
+        self.ai.on_available(self.quant_missions.on_ai_available)
+
+    async def _on_ai_route(self, _event: object) -> None:
+        if self._injected_models is None:
+            await self.connector.refresh()
 
     async def _housekeep(self) -> None:
         """Once a day: drop old activity (the conversation stays)."""
@@ -573,6 +623,7 @@ class Runtime:
             self._housekeeping.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._housekeeping
+        await self.ai.stop()
         await self.ultron.stop()
         await self.quant_missions.stop()
         await self.sources.stop()

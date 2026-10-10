@@ -181,12 +181,20 @@ def translate_error(exc: anthropic.APIError, model: str) -> ModelError:
             detail=detail,
         )
     if isinstance(exc, anthropic.RateLimitError):
+        if "usage limit" in detail.lower() or "spend limit" in detail.lower():
+            return ModelError(
+                "billing",
+                "The API organization reached its spend limit.",
+                suggestion="Raise the limit in the Claude Console (Limits) or wait a month.",
+                detail=detail,
+            )
         return ModelError(
             "rate_limited",
             "I'm being rate-limited by the model provider.",
             suggestion="Wait a moment and try again.",
             retryable=True,
             detail=detail,
+            retry_after=_retry_after(exc),
         )
     if isinstance(exc, anthropic.OverloadedError):
         return ModelError(
@@ -197,6 +205,13 @@ def translate_error(exc: anthropic.APIError, model: str) -> ModelError:
             detail=detail,
         )
     if isinstance(exc, anthropic.BadRequestError):
+        if "usage limits" in detail.lower() or "spend limit" in detail.lower():
+            return ModelError(
+                "billing",
+                "The API organization reached its spend limit.",
+                suggestion="Raise the limit in the Claude Console (Limits) or wait a month.",
+                detail=detail,
+            )
         if "credit balance" in detail.lower():
             return ModelError(
                 "billing",
@@ -241,6 +256,14 @@ def translate_error(exc: anthropic.APIError, model: str) -> ModelError:
         retryable=status >= 500,
         detail=detail,
     )
+
+
+def _retry_after(exc: anthropic.APIStatusError) -> float | None:
+    try:
+        value = exc.response.headers.get("retry-after")
+        return float(value) if value is not None else None
+    except (AttributeError, ValueError):
+        return None
 
 
 def _stop_reason(value: str | None) -> StopReason:

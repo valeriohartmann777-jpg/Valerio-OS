@@ -337,6 +337,42 @@ class QuantLabSettings(BaseModel):
     intake: IntakeSettings = Field(default_factory=IntakeSettings)
 
 
+def _ai_prices() -> dict[str, ModelPrice]:
+    return {
+        "claude-opus-5-5": ModelPrice(input=4.0, output=20.0, cache_read=0.2, cache_write=5.0),
+        "claude-sonnet-5-5": ModelPrice(input=2.0, output=10.0, cache_read=0.2, cache_write=2.5),
+        "claude-haiku-5-5": ModelPrice(input=0.1, output=0.5, cache_read=0.01, cache_write=0.125),
+    }
+
+
+class AiSettings(BaseModel):
+    """Static AI-routing settings (config/ai.yaml). The owner's choices — strategy, Claude
+    plan, paid fallback and budgets, local model — live in the database (Settings → AI &
+    Billing) and are never changed by an agent."""
+
+    # "memory" (tests and the E2E only, labelled in the UI) swaps the OS keystore.
+    keystore: Literal["os", "memory"] = "os"
+    # Path to Claude Code's `claude` binary ("" = look it up on PATH and the usual places).
+    cli_path: str = ""
+    plan_timeout_seconds: float = Field(600.0, gt=0)
+    plan_max_turns: int = Field(4, ge=2, le=10)
+    max_attempts: int = Field(3, ge=1, le=6)  # per provider, on temporary errors
+    backoff_seconds: float = Field(2.0, ge=0)
+    max_backoff_seconds: float = Field(60.0, ge=0)
+    cooldown_seconds: float = Field(120.0, ge=0)  # after temporary errors are exhausted
+    plan_retry_minutes: float = Field(60.0, gt=0)  # plan limit without a reported reset time
+    probe_seconds: float = Field(300.0, gt=0)  # free status checks (sign-in, local server)
+    prices: dict[str, ModelPrice] = Field(default_factory=_ai_prices)  # USD per MTok
+    # Work profiles swap models per task; budgets and policies apply unchanged.
+    profiles: dict[str, dict[str, str]] = Field(
+        default_factory=lambda: {
+            "economy": {"claude-opus-5-5": "claude-sonnet-5-5"},
+            "balanced": {},
+            "deep": {"claude-sonnet-5-5": "claude-opus-5-5"},
+        }
+    )
+
+
 class ModelRoleSettings(BaseModel):
     provider: str = "none"
     model: str = ""
@@ -380,6 +416,7 @@ class Settings(BaseModel):
     bots: BotsSettings = Field(default_factory=BotsSettings)
     ultron: UltronSettings = Field(default_factory=UltronSettings)
     quantlab: QuantLabSettings = Field(default_factory=QuantLabSettings)
+    ai: AiSettings = Field(default_factory=AiSettings)
 
     @property
     def env_file(self) -> Path:
@@ -445,6 +482,7 @@ def load_settings(
     data["training"] = _read_yaml(config_dir / "training.yaml")
     data["bots"] = _read_yaml(config_dir / "bots.yaml")
     data["ultron"] = _read_yaml(config_dir / "ultron.yaml")
+    data["ai"] = _read_yaml(config_dir / "ai.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))
@@ -513,6 +551,11 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         quantlab["keystore"] = value
     if value := env.get("JARVIS_QUANTLAB_ARCHITECT_SCRIPT", "").strip():  # tests, E2E
         quantlab["architect_script"] = value
+    ai = data.setdefault("ai", {})
+    if value := env.get("JARVIS_AI_KEYSTORE", "").strip():  # tests, E2E
+        ai["keystore"] = value
+    if value := env.get("JARVIS_AI_CLI", "").strip():  # a different `claude` binary
+        ai["cli_path"] = value
 
 
 _QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019"}

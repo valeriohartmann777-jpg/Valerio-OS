@@ -88,8 +88,9 @@ def _secure(backend: KeyringBackend) -> tuple[bool, str]:
 
 
 class CredentialVault:
-    def __init__(self, backend: KeyringBackend | None = None) -> None:
+    def __init__(self, backend: KeyringBackend | None = None, service: str = SERVICE) -> None:
         self._backend = backend
+        self._service = service
         self._lock = threading.Lock()
 
     def _resolve(self) -> KeyringBackend:
@@ -125,7 +126,7 @@ class CredentialVault:
         backend = self._require()
         with self._lock:
             try:
-                return backend.get_password(SERVICE, account)
+                return backend.get_password(self._service, account)
             except KeyringError as exc:
                 raise VaultError(
                     "KEYSTORE_ERROR",
@@ -137,7 +138,7 @@ class CredentialVault:
         backend = self._require()
         with self._lock:
             try:
-                backend.set_password(SERVICE, account, secret)
+                backend.set_password(self._service, account, secret)
             except KeyringError as exc:
                 raise VaultError(
                     "KEYSTORE_ERROR",
@@ -150,7 +151,7 @@ class CredentialVault:
         backend = self._require()
         with self._lock:
             try:
-                backend.delete_password(SERVICE, account)
+                backend.delete_password(self._service, account)
             except PasswordDeleteError:
                 return False
             except KeyringError as exc:
