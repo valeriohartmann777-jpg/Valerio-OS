@@ -378,6 +378,7 @@ try {
     await page.getByTestId("ul-activity").getByText("denied").first().waitFor(); // the out-of-scope write
     await page.getByTestId("ul-view-agent-matrix").click();
     await page.getByTestId("ul-agents").waitFor();
+    await page.waitForTimeout(300); // let the tab's colour transition finish
     await shot("11j-ultron-agents");
     await page.getByTestId("ul-view-overview").click();
     await page.getByTestId("ul-mission-card").first().waitFor();
