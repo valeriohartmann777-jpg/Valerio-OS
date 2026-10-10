@@ -27,6 +27,7 @@ def _limit_resources(cpu_seconds: int) -> None:
     if sys.platform == "win32":
         return
     import resource
+
     caps = [
         (resource.RLIMIT_CPU, cpu_seconds),
         (resource.RLIMIT_FSIZE, 512 * 1024 * 1024),

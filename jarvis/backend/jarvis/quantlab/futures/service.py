@@ -37,10 +37,10 @@ from jarvis.quantlab.futures.sessions import Window
 from jarvis.quantlab.futures.spec import (
     FuturesSpec,
     FuturesSpecError,
-    OpeningRangeBreakout,
     clock,
     describe,
     parse,
+    range_minutes_of,
     template,
 )
 from jarvis.quantlab.futures.store import ResearchStore, now
@@ -166,6 +166,16 @@ class ResearchService:
                 "kind": "ma_crossover",
                 "title": "Intraday moving-average crossover",
                 "spec": template("ma_crossover", "NQ"),
+            },
+            {
+                "kind": "level_sweep_reclaim",
+                "title": "Opening-range sweep and reclaim",
+                "spec": template("level_sweep_reclaim", "NQ"),
+            },
+            {
+                "kind": "opening_range_retest",
+                "title": "Opening-range breakout and retest",
+                "spec": template("opening_range_retest", "NQ"),
             },
         ]
 
@@ -543,7 +553,9 @@ class ResearchService:
 
         def sim(variant: FuturesSpec, ws: list[Window], **kw: Any) -> Result:
             source = kw.pop("bars", bars)
-            return engine.simulate(variant, source, contract_map, ws, cancelled=stop.is_set, **kw)
+            return engine.simulate(
+                variant, source, contract_map, ws, cancelled=stop.is_set, context=windows, **kw
+            )
 
         await self._stage(run_id, "simulating (conservative fills)", 0.08)
         base = await asyncio.to_thread(sim, spec, eligible)
@@ -1024,7 +1036,7 @@ class ResearchService:
         windows = _windows(spec, record["start"], record["end"])
         sp = validation.split(windows, spec)
         again = await asyncio.to_thread(
-            engine.simulate, spec, bars, contract_map, sp.insample + sp.oos
+            lambda: engine.simulate(spec, bars, contract_map, sp.insample + sp.oos, context=windows)
         )
         segment_of = {label: "IS" for label in sp.labels("insample")}
         segment_of.update({label: "OOS" for label in sp.labels("oos")})
@@ -1213,10 +1225,10 @@ def _downsample(values: list[float], limit: int) -> list[int]:
 def _range_levels(
     spec: FuturesSpec, cols: dict[str, list[Any]], window: Window | None
 ) -> dict[str, Any] | None:
-    rule = spec.rule
-    if not isinstance(rule, OpeningRangeBreakout) or window is None:
+    minutes = range_minutes_of(spec.rule)
+    if minutes is None or window is None:
         return None
-    end = window.start_ns + rule.range_minutes * MINUTE
+    end = window.start_ns + minutes * MINUTE
     picked = [k for k, t in enumerate(cols["ts_event"]) if window.start_ns <= t < end]
     if not picked:
         return None

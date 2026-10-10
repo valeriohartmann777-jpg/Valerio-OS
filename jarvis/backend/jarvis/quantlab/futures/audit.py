@@ -14,7 +14,7 @@ import numpy as np
 
 from jarvis.quantlab.futures.engine import MINUTE, Bars, Result
 from jarvis.quantlab.futures.sessions import Window
-from jarvis.quantlab.futures.spec import FuturesSpec, OpeningRangeBreakout
+from jarvis.quantlab.futures.spec import FuturesSpec, range_minutes_of
 
 
 def audit(
@@ -158,8 +158,8 @@ def audit(
     ambiguous = [s.label for s in result.sessions if s.status == "AMBIGUOUS_ENTRY" and s.trades]
     check("AMBIGUOUS_EXCLUDED", "Days with an unresolvable breakout have no trade", ambiguous,
           sum(1 for s in result.sessions if s.status == "AMBIGUOUS_ENTRY"))  # fmt: skip
-    if isinstance(spec.rule, OpeningRangeBreakout):
-        minutes = spec.rule.range_minutes
+    minutes = range_minutes_of(spec.rule)
+    if minutes is not None:
         before: list[str] = []
         for t in result.trades:
             w = by_label[t.session]

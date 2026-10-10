@@ -225,7 +225,12 @@ def test_api_research_flow(tmp_path: Path) -> None:
     )
     with TestClient(create_app(settings)) as client:
         templates = client.get("/quantlab/research/templates").json()
-        assert {t["kind"] for t in templates} == {"opening_range_breakout", "ma_crossover"}
+        assert {t["kind"] for t in templates} == {
+            "opening_range_breakout",
+            "ma_crossover",
+            "level_sweep_reclaim",
+            "opening_range_retest",
+        }
         bad = client.post(
             "/quantlab/research/strategies/check", json={"spec": {"kind": "x"}}
         ).json()

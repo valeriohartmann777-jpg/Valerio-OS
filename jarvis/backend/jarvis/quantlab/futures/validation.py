@@ -1067,6 +1067,7 @@ def fitness(
         spec.exits.stop.type != "none"
         or spec.exits.target.type != "none"
         or (getattr(spec.rule, "entry", "") == "stop_through_range")
+        or (getattr(spec.rule, "reclaim", "") == "stop_back_through")
     )
     if intrabar:
         worse(
