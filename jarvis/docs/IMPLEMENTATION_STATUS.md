@@ -445,6 +445,26 @@ _Last updated: 2026-10-10_
 - Not verified: a real claude.ai sign-in with a plan call, a real API call, Ollama, the macOS
   Keychain.
 
+### QuantLab Local Data First (D-031) — details in `docs/quantlab/LOCAL_DATA_FIRST*.md`
+- Backtest Lab (QuantLab's default section): strategy → NQ / MNQ / ES / MES → 1m … 1h →
+  Backtest, on local data only; readiness badge with what is missing and "Open Data Vault";
+  advanced settings folded; provenance card in the results. No provider path, no fees.
+- Timeframes derived from 1-minute bars (`ql-resample-1`, session-anchored in New York time,
+  bar-start stamps, gaps never filled, no mixed contracts); engine 1.1.0 takes the bar
+  duration (1-minute results unchanged); strategy ↔ timeframe compatibility checks.
+- Data Vault: imports (DBN / DBN.ZST / Parquet / CSV, strict checks, user files never
+  exchange-authoritative), coverage per session, audit / repair / rebuild, backup / restore,
+  offline switch, storage view, provider comparison.
+- One-time Databento batch purchase: free `get_cost` quote for missing days only, explicit
+  approval (exact hash, maximum, caps, expiry, append-only), single submission, reconcile
+  instead of resubmit, resumable SHA-256-verified download into a read-only archive.
+- Tests: 28 vault tests (all 20 required acceptance tests plus extras); full backend suite
+  BACKEND_TOTAL passed; vitest VITEST_TOTAL; **31/31 E2E steps** incl. "Data Vault buys MNQ once,
+  then Strategy → NQ → 5m → Backtest runs offline".
+- Mocked here: the Databento batch API (fixture, synthetic prices, labelled). Not verified: a
+  real batch job and charge, real Databento DBN files, multi-year import speed, macOS.
+- Screenshots: `docs/screenshots/quantlab-{backtest-lab,data-vault,vault-quote}.png`
+
 ## IN PROGRESS
 - —
 
@@ -457,6 +477,8 @@ _Last updated: 2026-10-10_
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
 0. QuantLab on the MacBook: connect Databento (Keychain), quote one month of NQ.v.0 1-minute bars,
    approve, build the dataset, run the opening-range template once — first real data
+0. QuantLab Data Vault on the MacBook: Acquire once → `NQ.v.0` (e.g. 2020 → yesterday) → free
+   quote → decide → approve → download; then Backtest Lab: strategy → NQ → 5m, offline mode on
 0. QuantLab Idea Inbox on the MacBook: drop a saved TikTok video, connect Claude, answer the
    question, approve the Databento quote — first real Idea-to-Edge verdict
 0. AI routing on the MacBook: install Claude Code, `claude auth login` (claude.ai), Settings →

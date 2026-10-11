@@ -63,6 +63,10 @@ ERRORS: dict[str, tuple[str, str]] = {
         "Databento had a server problem.",
         "Try again later; check status.databento.com.",
     ),
+    "OFFLINE_MODE": (
+        "Offline mode is on: JARVIS makes no market-data requests.",
+        "Turn offline mode off in QuantLab → Data Vault if you want to quote or acquire data.",
+    ),
     "NETWORK": (
         "Databento can't be reached from this computer.",
         "Check the internet connection, VPN or firewall, then try again.",
@@ -194,8 +198,16 @@ class DatabentoAdapter:
         self._factory = factory or _historical
         self.fixture_label = fixture_label  # set → an offline fixture, never real data
         self._lock = asyncio.Lock()
+        # The Data Vault's offline switch: a reason string blocks every provider call.
+        self.guard: Callable[[], str | None] = lambda: None
+        self.calls = 0  # provider calls made (QA proves cached backtests make none)
 
     async def _call(self, key: str, fn: Callable[[Any], T]) -> tuple[T, list[str]]:
+        reason = self.guard()
+        if reason:
+            raise ProviderError("OFFLINE_MODE", reason)
+        self.calls += 1
+
         def work() -> tuple[T, list[str]]:
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
@@ -341,3 +353,56 @@ class DatabentoAdapter:
             ),
         )
         return warns
+
+    # Batch (one-time archival purchases) ----------------------------------------------------
+
+    async def submit_batch(
+        self,
+        key: str,
+        *,
+        dataset: str,
+        schema: str,
+        stype_in: str,
+        symbols: list[str],
+        start: date,
+        end: date,
+    ) -> dict[str, Any]:
+        """The billable batch submission: one data charge for this exact request."""
+        symbols = check_symbols(symbols)
+        value, _ = await self._call(
+            key,
+            lambda c: c.batch.submit_job(
+                dataset=dataset,
+                symbols=symbols,
+                schema=schema,
+                start=start.isoformat(),
+                end=end.isoformat(),
+                encoding="dbn",
+                compression="zstd",
+                split_duration="month",
+                stype_in=stype_in,
+                stype_out="instrument_id",
+                delivery="download",
+            ),
+        )
+        return dict(value)
+
+    async def batch_jobs(self, key: str, since: str | None = None) -> list[dict[str, Any]]:
+        value, _ = await self._call(
+            key, lambda c: c.batch.list_jobs(states="queued,processing,done,expired", since=since)
+        )
+        return [dict(v) for v in value]
+
+    async def batch_files(self, key: str, job_id: str) -> list[dict[str, Any]]:
+        value, _ = await self._call(key, lambda c: c.batch.list_files(job_id=job_id))
+        return [dict(v) for v in value]
+
+    async def batch_download(self, key: str, job_id: str, filename: str, folder: Path) -> Path:
+        """One file into ``folder/<job_id>/``; a partial file is resumed (HTTP Range)."""
+        value, _ = await self._call(
+            key,
+            lambda c: c.batch.download(
+                job_id=job_id, output_dir=str(folder), filename_to_download=filename
+            ),
+        )
+        return Path(value[0]) if value else folder / job_id / filename

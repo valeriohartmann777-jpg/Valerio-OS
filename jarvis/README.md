@@ -61,6 +61,11 @@ _Screenshots from the Electron E2E run (simulated desktop on Linux)._
   holdout only you see, prop-firm limits checked, and what account a $10k
   month would really need. Improved versions reach MetaTrader only when you
   click "Copy to MetaTrader".
+- **QuantLab Backtest Lab (local data first)**: pick a strategy, NQ / MNQ / ES / MES and a
+  timeframe (1m … 1h), press Backtest — it runs on data already on your Mac, with no
+  provider request and no data fee. The **Data Vault** buys history once from Databento
+  (free quote, your approval, verified batch download) or imports your DBN / Parquet / CSV
+  files, and derives every higher timeframe from the 1-minute bars.
 - **QuantLab Idea Inbox**: drop a saved TikTok/YouTube video, a screenshot, a PDF or just
   text. JARVIS reads it on your Mac (speech with timecodes, on-screen text, keyframes), turns
   it into exact rules with a source for every value, asks you only what is truly undefined,
@@ -168,9 +173,40 @@ account size × a real edge × risk. The Bots page shows what account a $10k
 month would need at prop-firm and own-account drawdown limits, from the
 months the EA wasn't tuned on. Settings: `config/bots.yaml`.
 
+### QuantLab Backtest Lab: strategy → market → timeframe → Backtest
+
+QuantLab opens on the **Backtest Lab**.
+
+1. **Strategy:** search your saved strategies (from the Studio, the Idea Inbox or a template).
+2. **Market:** NQ, MNQ, ES or MES. NQ and MNQ are different contracts; one is never used for
+   the other, and ES is never used for NQ.
+3. **Timeframe:** 1m, 2m, 3m, 5m, 10m, 15m, 30m, 1h. Greyed out means the strategy can't be
+   measured there (e.g. a 15-minute opening range on 10-minute bars) or the data doesn't
+   allow it.
+4. **Backtest.** The badge says *Ready locally*, *Partial coverage*, *Not available* (with
+   **Open Data Vault**) and so on. Results, trades, validation and a "How this run was
+   computed" card appear below. **Advanced settings** (period, costs, contracts, capital) are
+   folded away.
+
+**Getting the data once — Data Vault:**
+
+- **Acquire once with Databento:** pick the market and the period → **Get free quote**. Only
+  the days you don't have are priced. Enter your maximum, tick the box, **Approve**, then
+  **Start download**. Files are verified (SHA-256) and kept read-only; an interrupted
+  download resumes; a job is never submitted twice. Afterwards the same request says
+  "nothing to buy".
+- **Import files:** DBN / DBN.ZST from Databento, or your own Parquet / CSV (you state the
+  timezone and contract; such data is marked *supplied by you*, never exchange-verified).
+- **Offline mode:** one switch blocks every Databento request. Backtests keep working.
+- **Audit / Repair**, **Rebuild derived bars**, **Back up** to an external folder and
+  **Restore**.
+
+Higher timeframes are built from the 1-minute bars, anchored at the session open in New
+York time; missing minutes are never filled in. Details: `docs/quantlab/LOCAL_DATA_FIRST.md`.
+
 ### QuantLab Idea-to-Edge: from a video or text to a verdict
 
-QuantLab opens on the **Idea Inbox**.
+Open **Idea Inbox** in QuantLab.
 
 1. **Drop** a saved video (up to 15 minutes), a screen recording, a screenshot, a PDF or a
    text file — or paste the strategy text, or a TikTok / YouTube link. A link only gives its

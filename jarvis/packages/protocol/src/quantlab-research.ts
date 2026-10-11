@@ -307,6 +307,8 @@ export interface QrRunRow {
   fixture: boolean;
   name: string;
   symbol: string;
+  product?: string;
+  timeframe?: string;
   net_pnl: number | null;
   oos_net: number | null;
   trades: number | null;
@@ -441,6 +443,15 @@ export interface QrSummary {
   dataset: { id: string; symbol: string; start: string; end: string; quality: string; license?: string };
   limitations: string[];
   assumptions: QrAssumption[];
+  timeframe?: {
+    minutes: number;
+    label: string;
+    source_minutes: number;
+    aggregator: string;
+    anchor: string;
+    derived: { bars_out: number; partial: number; split_by_contract: number; sha256: string; cached: boolean; rebuilt?: string | null } | null;
+  };
+  binding?: { product: string; symbol: string; cost_profile: string | null; overrides: Record<string, unknown>; notes: string[]; timeframe_notes: string[] };
 }
 
 export interface QrRun extends Omit<QrRunRow, "name" | "symbol" | "net_pnl" | "oos_net" | "trades" | "version_number"> {

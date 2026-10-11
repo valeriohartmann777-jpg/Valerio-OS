@@ -125,9 +125,10 @@ def session_drift(
     contracts: int,
     fee_per_side: float,
     slippage_ticks: int,
+    bar_ns: int = MINUTE,
 ) -> dict[str, float]:
     """Naive benchmark, computed independently of the engine: long from the first bar's
-    open in the window to the open of the first bar at/after the flatten time, same costs."""
+    open in the window to the open of the bar holding the flatten time, same costs."""
     out: dict[str, float] = {}
     for w in windows:
         lo, hi = (int(x) for x in np.searchsorted(bars.ts, [w.start_ns, w.end_ns]))
@@ -140,7 +141,7 @@ def session_drift(
         if instrument not in tick_values:
             continue
         tick, value = tick_values[instrument]
-        exit_i = next((i for i in range(lo, hi) if bars.ts[i] >= w.flatten_ns), None)
+        exit_i = next((i for i in range(lo, hi) if bars.ts[i] + bar_ns > w.flatten_ns), None)
         entry = int(bars.open[lo]) // tick + slippage_ticks
         if exit_i is None:
             leave = int(bars.close[hi - 1]) // tick - slippage_ticks
@@ -281,6 +282,7 @@ def run_suite(ctx: Context, base: Result, optimistic: Result) -> list[dict[str, 
         spec.sizing.contracts,
         float(base.fee_per_side),
         base.slippage_ticks,
+        base.bar_ns,
     )
     drift_oos = sum(drift.get(label, 0.0) for label in oos_l)
     tests.append(

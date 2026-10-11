@@ -87,8 +87,12 @@ def build(
     root: str,
     first_ts: dict[int, int],
     definitions: pa.Table | None,
+    names: dict[int, str] | None = None,
 ) -> tuple[dict[int, ContractSpec], list[dict[str, Any]]]:
-    """Specs for every instrument id in the bars (``first_ts``: id → first bar time)."""
+    """Specs for every instrument id in the bars (``first_ts``: id → first bar time).
+
+    ``names``: contract names a user file stated (e.g. NQZ5) — used only as labels of the
+    ASSUMED reference specs, never as a definition."""
     findings: list[dict[str, Any]] = []
     reference = REFERENCE.get(root)
     by_id: dict[int, list[dict[str, Any]]] = {}
@@ -110,8 +114,9 @@ def build(
                     )
                 )
                 continue
+            label = (names or {}).get(instrument) or f"{root}?{instrument}"
             specs[instrument] = ContractSpec(
-                instrument, f"{root}?{instrument}", root, reference.tick_size_fixed,
+                instrument, label, root, reference.tick_size_fixed,
                 reference.tick_value, reference.multiplier, reference.currency, None,
                 "assumed", None,
             )  # fmt: skip

@@ -11,6 +11,8 @@ import { Experiments, TradeExplorer } from "../components/quantlab/research/Expl
 import { Overview, type Section } from "../components/quantlab/research/Overview";
 import { BacktestLab, Reports, RiskExecution, ValidationLab } from "../components/quantlab/research/Results";
 import { StrategyStudio } from "../components/quantlab/research/StrategyStudio";
+import { BacktestLauncher } from "../components/quantlab/vault/BacktestLauncher";
+import { DataVault } from "../components/quantlab/vault/DataVault";
 import { Badge, ResearchOnly } from "../components/quantlab/ui";
 import { Button, cx } from "../components/ui/primitives";
 import { ApiError, api } from "../lib/api";
@@ -23,12 +25,13 @@ import { useJarvis } from "../store/store";
  */
 
 const SECTIONS: { id: Section; modes: Mode[] }[] = [
+  { id: "Backtest Lab", modes: ["Simple", "Research", "Institutional"] },
+  { id: "Data Vault", modes: ["Simple", "Research", "Institutional"] },
   { id: "Idea Inbox", modes: ["Simple", "Research", "Institutional"] },
   { id: "Research Room", modes: ["Simple", "Research", "Institutional"] },
   { id: "Overview", modes: ["Simple", "Research", "Institutional"] },
   { id: "Strategy Studio", modes: ["Simple", "Research", "Institutional"] },
   { id: "Data Hub", modes: ["Simple", "Research", "Institutional"] },
-  { id: "Backtest Lab", modes: ["Simple", "Research", "Institutional"] },
   { id: "Validation", modes: ["Research", "Institutional"] },
   { id: "Trade Explorer", modes: ["Research", "Institutional"] },
   { id: "Experiments", modes: ["Research", "Institutional"] },
@@ -51,7 +54,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 
 export function QuantLab() {
   const [mode, setModeState] = useState<Mode>(savedMode);
-  const [section, setSection] = useState<Section>("Idea Inbox");
+  const [section, setSection] = useState<Section>("Backtest Lab");
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [missionId, setMissionId] = useState<string | null>(null);
   const [overview, setOverview] = useState<QrOverview | null>(null);
@@ -71,7 +74,7 @@ export function QuantLab() {
     } catch {
       /* per-viewer convenience only */
     }
-    if (!SECTIONS.find((s) => s.id === section)?.modes.includes(m)) setSection("Idea Inbox");
+    if (!SECTIONS.find((s) => s.id === section)?.modes.includes(m)) setSection("Backtest Lab");
   };
 
   const refresh = useCallback(async () => {
@@ -115,7 +118,7 @@ export function QuantLab() {
             <p className="font-mono text-2xs tracking-[0.2em] text-fg-faint">JARVIS / QUANTLAB / {section.toUpperCase()}</p>
             <h1 className="mt-1 text-2xl font-light tracking-[-0.01em] text-fg">QuantLab</h1>
             <p className="mt-1 text-[13px] text-fg-muted">
-              Futures research terminal · NQ · MNQ · ES · MES ·{" "}
+              Futures research terminal · local data first · NQ · MNQ · ES · MES ·{" "}
               {busy ? <span className="text-ql">work in progress</span> : "idle"}
             </p>
           </div>
@@ -202,8 +205,24 @@ export function QuantLab() {
         )}
         {section === "Data Hub" && <DataHub mode={mode} tick={tick} onDatasets={refresh} />}
         {section === "Backtest Lab" && (
-          <BacktestLab runId={runId} runs={runs} tick={tick} mode={mode} onPick={setRunId} onTrade={(n) => { setTradeFocus(n); setSection(mode === "Simple" ? "Backtest Lab" : "Trade Explorer"); }} />
+          <div className="space-y-5">
+            <BacktestLauncher
+              tick={tick}
+              onRun={(id) => {
+                setRunId(id);
+                setTradeFocus(null);
+                void refresh();
+              }}
+              onVault={() => setSection("Data Vault")}
+              onIdeas={() => {
+                setSourceId(null);
+                setSection("Idea Inbox");
+              }}
+            />
+            <BacktestLab runId={runId} runs={runs} tick={tick} mode={mode} onPick={setRunId} onTrade={(n) => { setTradeFocus(n); setSection(mode === "Simple" ? "Backtest Lab" : "Trade Explorer"); }} />
+          </div>
         )}
+        {section === "Data Vault" && <DataVault tick={tick} />}
         {section === "Validation" && (
           <ValidationLab runId={runId} runs={runs} tick={tick} mode={mode} onPick={setRunId} onRun={(id) => { void refresh(); openRun(id, "Validation"); }} />
         )}

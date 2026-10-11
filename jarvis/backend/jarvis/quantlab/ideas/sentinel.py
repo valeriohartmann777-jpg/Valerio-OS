@@ -861,23 +861,37 @@ def run_audit(materials: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str
     summary = run["summary"] or {}
     checks: list[dict[str, Any]] = []
     eligible = split.insample + split.oos
-    ref = recompute(
-        spec, materials["bars"], materials["contracts"], eligible, context=materials["windows"]
-    )
     stored = [r for r in rows if r["segment"] != "HOLDOUT"]
-    tick = (
-        next(iter(materials["contracts"].values())).tick_size_fixed / 1e9
-        if materials["contracts"]
-        else 0.25
-    )
-    cmp = compare(stored, ref, tick)
-    _check(
-        checks,
-        "SECOND_ENGINE",
-        "An independently written engine reproduces every trade",
-        cmp["mismatch_count"] == 0,
-        f"{cmp['agree']} of {cmp['compared']} trades agree; {cmp['mismatch_count']} difference(s)",
-    )
+    minutes = int(materials.get("bar_minutes", 1))
+    if minutes > 1:
+        # The second engine is written for 1-minute bars only: a WARN, never a fake PASS.
+        _check(
+            checks,
+            "SECOND_ENGINE",
+            "An independently written engine reproduces every trade",
+            False,
+            f"Not run: the second engine covers 1-minute bars; this run used {minutes}-minute "
+            "bars. Re-run on 1m for an independent reproduction.",
+            warn=True,
+        )
+    else:
+        ref = recompute(
+            spec, materials["bars"], materials["contracts"], eligible, context=materials["windows"]
+        )
+        tick = (
+            next(iter(materials["contracts"].values())).tick_size_fixed / 1e9
+            if materials["contracts"]
+            else 0.25
+        )
+        cmp = compare(stored, ref, tick)
+        _check(
+            checks,
+            "SECOND_ENGINE",
+            "An independently written engine reproduces every trade",
+            cmp["mismatch_count"] == 0,
+            f"{cmp['agree']} of {cmp['compared']} trades agree; "
+            f"{cmp['mismatch_count']} difference(s)",
+        )
     total = sum(Decimal(str(r["net"])) for r in stored)
     seg = summary.get("segments", {})
     expected = Decimal(str((seg.get("insample") or {}).get("net_pnl") or 0)) + Decimal(

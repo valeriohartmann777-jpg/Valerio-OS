@@ -115,3 +115,25 @@ Repo-wide decision: D-028 in `/DECISIONS.md`. Details here.
     surface, dataset manifest, report and verdict.
 - **Reason:** The whole path (adapter → DBN decode → cache → engine → validation → UI) is
   exercised without a key or spending money, and without pretending to be Databento.
+
+## QD-12 — Higher timeframes are derived locally from 1-minute bars, anchored at the session open
+
+- **Decision:** `futures/resample.py` (`ql-resample-1`) builds 2–60-minute bars from the
+  canonical 1-minute bars. Buckets start at the session window start in exchange local time;
+  the timestamp is the bar start; missing minutes are not filled; a bucket never spans two
+  instrument ids; a partial last bucket is flagged. The engine receives the bar duration and
+  treats a bar as known at `start + duration`.
+- **Reason:** One purchased source, any number of timeframes, no new fees; bars match what
+  a chart anchored at the open shows; no fabricated prices; no look-ahead from the bar size.
+- **Alternatives:** buying `ohlcv-1h` separately (two sources of truth, extra cost); UTC
+  clock buckets (straddle the open); forward-filling (fabricated bars).
+- **Consequence:** A strategy whose opening range, MA bar size or session window doesn't fit
+  the timeframe is blocked before the run; intrabar ambiguity grows with the bar size and is
+  always resolved against the strategy.
+
+## QD-13 — Batch acquisition never resubmits on uncertainty
+
+- **Decision:** `vault/acquire.py` writes SUBMITTING before calling `batch.submit_job`. If the
+  answer is lost, it looks the job up with `batch.list_jobs`; if that is inconclusive, the
+  acquisition goes to ATTENTION and waits for the owner.
+- **Reason:** A repeated submit is a repeated charge. A stuck acquisition costs only time.

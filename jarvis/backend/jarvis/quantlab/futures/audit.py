@@ -65,7 +65,7 @@ def audit(
     early: list[str] = []
     for f in result.fills:
         if f.reason == "LAST_BAR_CLOSE":
-            if f.known_at_ns != f.bar_ts + MINUTE:
+            if f.known_at_ns != f.bar_ts + result.bar_ns:
                 early.append(f"order {f.order_id}: close exit not at the bar's end")
         elif f.bar_ts < f.known_at_ns:
             early.append(f"order {f.order_id}: filled in bar {f.bar_ts} before {f.known_at_ns}")

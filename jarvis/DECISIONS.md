@@ -160,6 +160,51 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-031 — QuantLab Local Data First: Data Vault, timeframes from 1-minute bars, one-time batch purchase
+
+- **Decision:** A normal backtest is three choices — strategy, market, timeframe — and runs
+  only on data already on the Mac. Buying data is a separate act in the **Data Vault**.
+  - **Backtest Lab** (QuantLab's default section, `quantlab/vault/lab.py`): readiness from the
+    local catalog, local snapshot, run. It has no code path to Databento; changing the
+    timeframe or market never contacts the provider.
+  - **1-minute bars are the source of truth.** Higher timeframes (2/3/5/10/15/30/60 min) are
+    derived (`ql-resample-1`: session-anchored in exchange time, bar start timestamps, no
+    filled gaps, no mixed contracts), cached by content hash, verified on use and rebuilt
+    offline. The engine takes the bar duration (`ENGINE_VERSION 1.1.0`, 1-minute results
+    unchanged). Strategy/timeframe compatibility is checked before a run.
+  - **Data Vault** (`quantlab/vault/`): imports (DBN / DBN.ZST, Parquet, CSV) with strict
+    checks — user files are never labelled exchange-authoritative; coverage per session;
+    readiness states; audit, repair from originals, derived rebuild; backup and restore;
+    an offline switch that blocks every Databento request.
+  - **One-time Databento purchase** (`vault/acquire.py`): only missing days are priced with
+    the free `metadata.get_cost`; explicit approval (confirm, exact request hash, maximum ≥
+    quote, Data Hub caps, 30-minute validity, append-only record); re-price before submit;
+    compare-and-set so a job is submitted once; an uncertain submit is looked up or handed to
+    the owner, never repeated; batch download with resume and SHA-256 verification into an
+    immutable raw archive.
+- **Reason:** The owner's brief (`docs/quantlab/LOCAL_DATA_FIRST_DIRECTIVE.md`): pay for
+  history once, then backtest any number of times on any timeframe without fees, keys or
+  network; never substitute another instrument and never invent data.
+- **Alternatives considered:**
+  - Request each timeframe from Databento (`ohlcv-1h` etc.). Rejected: costs per request and
+    a second, inconsistent source of truth.
+  - Resampling on UTC clock boundaries. Rejected: bars would straddle the session open.
+  - Filling missing minutes with the last price. Rejected: fabricated data.
+  - Streaming `timeseries.get_range` per backtest (the Data Hub path). Kept for the existing
+    Data Hub, but not used by the Backtest Lab.
+  - An OS-level network sandbox for backtests. Not built: the guarantee is enforced in code
+    (single gateway with an offline guard and a call counter) and by tests that block sockets.
+- **Consequences:**
+  - QuantLab opens on the Backtest Lab; the Idea Inbox and all earlier sections remain.
+  - Runs on a timeframe > 1 minute or with a market binding carry `timeframe`, `binding` and
+    `effective_spec(_sha256)` in their manifest; earlier runs keep their identity.
+  - SENTINEL's second engine only covers 1-minute runs; on coarser runs that check reports
+    "not run".
+  - User CSV/Parquet runs carry the fitness warning `UNVERIFIED_SOURCE`.
+  - Not verified here: a real Databento batch job, real DBN from Databento, the Keychain on
+    macOS. The fixture batch provider is labelled.
+- **Date:** 2026-10-11
+
 ## D-030 — Smart AI routing: Claude plan first, paid API only within approved caps, then local / pause
 
 - **Decision:** All model calls go through one `SmartRouter` (`backend/jarvis/ai/`). This covers

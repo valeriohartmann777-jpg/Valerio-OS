@@ -15,8 +15,11 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import threading
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from importlib.metadata import PackageNotFoundError, version
@@ -31,8 +34,10 @@ from jarvis.events.types import EventType, Severity
 from jarvis.quantlab.futures import contracts as ct
 from jarvis.quantlab.futures import engine, metrics, validation
 from jarvis.quantlab.futures import sessions as cal
+from jarvis.quantlab.futures import timeframes as tfs
 from jarvis.quantlab.futures.audit import audit, passed
 from jarvis.quantlab.futures.engine import MINUTE, Bars, Result
+from jarvis.quantlab.futures.resample import AGGREGATOR, resample, table_sha256
 from jarvis.quantlab.futures.sessions import Window
 from jarvis.quantlab.futures.spec import (
     FuturesSpec,
@@ -53,8 +58,9 @@ log = logging.getLogger("jarvis.quantlab.research")
 NS = 1_000_000_000
 KINDS = ("backtest", "validation")
 LIMITATIONS = [
-    "1-minute OHLCV bars: the order of prices within a minute is unknown (ambiguous bars are "
-    "resolved conservatively; the optimistic case is reported as a bound).",
+    "OHLCV bars (1-minute, or N-minute bars built from them): the order of prices within a "
+    "bar is unknown (ambiguous bars are resolved conservatively; the optimistic case is "
+    "reported as a bound).",
     "No bid/ask: the spread is part of the slippage assumption; no partial fills, no queue "
     "position, no market impact.",
     "Fixed contract count; margin is not modelled (only an optional initial-margin check).",
@@ -96,6 +102,58 @@ def _price(ticks: int | None, tick_fixed: int) -> float | None:
     return float(Decimal(ticks * tick_fixed) / Decimal(NS))
 
 
+# (dataset record, 1-minute-or-source bars, windows, minutes, source minutes)
+#   → (N-minute bars, provenance). The Data Vault caches them; the default builds them in memory.
+DeriveFn = Callable[
+    [dict[str, Any], pa.Table, list[Window], int, int], Awaitable[tuple[pa.Table, dict[str, Any]]]
+]
+
+
+def run_spec(manifest: dict[str, Any]) -> FuturesSpec:
+    """The spec a run executes: the strategy version, bound to the run's symbol/timeframe."""
+    return parse(manifest.get("effective_spec") or manifest["spec"])
+
+
+def run_minutes(manifest: dict[str, Any]) -> int:
+    return int((manifest.get("timeframe") or {}).get("minutes", 1))
+
+
+def source_minutes(record: dict[str, Any]) -> int:
+    match = re.fullmatch(r"ohlcv-(\d+)([mh])", str(record.get("schema", "ohlcv-1m")))
+    if match is None:
+        return 1
+    return int(match.group(1)) * (60 if match.group(2) == "h" else 1)
+
+
+def bind_symbol(dataset_symbol: str, product: str) -> str:
+    pattern = r"^(NQ|MNQ|ES|MES)(\.[cvn]\.0|\.local|[HMUZ]\d{1,2})$"
+    if re.match(pattern, dataset_symbol) and re.match(rf"^{product}(\.|[HMUZ]\d)", dataset_symbol):
+        return dataset_symbol
+    return f"{product}.local"
+
+
+async def derive_in_memory(
+    record: dict[str, Any], table: pa.Table, windows: list[Window], minutes: int, source: int
+) -> tuple[pa.Table, dict[str, Any]]:
+    out = await asyncio.to_thread(resample, table, windows, minutes, source_minutes=source)
+    sha = await asyncio.to_thread(table_sha256, out.table)
+    return out.table, {**out.stats, "sha256": sha, "cached": False}
+
+
+@dataclass
+class RunInputs:
+    spec: FuturesSpec
+    record: dict[str, Any]
+    table: pa.Table  # the bars as simulated (N-minute bars when the timeframe is > 1)
+    definitions: pa.Table | None
+    bars: Bars
+    contracts: dict[int, ct.ContractSpec]
+    findings: list[dict[str, Any]]
+    windows: list[Window]
+    minutes: int
+    derived: dict[str, Any] | None
+
+
 class ResearchService:
     def __init__(
         self,
@@ -115,6 +173,7 @@ class ResearchService:
         self._worker: asyncio.Task[None] | None = None
         self._cancel: dict[str, threading.Event] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
+        self.derive: DeriveFn = derive_in_memory  # the Data Vault plugs its cache in here
 
     # Lifecycle --------------------------------------------------------------------------
 
@@ -330,7 +389,11 @@ class ResearchService:
         kind: str = "backtest",
         include_holdout: bool = False,
         confirm_holdout: bool = False,
+        timeframe: int = 1,
+        binding: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Queue a run. ``timeframe`` (minutes) and ``binding`` ({product, cost_profile,
+        overrides}) come from the Backtest Lab; both become part of the run's identity."""
         if kind not in KINDS:
             raise ResearchError("INVALID_KIND", f"Run kind must be one of {', '.join(KINDS)}.")
         version_row = await self._store.version(version_id)
@@ -356,6 +419,48 @@ class ResearchService:
             dataset = await self._hub.dataset(dataset_id)
         except HubError as exc:
             raise ResearchError(exc.code, exc.message, status=exc.status) from None
+        minutes = int(timeframe)
+        extra: dict[str, Any] = {}
+        if minutes > 1 or binding:
+            product = str((binding or {}).get("product") or spec.instrument.product)
+            try:
+                effective, notes = tfs.effective_spec(
+                    spec,
+                    product=product,
+                    symbol=bind_symbol(str(dataset["symbol"]), product),
+                    minutes=minutes,
+                    cost_profile=(binding or {}).get("cost_profile"),
+                    overrides=(binding or {}).get("overrides"),
+                )
+            except (ValueError, FuturesSpecError) as exc:
+                raise ResearchError("INVALID_SETTINGS", str(exc)) from None
+            source = source_minutes(dataset)
+            compat = tfs.compatibility(effective, minutes, source)
+            if not compat["compatible"]:
+                raise ResearchError(
+                    "TIMEFRAME_INCOMPATIBLE",
+                    " ".join(i["message"] for i in compat["issues"]),
+                    "Pick a compatible timeframe — the Backtest Lab shows which ones are.",
+                )
+            extra = {
+                "timeframe": {
+                    "minutes": minutes,
+                    "label": tfs.label(minutes),
+                    "source_minutes": source,
+                    "aggregator": AGGREGATOR,
+                    "anchor": "strategy window start, local exchange time per date",
+                },
+                "binding": {
+                    "product": product,
+                    "symbol": effective.instrument.symbol,
+                    "cost_profile": (binding or {}).get("cost_profile"),
+                    "overrides": (binding or {}).get("overrides") or {},
+                    "notes": notes,
+                    "timeframe_notes": compat["notes"],
+                },
+                "effective_spec": effective.model_dump(mode="json"),
+                "effective_spec_sha256": effective.sha256(),
+            }
         core = {
             "manifest_version": "qr-run-1",
             "kind": kind,
@@ -390,6 +495,7 @@ class ResearchService:
             },
             "seed": spec.validation.bootstrap.seed,
             "live_trading": False,
+            **extra,
         }
         manifest_sha = sha256_text(canonical_json(core))
         run_id = "run-" + manifest_sha[:16]
@@ -424,8 +530,9 @@ class ResearchService:
                     "fixture": dataset["fixture"],
                 }
             )
+        on = dataset["symbol"] + (f" · {tfs.label(minutes)}" if minutes > 1 else "")
         await self._emit(
-            f"{kind.title()} queued — {spec.name} v{version_row['number']} on {dataset['symbol']}",
+            f"{kind.title()} queued — {spec.name} v{version_row['number']} on {on}",
             {"run_id": run_id, "status": "QUEUED"},
         )
         await self._queue.put(run_id)
@@ -531,14 +638,10 @@ class ResearchService:
         assert row is not None
         await self._stage(run_id, "loading verified dataset", 0.02)
         manifest = row["manifest"]
-        spec = parse(manifest["spec"])
-        record, table, definitions = await self._hub.load(row["dataset_id"])
-        bars = await asyncio.to_thread(Bars.from_table, table)
-        first_ts: dict[int, int] = {}
-        for iid, ts in zip(bars.iid.tolist(), bars.ts.tolist(), strict=True):
-            first_ts.setdefault(iid, ts)
-        contract_map, contract_findings = ct.build(spec.instrument.product, first_ts, definitions)
-        windows = _windows(spec, record["start"], record["end"])
+        inputs = await self._inputs(row)
+        spec, record, bars = inputs.spec, inputs.record, inputs.bars
+        contract_map, contract_findings = inputs.contracts, inputs.findings
+        windows, minutes = inputs.windows, inputs.minutes
         if not windows:
             raise ResearchError("NO_SESSIONS", "The dataset contains no trading session.")
         sp = validation.split(windows, spec)
@@ -554,8 +657,9 @@ class ResearchService:
         def sim(variant: FuturesSpec, ws: list[Window], **kw: Any) -> Result:
             source = kw.pop("bars", bars)
             return engine.simulate(
-                variant, source, contract_map, ws, cancelled=stop.is_set, context=windows, **kw
-            )
+                variant, source, contract_map, ws, cancelled=stop.is_set, context=windows,
+                bar_minutes=minutes, **kw,
+            )  # fmt: skip
 
         await self._stage(run_id, "simulating (conservative fills)", 0.08)
         base = await asyncio.to_thread(sim, spec, eligible)
@@ -573,6 +677,18 @@ class ResearchService:
         fit = validation.fitness(
             record["quality"], contract_findings, spec, record["symbol"], observed, counts
         )
+        if record.get("provider") == "import":
+            # A user's own CSV/Parquet file: usable for research, never exchange-verified.
+            if fit["status"] == "FIT":
+                fit["status"] = "FIT_WITH_LIMITATIONS"
+            fit["reasons"].append(
+                {
+                    "level": "FIT_WITH_LIMITATIONS",
+                    "code": "UNVERIFIED_SOURCE",
+                    "message": "Prices come from a file you imported; they weren't verified "
+                    "against the exchange. Confirm important results on licensed data.",
+                }
+            )
         is_l = sp.labels("insample")
         trial_rows: list[dict[str, Any]] = []
         trials = dict(await self._store.trial_keys(row["strategy_id"]))
@@ -660,6 +776,9 @@ class ResearchService:
             verdict,
             counts,
         )
+        if "timeframe" in manifest:
+            summary["timeframe"] = {**manifest["timeframe"], "derived": inputs.derived}
+            summary["binding"] = manifest["binding"]
         results_sha = await asyncio.to_thread(
             self._write_artifacts, run_id, manifest, base, sp, summary, contract_map, holdout_result
         )
@@ -691,6 +810,31 @@ class ResearchService:
             f"${float(base.final_equity - base.capital):,.2f} (conservative fills)"
         )
         await self._emit(text, {"run_id": run_id, "status": "COMPLETED"})
+
+    async def _inputs(self, row: dict[str, Any]) -> RunInputs:
+        """Everything a run is computed from, loaded and verified the same way every time."""
+        manifest = row["manifest"]
+        spec = run_spec(manifest)
+        record, table, definitions = await self._hub.load(row["dataset_id"])
+        windows = _windows(spec, record["start"], record["end"])
+        source = await asyncio.to_thread(Bars.from_table, table)
+        first_ts: dict[int, int] = {}
+        for iid, ts in zip(source.iid.tolist(), source.ts.tolist(), strict=True):
+            first_ts.setdefault(iid, ts)  # point-in-time contract specs: the first actual bar
+        names = {
+            int(k): str(v) for k, v in (record["manifest"].get("contract_names") or {}).items()
+        }
+        contracts, findings = ct.build(spec.instrument.product, first_ts, definitions, names)
+        minutes = run_minutes(manifest)
+        src = source_minutes(record)
+        derived: dict[str, Any] | None = None
+        bars = source
+        if minutes > 1 or src > 1:
+            table, derived = await self.derive(record, table, windows, minutes, src)
+            bars = await asyncio.to_thread(Bars.from_table, table)
+        return RunInputs(
+            spec, record, table, definitions, bars, contracts, findings, windows, minutes, derived
+        )
 
     def _summary(
         self,
@@ -895,20 +1039,11 @@ class ResearchService:
         if not match:
             raise ResearchError("NOT_FOUND", "No such trade.", status=404)
         trade = match[0]
-        _, table, _ = await self._hub.load(row["dataset_id"])
-        spec = parse(row["manifest"]["spec"])
+        inputs = await self._inputs(row)
+        table, spec = inputs.table, inputs.spec
         entry_ns = _parse_iso(trade["entry_time"])
         exit_ns = _parse_iso(trade["exit_time"])
-        window = next(
-            (
-                w
-                for w in _windows(
-                    spec, row["manifest"]["dataset"]["start"], row["manifest"]["dataset"]["end"]
-                )
-                if w.label.isoformat() == trade["session"]
-            ),
-            None,
-        )
+        window = next((w for w in inputs.windows if w.label.isoformat() == trade["session"]), None)
         start = window.start_ns if window else entry_ns - 30 * MINUTE
         end = window.end_ns if window else exit_ns + 30 * MINUTE
         lo_ns, hi_ns = max(start, entry_ns - 45 * MINUTE), min(end, exit_ns + 30 * MINUTE)
@@ -959,7 +1094,7 @@ class ResearchService:
         equity_path = self.root / run_id / "equity.parquet"
         equity = pq.read_table(equity_path).to_pylist() if equity_path.exists() else []
         picked = _downsample([e["equity"] for e in equity], points)
-        capital = float(row["manifest"]["spec"]["sizing"]["account_capital"])
+        capital = float(run_spec(row["manifest"]).sizing.account_capital)
         peak, curve = capital, []
         for i in picked:
             value = equity[i]["equity"]
@@ -971,11 +1106,8 @@ class ResearchService:
                     "drawdown": round(value - peak, 2),
                 }
             )
-        _, table, _ = await self._hub.load(row["dataset_id"])
-        spec = parse(row["manifest"]["spec"])
-        windows = _windows(
-            spec, row["manifest"]["dataset"]["start"], row["manifest"]["dataset"]["end"]
-        )
+        inputs = await self._inputs(row)
+        table, windows = inputs.table, inputs.windows
         ts = table.column("ts_event").to_numpy()
         o, h, lo, c = (table.column(k).to_numpy() for k in ("open", "high", "low", "close"))
         import numpy as np
@@ -1025,39 +1157,35 @@ class ResearchService:
     async def materials(self, run_id: str) -> dict[str, Any]:
         """What a run was computed from — for independent checks (SENTINEL), no results."""
         row = await self._completed(run_id)
-        spec = parse(row["manifest"]["spec"])
-        record, table, definitions = await self._hub.load(row["dataset_id"])
-        bars = Bars.from_table(table)
-        first_ts: dict[int, int] = {}
-        for iid, ts in zip(bars.iid.tolist(), bars.ts.tolist(), strict=True):
-            first_ts.setdefault(iid, ts)
-        contract_map, _ = ct.build(spec.instrument.product, first_ts, definitions)
-        windows = _windows(spec, record["start"], record["end"])
+        inputs = await self._inputs(row)
         return {
             "run": row,
-            "spec": spec,
-            "bars": bars,
-            "contracts": contract_map,
-            "windows": windows,
-            "split": validation.split(windows, spec),
-            "fixture": bool(record["fixture"]),
+            "spec": inputs.spec,
+            "bars": inputs.bars,
+            "bar_minutes": inputs.minutes,
+            "contracts": inputs.contracts,
+            "windows": inputs.windows,
+            "split": validation.split(inputs.windows, inputs.spec),
+            "fixture": bool(inputs.record["fixture"]),
         }
 
     async def reproduce(self, run_id: str) -> dict[str, Any]:
         """Recompute from the same manifest and compare result hashes (artifacts untouched)."""
         row = await self._completed(run_id)
-        manifest = row["manifest"]
-        spec = parse(manifest["spec"])
-        record, table, definitions = await self._hub.load(row["dataset_id"])
-        bars = Bars.from_table(table)
-        first_ts: dict[int, int] = {}
-        for iid, ts in zip(bars.iid.tolist(), bars.ts.tolist(), strict=True):
-            first_ts.setdefault(iid, ts)
-        contract_map, _ = ct.build(spec.instrument.product, first_ts, definitions)
-        windows = _windows(spec, record["start"], record["end"])
+        inputs = await self._inputs(row)
+        spec, bars, contract_map, windows = (
+            inputs.spec, inputs.bars, inputs.contracts, inputs.windows,
+        )  # fmt: skip
         sp = validation.split(windows, spec)
         again = await asyncio.to_thread(
-            lambda: engine.simulate(spec, bars, contract_map, sp.insample + sp.oos, context=windows)
+            lambda: engine.simulate(
+                spec,
+                bars,
+                contract_map,
+                sp.insample + sp.oos,
+                context=windows,
+                bar_minutes=inputs.minutes,
+            )
         )
         segment_of = {label: "IS" for label in sp.labels("insample")}
         segment_of.update({label: "OOS" for label in sp.labels("oos")})
@@ -1095,7 +1223,7 @@ class ResearchService:
                     "fixture": row["fixture"],
                 }
             )
-            specs.append(_flatten(row["manifest"]["spec"]))
+            specs.append(_flatten(row["manifest"].get("effective_spec") or row["manifest"]["spec"]))
         keys = sorted({k for s in specs for k in s})
         diff = [
             {"field": k, "values": [s.get(k) for s in specs]}
@@ -1212,6 +1340,9 @@ def _run_row(r: dict[str, Any]) -> dict[str, Any]:
         "fixture": r["fixture"],
         "name": summary.get("name") or r["manifest"]["spec"].get("name"),
         "symbol": r["manifest"]["dataset"]["symbol"],
+        "product": (r["manifest"].get("binding") or {}).get("product")
+        or r["manifest"]["spec"].get("instrument", {}).get("product"),
+        "timeframe": (r["manifest"].get("timeframe") or {}).get("label", "1m"),
         "net_pnl": (summary.get("metrics") or {}).get("net_pnl"),
         "oos_net": ((summary.get("segments") or {}).get("oos") or {}).get("net_pnl"),
         "trades": (summary.get("metrics") or {}).get("trades"),

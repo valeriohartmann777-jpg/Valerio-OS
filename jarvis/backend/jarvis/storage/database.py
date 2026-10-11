@@ -1025,6 +1025,134 @@ MIGRATIONS: list[list[str]] = [
         "CREATE INDEX idx_ai_usage_mission ON ai_usage(mission_id)",
         "CREATE INDEX idx_ai_events_at ON ai_events(id)",
     ],
+    # 16 — QuantLab Data Vault (local data first): file imports with provenance, cached
+    # derived timeframes, settings (offline switch), backups, integrity issues, one-time
+    # Databento batch acquisitions and their append-only approvals
+    [
+        """
+        CREATE TABLE qv_imports (
+            id             TEXT PRIMARY KEY,
+            created_at     TEXT NOT NULL,
+            status         TEXT NOT NULL,
+            format         TEXT NOT NULL,
+            filename       TEXT NOT NULL,
+            staged_path    TEXT,
+            raw_path       TEXT,
+            raw_sha256     TEXT NOT NULL,
+            bytes          INTEGER NOT NULL,
+            preview        TEXT NOT NULL,
+            mapping        TEXT,
+            provider       TEXT,
+            dataset        TEXT,
+            schema         TEXT,
+            stype_in       TEXT,
+            symbol         TEXT,
+            root           TEXT,
+            source_minutes INTEGER,
+            rows_in        INTEGER NOT NULL DEFAULT 0,
+            rows_ok        INTEGER NOT NULL DEFAULT 0,
+            rows_rejected  INTEGER NOT NULL DEFAULT 0,
+            first_ts       INTEGER,
+            last_ts        INTEGER,
+            days_added     INTEGER NOT NULL DEFAULT 0,
+            days_kept      INTEGER NOT NULL DEFAULT 0,
+            findings       TEXT NOT NULL DEFAULT '[]',
+            authoritative  INTEGER NOT NULL DEFAULT 0,
+            committed_at   TEXT,
+            error          TEXT
+        )
+        """,
+        """
+        CREATE TABLE qv_derived (
+            id           TEXT PRIMARY KEY,
+            dataset_id   TEXT NOT NULL,
+            minutes      INTEGER NOT NULL,
+            profile_sha  TEXT NOT NULL,
+            aggregator   TEXT NOT NULL,
+            path         TEXT NOT NULL,
+            file_sha256  TEXT NOT NULL,
+            data_sha256  TEXT NOT NULL,
+            bars         INTEGER NOT NULL,
+            stats        TEXT NOT NULL,
+            created_at   TEXT NOT NULL,
+            UNIQUE (dataset_id, minutes, profile_sha, aggregator)
+        )
+        """,
+        """
+        CREATE TABLE qv_settings (
+            key         TEXT PRIMARY KEY,
+            value       TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE qv_backups (
+            id           TEXT PRIMARY KEY,
+            created_at   TEXT NOT NULL,
+            location     TEXT NOT NULL,
+            files        INTEGER NOT NULL,
+            bytes        INTEGER NOT NULL,
+            manifest_sha256 TEXT NOT NULL,
+            status       TEXT NOT NULL,
+            verified_at  TEXT,
+            detail       TEXT NOT NULL DEFAULT '{}'
+        )
+        """,
+        """
+        CREATE TABLE qv_issues (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            at           TEXT NOT NULL,
+            kind         TEXT NOT NULL,
+            subject      TEXT NOT NULL,
+            detail       TEXT NOT NULL,
+            resolved_at  TEXT
+        )
+        """,
+        """
+        CREATE TABLE qv_acquisitions (
+            id             TEXT PRIMARY KEY,
+            created_at     TEXT NOT NULL,
+            updated_at     TEXT NOT NULL,
+            request_hash   TEXT NOT NULL,
+            request        TEXT NOT NULL,
+            items          TEXT NOT NULL,
+            status         TEXT NOT NULL,
+            quote          TEXT,
+            expires_at     TEXT,
+            approved_at    TEXT,
+            max_usd        REAL,
+            provider_job   TEXT,
+            job            TEXT NOT NULL DEFAULT '{}',
+            files          TEXT NOT NULL DEFAULT '[]',
+            progress       REAL NOT NULL DEFAULT 0,
+            error_code     TEXT,
+            error          TEXT,
+            fixture        INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+        """
+        CREATE TABLE qv_approvals (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            acquisition_id  TEXT NOT NULL,
+            request_hash    TEXT NOT NULL,
+            quoted_usd      REAL NOT NULL,
+            max_usd         REAL NOT NULL,
+            at              TEXT NOT NULL,
+            detail          TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER qv_approvals_no_update BEFORE UPDATE ON qv_approvals
+        BEGIN SELECT RAISE(ABORT, 'approvals are append-only'); END
+        """,
+        """
+        CREATE TRIGGER qv_approvals_no_delete BEFORE DELETE ON qv_approvals
+        BEGIN SELECT RAISE(ABORT, 'approvals are append-only'); END
+        """,
+        "CREATE INDEX idx_qv_acq_hash ON qv_acquisitions(request_hash)",
+        "CREATE INDEX idx_qv_acq_status ON qv_acquisitions(status)",
+        "CREATE INDEX idx_qv_imports_sha ON qv_imports(raw_sha256)",
+    ],
 ]
 
 

@@ -1,5 +1,8 @@
 # QuantLab architecture (Institutional Edition)
 
+> Local Data First (D-031): Backtest Lab, Data Vault, derived timeframes and one-time batch
+> purchase are described in `LOCAL_DATA_FIRST.md`.
+
 QuantLab is a part of JARVIS: the same shell, event bus, SQLite, permissions model and
 brain. It is not a second app. The R1 cash-equity lab (`backend/jarvis/quantlab/*.py`)
 is unchanged. The new parts are two packages.

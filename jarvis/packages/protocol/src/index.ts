@@ -6,3 +6,4 @@ export * from "./ultron";
 export * from "./quantlab-research";
 export * from "./quantlab-ideas";
 export * from "./ai";
+export * from "./quantlab-vault";

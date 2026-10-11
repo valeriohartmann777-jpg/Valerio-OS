@@ -58,6 +58,10 @@ from jarvis.quantlab.ideas.missions import MissionService
 from jarvis.quantlab.intake.service import SourceService
 from jarvis.quantlab.service import QuantLabService
 from jarvis.quantlab.store import QuantLabStore
+from jarvis.quantlab.vault.acquire import Acquisitions
+from jarvis.quantlab.vault.lab import BacktestLab
+from jarvis.quantlab.vault.service import VaultService
+from jarvis.quantlab.vault.store import VaultStore
 from jarvis.settings import PROJECT_ROOT, Settings
 from jarvis.storage.audit import AuditLog
 from jarvis.storage.database import Database
@@ -326,6 +330,30 @@ class Runtime:
             bus=self.bus,
             root=settings.data_dir / "quantlab" / "research",
             code_revision=self.build,
+        )
+        # Data Vault (local data first) and the Backtest Lab on top of hub + research.
+        self.vault = VaultService(
+            store=VaultStore(self.db),
+            hub=self.hub,
+            hub_store=self.hub.store,
+            bus=self.bus,
+            adapter=self.hub.adapter,
+        )
+        self.research.derive = self.vault.derived_bars  # cached, verified N-minute bars
+        self.acquisitions = Acquisitions(
+            store=VaultStore(self.db),
+            hub=self.hub,
+            hub_store=self.hub.store,
+            vault=self.vault,
+            adapter=self.hub.adapter,
+            bus=self.bus,
+        )
+        self.backtests = BacktestLab(
+            vault=self.vault,
+            hub=self.hub,
+            research=self.research,
+            store=ResearchStore(self.db),
+            bus=self.bus,
         )
         self._architect_script: ChatModel | None = None
         self.architect = StrategyArchitect(self._architect_model, self._architect_label)
@@ -596,6 +624,8 @@ class Runtime:
         await self.quantlab.start()
         await self.hub.start()
         await self.research.start()
+        await self.vault.start()  # offline switch, derived cache
+        await self.acquisitions.start()  # resumes interrupted purchases, never resubmits
         await self.sources.start()
         await self.quant_missions.start()
         await self.ultron.start()
@@ -627,6 +657,7 @@ class Runtime:
         await self.ultron.stop()
         await self.quant_missions.stop()
         await self.sources.stop()
+        await self.acquisitions.stop()
         await self.research.stop()
         await self.hub.stop()
         await self.quantlab.stop()

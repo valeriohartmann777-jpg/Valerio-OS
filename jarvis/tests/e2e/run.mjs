@@ -327,7 +327,7 @@ try {
   await step("QuantLab: broken data refused, synthetic data passported, a spec frozen, a run judged critically", async () => {
     const top = () => page.getByTestId("quantlab-page").evaluate((el) => el.scrollTo(0, 0));
     await page.getByRole("button", { name: "QuantLab", exact: true }).click();
-    await page.getByTestId("idea-inbox").waitFor(); // QuantLab opens on the Idea Inbox
+    await page.getByTestId("bl-launcher").waitFor(); // QuantLab opens on the Backtest Lab
     await page.getByTestId("ql-nav-overview").click();
     await page.getByTestId("qr-getting-started").waitFor(); // no number before a real run
     await page.getByTestId("ql-mode-research").click();
@@ -463,6 +463,71 @@ try {
     await page.waitForTimeout(300);
     await shot("11r-quantlab-overview");
     await page.getByTestId("ql-mode-simple").click();
+    await page.getByRole("button", { name: "Home" }).click();
+  });
+
+  await step("QuantLab local data first: Data Vault buys MNQ once, then Strategy → NQ → 5m → Backtest runs offline", async () => {
+    const lab = () => page.getByTestId("quantlab-page");
+    const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
+    const vault = () => fetch(`${backendUrl}/quantlab/data/vault`).then((r) => r.json());
+    await page.getByRole("button", { name: "QuantLab", exact: true }).click();
+    await page.getByTestId("ql-nav-data-vault").click();
+    await page.getByTestId("qv-vault").waitFor();
+    await page.getByTestId("qv-series-row").filter({ hasText: "NQ.v.0" }).waitFor(); // the earlier download
+    await page.getByTestId("qv-backup-warning").waitFor(); // the only copy is on this disk
+    // One-time purchase of MNQ: free quote → explicit approval → batch job → verified files.
+    await page.getByTestId("qv-acq-symbol").selectOption("MNQ");
+    await page.getByTestId("qv-acq-start").fill("2025-11-03");
+    await page.getByTestId("qv-acq-end").fill("2026-03-03");
+    await page.getByTestId("qv-acq-quote").click();
+    await page.getByTestId("qv-acq").and(page.locator('[data-status="QUOTED"]')).waitFor();
+    assert.match(await page.getByTestId("qv-acq-cost").innerText(), /^Quote \$\d/);
+    assert.equal(await page.getByTestId("qv-acq-approve").isDisabled(), true, "no purchase without the confirmation");
+    await page.getByTestId("qv-acquire").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    await shot("11s-vault-quote");
+    await page.getByTestId("qv-acq-confirm").check();
+    await page.getByTestId("qv-acq-approve").click();
+    await page.getByTestId("qv-acq-execute").click();
+    await page.getByTestId("qv-acq").and(page.locator('[data-status="COMPLETED"]')).waitFor({ timeout: 90_000 });
+    await page.getByTestId("qv-series-row").filter({ hasText: "MNQ.v.0" }).waitFor({ timeout: 30_000 });
+    // Offline mode: from here no market-data request may leave the app.
+    await page.getByTestId("qv-offline-toggle").click();
+    await page.getByTestId("qv-offline-state").filter({ hasText: "Offline mode on" }).waitFor();
+    await top();
+    await page.waitForTimeout(300);
+    await shot("11t-data-vault");
+    const before = (await vault()).provider_requests;
+
+    await page.getByTestId("ql-nav-backtest-lab").click();
+    await page.getByTestId("bl-strategy").filter({ hasText: "opening range" }).first().click();
+    await page.getByTestId("bl-market-NQ").click();
+    await page.getByTestId("bl-tf-5m").click();
+    await page.getByTestId("bl-readiness").and(page.locator('[data-status="READY"]')).waitFor();
+    await page.getByTestId("bl-readiness-badge").filter({ hasText: "Ready locally" }).waitFor();
+    assert.equal(await page.getByTestId("bl-tf-10m").getAttribute("data-ready"), "no", "a 15-min range can't be cut into 10-min bars");
+    await page.getByTestId("bl-run").click();
+    await page.getByTestId("qr-provenance").getByTestId("qr-timeframe").filter({ hasText: "NQ · 5m" }).waitFor({ timeout: 120_000 });
+    await page.getByTestId("qr-net").waitFor();
+    await page.getByTestId("qr-session-chart").waitFor();
+    await top();
+    await page.waitForTimeout(400);
+    await shot("11u-backtest-lab-nq-5m");
+    // The same strategy on MNQ (bought above) at 15m: one tenth of NQ's tick value.
+    await page.getByTestId("bl-market-MNQ").click();
+    await page.getByTestId("bl-tf-15m").click();
+    await page.getByTestId("bl-readiness").and(page.locator('[data-status="READY"]')).waitFor();
+    await page.getByTestId("bl-run").click();
+    await page.getByTestId("qr-provenance").getByTestId("qr-timeframe").filter({ hasText: "MNQ · 15m" }).waitFor({ timeout: 120_000 });
+    await page.getByTestId("bl-market-ES").click();
+    await page.getByTestId("bl-readiness").and(page.locator('[data-status="NOT_AVAILABLE"]')).waitFor();
+    await page.getByTestId("bl-open-vault").waitFor(); // missing data → the vault, never a silent purchase
+    assert.equal(await page.getByTestId("bl-run").isDisabled(), true);
+    assert.equal((await vault()).provider_requests, before, "a local backtest made a provider request");
+
+    await page.getByTestId("ql-nav-data-vault").click();
+    await page.getByTestId("qv-offline-toggle").click(); // back online for the later steps
+    await page.getByTestId("qv-offline-state").filter({ hasText: "Online" }).waitFor();
     await page.getByRole("button", { name: "Home" }).click();
   });
 

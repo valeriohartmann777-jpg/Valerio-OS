@@ -63,7 +63,7 @@ def clock(value: str) -> time:
 class Instrument(_Strict):
     product: Literal["NQ", "MNQ", "ES", "MES"]
     dataset: Literal["GLBX.MDP3"] = "GLBX.MDP3"
-    symbol: str = Field(pattern=r"^(NQ|MNQ|ES|MES)(\.[cvn]\.0|[HMUZ]\d{1,2})$")
+    symbol: str = Field(pattern=r"^(NQ|MNQ|ES|MES)(\.[cvn]\.0|\.local|[HMUZ]\d{1,2})$")
     stype_in: Literal["continuous", "raw_symbol"]
 
     @model_validator(mode="after")

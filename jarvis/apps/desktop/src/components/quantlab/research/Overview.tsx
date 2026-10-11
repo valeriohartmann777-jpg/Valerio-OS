@@ -6,6 +6,7 @@ import { Badge, Card } from "../ui";
 import { FixtureBadge, Progress, RunBadge, VerdictTag, tone, usd } from "./common";
 
 export type Section =
+  | "Data Vault"
   | "Idea Inbox"
   | "Research Room"
   | "Overview"

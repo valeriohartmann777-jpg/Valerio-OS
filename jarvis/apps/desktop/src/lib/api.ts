@@ -1,4 +1,11 @@
 import type {
+  BlAdvanced,
+  BlLaunch,
+  BlOptions,
+  BlReadiness,
+  QvAcquisition,
+  QvImport,
+  QvOverview,
   AiStatus,
   AiUsage,
   BotDetail,
@@ -389,6 +396,51 @@ export const api = {
       confirm: true,
     }),
   qmDossier: (id: string) => request<QmDossier>(`/quantlab/research/missions/${encodeURIComponent(id)}/dossier`),
+  // QuantLab Data Vault + Backtest Lab (local data first)
+  blOptions: () => request<BlOptions>("/quantlab/backtest/options"),
+  blReadiness: (symbol: string, versionId?: string | null, start?: string | null, end?: string | null) => {
+    const q = new URLSearchParams({ symbol });
+    if (versionId) q.set("version_id", versionId);
+    if (start) q.set("start", start);
+    if (end) q.set("end", end);
+    return request<{ product: string; version_id: string | null; timeframes: BlReadiness[] }>(`/quantlab/backtest/readiness?${q}`);
+  },
+  blStart: (body: { version_id: string; symbol: string; timeframe: string; advanced?: BlAdvanced }) =>
+    post<BlLaunch>("/quantlab/backtests", body),
+  qvOverview: () => request<QvOverview>("/quantlab/data/vault"),
+  qvUpload: (file: File) =>
+    request<QvImport>("/quantlab/data/imports", {
+      method: "POST",
+      body: file,
+      headers: { "content-type": "application/octet-stream", "x-filename": encodeURIComponent(file.name || "upload") },
+    }),
+  qvImportPath: (path: string) => post<QvImport>("/quantlab/data/imports/path", { path }),
+  qvCommit: (id: string, mapping: Record<string, unknown>) =>
+    post<QvImport>(`/quantlab/data/imports/${encodeURIComponent(id)}/commit`, mapping),
+  qvOffline: (enabled: boolean) => post<{ offline: boolean }>("/quantlab/data/vault/offline", { enabled }),
+  qvAudit: (repair = false) =>
+    post<{ checked: number; problems: Record<string, unknown>[]; repaired: Record<string, unknown>[]; ok: boolean }>(
+      "/quantlab/data/vault/audit",
+      { repair },
+    ),
+  qvRebuild: () => post<{ rebuilt: { path: string; identical: boolean; bars: number }[]; failed: unknown[] }>("/quantlab/data/rebuild-derived", {}),
+  qvBackup: (location: string) =>
+    post<{ id: string; location: string; files: number; bytes: number; status: string }>("/quantlab/data/vault/backups", { location, confirm: true }),
+  qvRestore: (location: string) =>
+    post<{ restored: number; intact: number; damaged_in_backup: string[] }>("/quantlab/data/vault/restore", { location, confirm: true }),
+  qvPrepare: (req: { symbols: string[]; start: string; end: string; schema?: string; stype_in?: string; include_definitions?: boolean }) =>
+    post<QvAcquisition>("/quantlab/data/acquisitions/prepare", req),
+  qvApprove: (id: string, requestHash: string, maxUsd: number) =>
+    post<QvAcquisition>("/quantlab/data/acquisitions/approve", {
+      acquisition_id: id,
+      request_hash: requestHash,
+      max_usd: maxUsd,
+      confirm: true,
+    }),
+  qvExecute: (id: string) => post<QvAcquisition>("/quantlab/data/acquisitions/execute", { acquisition_id: id }),
+  qvAcquisitions: () => request<QvAcquisition[]>("/quantlab/data/acquisitions"),
+  qvResume: (id: string) => post<QvAcquisition>(`/quantlab/data/acquisitions/${encodeURIComponent(id)}/resume`),
+  qvAbandon: (id: string) => post<QvAcquisition>(`/quantlab/data/acquisitions/${encodeURIComponent(id)}/abandon`),
   aiStatus: () => request<AiStatus>("/ai/status"),
   aiUsage: () => request<AiUsage>("/ai/usage"),
   aiStrategy: (strategy: AiStatus["strategy"], profile?: AiStatus["profile"]) =>

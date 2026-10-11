@@ -268,6 +268,50 @@ class HubStore:
         )
         return [_row(r, "instrument_ids") for r in rows]
 
+    async def cache_rows(self, cache_key: str) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            "SELECT * FROM qh_cache WHERE cache_key = ? ORDER BY day", (cache_key,)
+        )
+        return [_row(r, "instrument_ids") for r in rows]
+
+    async def cache_rows_all(self) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all("SELECT * FROM qh_cache ORDER BY cache_key, day")
+        return [_row(r, "instrument_ids") for r in rows]
+
+    async def update_cache_file(self, cache_key: str, day: str, path: str, sha: str) -> None:
+        await self._db.execute(
+            "UPDATE qh_cache SET canonical_path = ?, sha256 = ? WHERE cache_key = ? AND day = ?",
+            (path, sha, cache_key, day),
+        )
+
+    async def restore_cache_rows(self, rows: list[dict[str, Any]]) -> int:
+        """Re-insert catalog rows from a backup; rows already present are left alone."""
+        before = await self._db.fetch_one("SELECT COUNT(*) AS n FROM qh_cache")
+        await self._db.execute_many(
+            "INSERT OR IGNORE INTO qh_cache (cache_key, day, provider, dataset, schema, "
+            "stype_in, symbol, records, canonical_path, sha256, raw_path, raw_sha256, "
+            "condition, instrument_ids, job_id, transform_version, fixture, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    r["cache_key"], r["day"], r["provider"], r["dataset"], r["schema"],
+                    r["stype_in"], r["symbol"], r["records"], r["canonical_path"], r["sha256"],
+                    r["raw_path"], r["raw_sha256"], r["condition"],
+                    json.dumps(r["instrument_ids"]), r["job_id"], r["transform_version"],
+                    int(r["fixture"]), r.get("created_at") or now(),
+                )
+                for r in rows
+            ],
+        )  # fmt: skip
+        after = await self._db.fetch_one("SELECT COUNT(*) AS n FROM qh_cache")
+        return int(after["n"]) - int(before["n"]) if after and before else 0
+
+    async def restore_dataset(self, record: dict[str, Any]) -> bool:
+        if await self.dataset(record["id"]) is not None:
+            return False
+        await self.add_dataset(record)
+        return True
+
     async def cache_summary(self) -> list[dict[str, Any]]:
         rows = await self._db.fetch_all(
             "SELECT cache_key, provider, dataset, schema, stype_in, symbol, MIN(day) AS first_day, "

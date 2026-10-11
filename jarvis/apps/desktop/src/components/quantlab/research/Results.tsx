@@ -170,6 +170,42 @@ function BacktestBody({ run, chart, mode, onTrade }: { run: QrRun; chart: QrChar
           </dl>
         </Card>
       </div>
+      {(s.timeframe || s.binding) && (
+        <Card title="How this run was computed" testId="qr-provenance">
+          <dl className="grid gap-x-6 sm:grid-cols-2">
+            <Kv label="Market / timeframe">
+              <span data-testid="qr-timeframe">
+                {s.binding?.product ?? s.product} · {s.timeframe?.label ?? "1m"}
+              </span>
+            </Kv>
+            <Kv label="Bars">
+              {s.timeframe
+                ? `${s.timeframe.label} built from ${s.timeframe.source_minutes}m bars (${s.timeframe.aggregator}, ${s.timeframe.anchor})`
+                : "1-minute bars as stored"}
+            </Kv>
+            {s.timeframe?.derived && (
+              <Kv label="Derived bars" mono>
+                {s.timeframe.derived.bars_out.toLocaleString("en-US")} · {s.timeframe.derived.cached ? "from the vault cache" : "built now"} ·{" "}
+                {s.timeframe.derived.sha256.slice(0, 12)}
+              </Kv>
+            )}
+            <Kv label="Dataset" mono>
+              {s.dataset.id} · {s.dataset.symbol} {s.dataset.start} → {s.dataset.end}
+            </Kv>
+            <Kv label="Network">none — local data only</Kv>
+            <Kv label="Engine" mono>
+              {String((run.manifest.engine as { version?: string }).version ?? "")}
+            </Kv>
+          </dl>
+          {[...(s.binding?.notes ?? []), ...(s.binding?.timeframe_notes ?? [])].length > 0 && (
+            <ul className="mt-3 list-disc space-y-0.5 pl-4 text-2xs leading-relaxed text-fg-faint">
+              {[...(s.binding?.notes ?? []), ...(s.binding?.timeframe_notes ?? [])].map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
       <Card title="Sessions and trades" aside={<span className="text-2xs text-fg-faint">one candle per strategy session (New York regular hours), prices unadjusted</span>}>
         {chart ? (
           <CandleChart

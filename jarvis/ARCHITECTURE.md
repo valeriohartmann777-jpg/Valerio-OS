@@ -726,7 +726,7 @@ ideas/dossier.py     Markdown + JSON dossier (source facts / test facts / interp
   (`confirm: true`), holdout only via `…/holdout-lock` (`confirm: true`).
 - Runtime: `rt.sources`, `rt.quant_missions` (`rt.missions` stays the core MissionEngine);
   `_quant_model(role)` gives Claude per role from `config/ultron.yaml` or the labelled script.
-- UI: `components/quantlab/ideas/*` — IdeaInbox (default section), SourceView, BlueprintView,
+- UI: `components/quantlab/ideas/*` — IdeaInbox, SourceView, BlueprintView,
   ResearchRoom, EvolutionView, DossierView.
 - Electron CSP allows keyframe images and the owner's own video from the local backend only.
 - Detail: `docs/quantlab/IDEA_TO_EDGE_SPEC.md`, `SOURCE_PROVENANCE_CONTRACT.md`,
@@ -756,6 +756,35 @@ task resumes without repeating a tool. ULTRON and QuantLab missions block on `ai
 
 UI: Settings → AI & Billing and the top-bar route chip. Details:
 `docs/AI_ROUTING_ARCHITECTURE.md`, `docs/AI_BILLING_POLICY.md`, `docs/AI_FALLBACK_RUNBOOK.md`.
+
+## 13k. QuantLab Local Data First (`backend/jarvis/quantlab/vault/`, D-031)
+
+```
+futures/resample.py    ql-resample-1: 1m → N-minute bars, session-anchored, bar-start stamps,
+                       no gap filling, split at instrument-id changes, content hash
+futures/timeframes.py  TIMEFRAMES, strategy↔timeframe compatibility, effective_spec
+                       (market binding, cost profile, overrides)
+vault/importer.py      sniff / mapping / preview / strict parse of DBN, Parquet, CSV
+vault/service.py       VaultService: catalog, coverage (XNYS sessions), readiness, derived
+                       cache, audit/repair, backup/restore, offline switch, overview
+vault/lab.py           BacktestLab: options, readiness, launch (local snapshot → research run)
+vault/acquire.py       Acquisitions: prepare (free get_cost) → approve → execute (batch
+                       submit_job / list_files / download, resume, SHA-256) → ingest
+vault/store.py         qv_* tables (migration 16; qv_approvals append-only)
+api/quantlab_vault_routes.py   /quantlab/data/*, /quantlab/backtest*, /quantlab/instruments
+```
+
+- Flow of a backtest: `BacktestLab.launch` → `hub.build_dataset` (local canonical days) →
+  `research.start_run(timeframe, binding)` → `research.derive = vault.derived_bars` → engine
+  (`bar_minutes`), audit, validation, verdict. No provider object on this path.
+- Network: every Databento call goes through `DatabentoAdapter._call`, which checks the
+  vault's offline guard and counts calls (`provider_requests` in the overview).
+- Runtime: `rt.vault`, `rt.backtests`, `rt.acquisitions` (worker resumes SUBMITTING …
+  INGESTING after a restart).
+- Events: `quantlab.vault`, `quantlab.backtest`.
+- UI: `components/quantlab/vault/BacktestLauncher.tsx` (default section, above the existing
+  results) and `DataVault.tsx`.
+- Detail: `docs/quantlab/LOCAL_DATA_FIRST.md`, evidence `LOCAL_DATA_FIRST_TEST_EVIDENCE.md`.
 
 ## 14. Extension points (designed, not built)
 

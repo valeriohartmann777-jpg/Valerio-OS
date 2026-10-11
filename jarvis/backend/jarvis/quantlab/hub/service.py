@@ -30,6 +30,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import shutil
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -148,6 +149,30 @@ class DataHubService:
     @property
     def fixture(self) -> bool:
         return self._adapter.fixture_label is not None
+
+    @property
+    def store(self) -> HubStore:
+        return self._store
+
+    @property
+    def adapter(self) -> DatabentoAdapter:
+        return self._adapter
+
+    # For the Data Vault's one-time batch acquisition (same key, same cache, same caps).
+
+    def api_key(self) -> str:
+        return self._key()
+
+    def provider_error(self, exc: ProviderError) -> HubError:
+        return self._provider_error(exc)
+
+    async def missing_days(
+        self, dataset: str, schema: str, stype_in: str, symbol: str, first: date, last: date
+    ) -> tuple[list[date], list[dict[str, Any]]]:
+        return await self._missing(dataset, schema, stype_in, symbol, first, last)
+
+    async def month_spent(self) -> float:
+        return await self._store.approved_since(_month_start())
 
     # Lifecycle --------------------------------------------------------------------------
 
@@ -428,9 +453,16 @@ class DataHubService:
         return sha256_text(canonical_json(core))
 
     async def _missing(
-        self, dataset: str, schema: str, stype_in: str, symbol: str, first: date, last: date
+        self,
+        dataset: str,
+        schema: str,
+        stype_in: str,
+        symbol: str,
+        first: date,
+        last: date,
+        provider: str = PROVIDER,
     ) -> tuple[list[date], list[dict[str, Any]]]:
-        key = cache.cache_key(PROVIDER, dataset, schema, stype_in, symbol)
+        key = cache.cache_key(provider, dataset, schema, stype_in, symbol)
         have = await self._store.cached_days(key, first.isoformat(), last.isoformat())
         held = {row["day"] for row in have}
         return [d for d in cache.days(first, last) if d.isoformat() not in held], have
@@ -947,18 +979,29 @@ class DataHubService:
     async def cache_summary(self) -> list[dict[str, Any]]:
         return await self._store.cache_summary()
 
-    async def build_dataset(self, request: dict[str, Any]) -> dict[str, Any]:
+    async def build_dataset(
+        self, request: dict[str, Any], extra: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """An immutable snapshot of cached days — local only, never a provider call.
+
+        ``provider`` is ``databento`` (downloads) or a Data Vault source (``import``,
+        ``databento-file``); ``extra`` (Data Vault only) adds provenance to the manifest.
+        """
         dataset = str(request.get("dataset", "")).strip()
         schema = str(request.get("schema", "ohlcv-1m"))
         stype_in = str(request.get("stype_in", "")).strip()
         symbol = str(request.get("symbol", "")).strip()
+        provider = str(request.get("provider") or PROVIDER)
         first, last = _day(str(request.get("start", ""))), _day(str(request.get("end", "")))
-        if schema != "ohlcv-1m":
+        bar_schema = re.fullmatch(r"ohlcv-(\d+)([mh])", schema)
+        if schema != "ohlcv-1m" and (provider == PROVIDER or bar_schema is None):
             raise HubError("SCHEMA_NOT_SUPPORTED", "Datasets are built from ohlcv-1m bars for now.")
         if last <= first:
             raise HubError("INVALID_RANGE", "The end date must be after the start date.")
         async with self._dataset_lock:
-            missing, have = await self._missing(dataset, schema, stype_in, symbol, first, last)
+            missing, have = await self._missing(
+                dataset, schema, stype_in, symbol, first, last, provider
+            )
             if missing:
                 spans = [f"{a} → {b}" for a, b in cache.ranges(missing)]
                 raise HubError(
@@ -967,8 +1010,12 @@ class DataHubService:
                     "Request a quote for them in the Data Hub (cached days cost nothing).",
                     missing=[d.isoformat() for d in missing],
                 )
-            _, def_have = await self._missing(dataset, "definition", stype_in, symbol, first, last)
-            return await self._build(dataset, schema, stype_in, symbol, first, last, have, def_have)
+            _, def_have = await self._missing(
+                dataset, "definition", stype_in, symbol, first, last, provider
+            )
+            return await self._build(
+                dataset, schema, stype_in, symbol, first, last, have, def_have, provider, extra
+            )
 
     async def _build(
         self,
@@ -980,6 +1027,8 @@ class DataHubService:
         last: date,
         have: list[dict[str, Any]],
         def_have: list[dict[str, Any]],
+        provider: str = PROVIDER,
+        extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         for row in have + def_have:
             path = row.get("canonical_path")
@@ -1044,9 +1093,10 @@ class DataHubService:
                     }
                 )
         fixture = any(bool(r["fixture"]) for r in have)
+        unit = "1-minute" if schema == "ohlcv-1m" else schema.removeprefix("ohlcv-") + " "
         core = {
             "manifest_version": "qh-dataset-1",
-            "provider": PROVIDER,
+            "provider": provider,
             "fixture": fixture,
             "dataset": dataset,
             "schema": schema,
@@ -1054,8 +1104,8 @@ class DataHubService:
             "symbol": symbol,
             "window": {"start": first.isoformat(), "end": last.isoformat(), "timezone": "UTC"},
             "time_convention": (
-                "ts_event is the START of each 1-minute bar (Databento OHLCV). A bar's values are "
-                "known only at ts_event + 1 minute. Bars exist only for minutes with trades."
+                f"ts_event is the START of each {unit.strip()} bar (Databento OHLCV convention). "
+                "A bar's values are known only at its end. Bars exist only for periods with trades."
             ),
             "prices": "Integer fixed precision (1e-9), unadjusted, as delivered.",
             "records": bars.num_rows,
@@ -1078,8 +1128,15 @@ class DataHubService:
             "calendar": {"library": cal.LIBRARY, "version": cal.library_version()},
             "sdk_version": sdk_version(),
             "acquisition": acquisition,
-            "license": LICENSE_NOTE,
+            "license": LICENSE_NOTE
+            if provider == PROVIDER
+            else (extra or {}).get(
+                "license",
+                "User-supplied file — private, local research use; provenance as declared.",
+            ),
         }
+        if extra:
+            core.update({k: v for k, v in extra.items() if k != "license"})
         dataset_id = "dh-" + sha256_text(canonical_json(core))[:16]
         existing = await self._store.dataset(dataset_id)
         if existing:
@@ -1110,7 +1167,7 @@ class DataHubService:
             cache.freeze(manifest_path)
         record = {
             "id": dataset_id,
-            "provider": PROVIDER,
+            "provider": provider,
             "dataset": dataset,
             "schema": schema,
             "stype_in": stype_in,
@@ -1125,7 +1182,7 @@ class DataHubService:
             "fixture": fixture,
         }
         await self._store.add_dataset(record)
-        await self._store.audit(PROVIDER, "dataset.built", {"dataset_id": dataset_id})
+        await self._store.audit(provider, "dataset.built", {"dataset_id": dataset_id})
         await self._emit(
             EventType.QUANTLAB_HUB_DATASET,
             f"Dataset {dataset_id} built — {bars.num_rows:,} bars, quality {quality['status']}",

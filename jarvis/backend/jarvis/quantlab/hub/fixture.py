@@ -407,6 +407,130 @@ class _Symbology:
         }
 
 
+# Batch jobs live for the process (each call builds a new client, like the hub does).
+BATCH_JOBS: dict[str, dict[str, Any]] = {}
+BATCH_FILES: dict[tuple[str, str], bytes] = {}
+# Tests: file names whose next download is cut halfway (a dropped connection).
+FAIL_ONCE: set[str] = set()
+
+
+class _Batch:
+    """``batch.submit_job / list_jobs / list_files / download`` — offline, labelled FIXTURE.
+
+    A job moves queued → processing → done over two ``list_jobs`` polls. Files are real
+    zstd-compressed DBN (one per month, like ``split_duration="month"``) with SHA-256 hashes;
+    a download resumes from a partial file the way the SDK's Range requests do.
+    """
+
+    def __init__(self, owner: FixtureHistorical) -> None:
+        self._o = owner
+
+    def submit_job(self, **kw: Any) -> dict[str, Any]:
+        dataset, schema, stype_in, known, _, start, end = self._o._plan(kw)
+        cost = _Metadata(self._o).get_cost(**{k: v for k, v in kw.items() if k in (
+            "dataset", "symbols", "schema", "start", "end", "stype_in")})  # fmt: skip
+        digest = hashlib.sha256(repr(sorted(kw.items())).encode() + str(len(BATCH_JOBS)).encode())
+        job_id = "FIXTURE-" + digest.hexdigest()[:12].upper()
+        job = {
+            "id": job_id,
+            "state": "queued",
+            "dataset": dataset,
+            "schema": schema,
+            "stype_in": stype_in,
+            "symbols": [s for s, _, _ in known],
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "cost_usd": cost,
+            "ts_received": datetime.now(UTC).isoformat(),
+            "split_duration": kw.get("split_duration", "day"),
+            "compression": kw.get("compression", "zstd"),
+            "key": self._o.key,
+            "fixture": True,
+        }
+        BATCH_JOBS[job_id] = job
+        return {k: v for k, v in job.items() if k != "key"}
+
+    def list_jobs(self, states: Any = None, since: Any = None) -> list[dict[str, Any]]:
+        self._o.check()
+        out = []
+        for job in BATCH_JOBS.values():
+            if job["key"] != self._o.key or (since and str(job["ts_received"]) < str(since)):
+                continue
+            if job["state"] == "queued":
+                job["state"] = "processing"
+            elif job["state"] == "processing":
+                job["state"] = "done"
+            out.append({k: v for k, v in job.items() if k != "key"})
+        return out
+
+    def _months(self, job: dict[str, Any]) -> list[tuple[date, date]]:
+        start, end = _date(job["start"]), _date(job["end"])
+        out, cursor = [], start
+        while cursor < end:
+            nxt = (cursor.replace(day=1) + timedelta(days=32)).replace(day=1)
+            out.append((cursor, min(nxt, end)))
+            cursor = nxt
+        return out
+
+    def list_files(self, job_id: str) -> list[dict[str, Any]]:
+        import zstandard
+
+        self._o.check()
+        job = BATCH_JOBS.get(job_id)
+        if job is None or job["state"] != "done":
+            return []
+        files = []
+        for first, last in self._months(job):
+            name = f"{job['dataset'].lower()}-{first:%Y%m%d}-{last:%Y%m%d}.{job['schema']}.dbn.zst"
+            key = (job_id, name)
+            if key not in BATCH_FILES:
+                raw = self._o.encode(
+                    dataset=job["dataset"], schema=job["schema"], stype_in=job["stype_in"],
+                    symbols=job["symbols"], start=first.isoformat(), end=last.isoformat(),
+                )  # fmt: skip
+                BATCH_FILES[key] = zstandard.ZstdCompressor(level=3).compress(raw)
+            data = BATCH_FILES[key]
+            files.append(
+                {
+                    "filename": name,
+                    "size": len(data),
+                    "hash": "sha256:" + hashlib.sha256(data).hexdigest(),
+                    "urls": {"https": f"fixture://{job_id}/{name}", "ftp": ""},
+                }
+            )
+        return files
+
+    def download(
+        self,
+        job_id: str,
+        output_dir: Any = None,
+        filename_to_download: str | None = None,
+        keep_zip: bool = False,
+    ) -> list[Path]:
+        self._o.check()
+        names = [f["filename"] for f in self.list_files(job_id)]
+        wanted = [filename_to_download] if filename_to_download else names
+        folder = Path(output_dir or ".") / job_id
+        folder.mkdir(parents=True, exist_ok=True)
+        out = []
+        for name in wanted:
+            data = BATCH_FILES[(job_id, name)]
+            path = folder / name
+            have = path.stat().st_size if path.exists() else 0
+            if have > len(data):
+                raise FileExistsError(f"{name} is larger than expected")
+            if name in FAIL_ONCE:
+                FAIL_ONCE.discard(name)
+                cut = have + (len(data) - have) // 2
+                with path.open("ab") as handle:
+                    handle.write(data[have:cut])
+                raise ConnectionError("fixture: connection dropped mid-file")
+            with path.open("ab") as handle:
+                handle.write(data[have:])  # Range request: only the missing bytes
+            out.append(path)
+        return out
+
+
 class FixtureHistorical:
     """Same call surface as ``databento.Historical`` for what the hub uses."""
 
@@ -415,6 +539,7 @@ class FixtureHistorical:
         self.metadata = _Metadata(self)
         self.timeseries = _Timeseries(self)
         self.symbology = _Symbology(self)
+        self.batch = _Batch(self)
 
     # -- behaviour -----------------------------------------------------------------------
 

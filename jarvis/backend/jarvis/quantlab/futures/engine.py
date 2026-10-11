@@ -1,4 +1,4 @@
-"""Event-driven intraday futures simulator on 1-minute OHLCV bars.
+"""Event-driven intraday futures simulator on OHLCV bars (1 minute or N minutes).
 
 Phases per bar: market event → observable state → signal eligibility → order
 submission → fill simulation → position/cash accounting → risk exits → next bar.
@@ -6,14 +6,16 @@ submission → fill simulation → position/cash accounting → risk exits → n
 Ground rules (each is tested):
 
 * A bar stamped ``t`` (its start, Databento convention) is complete at
-  ``t + 1 minute``; nothing it contains is used before then.
+  ``t + bar duration``; nothing it contains is used before then. N-minute bars are
+  built from 1-minute bars by ``futures/resample.py`` (session-anchored, one contract
+  per bar); every timing rule below uses the bar's own duration.
 * Prices are integer ticks of the traded contract; money is ``Decimal``.
   P&L = ticks × tick value × contracts, so NQ and MNQ can't be confused.
 * Market orders fill at the next eligible bar's open plus slippage. Stop
   orders fill at their price, or at the open if price gapped through, plus
   slippage. Targets (limit orders) fill at their price, only when price
   trades through it unless ``touch`` is chosen (at the open if it opened beyond).
-* Within one minute the order of high and low is unknown. When a stop and a
+* Within one bar the order of high and low is unknown. When a stop and a
   target are both inside a bar, ``conservative`` mode assumes the stop and
   ``optimistic`` mode the target; the run reports both. Breakouts triggering
   both directions inside one bar are excluded and counted, never guessed.
@@ -44,7 +46,7 @@ from jarvis.quantlab.futures.spec import (
 )
 
 ENGINE_NAME = "quantlab-futures-bar-engine"
-ENGINE_VERSION = "1.0.0"
+ENGINE_VERSION = "1.1.0"  # 1.1: N-minute bars (1-minute results unchanged)
 NS = 1_000_000_000
 MINUTE = 60 * NS
 Mode = Literal["conservative", "optimistic"]
@@ -177,6 +179,11 @@ class Result:
     fee_per_side: Decimal = Decimal(0)
     slippage_ticks: int = 0
     contracts_used: dict[int, ContractSpec] = field(default_factory=dict)
+    bar_minutes: int = 1
+
+    @property
+    def bar_ns(self) -> int:
+        return self.bar_minutes * MINUTE
 
     @property
     def final_equity(self) -> Decimal:
@@ -415,7 +422,7 @@ class _Session:
         sim.result.trades.append(trade)
         self.log.trades += 1
         self.log.net += trade.net
-        self.log.minutes_in_market += (self.ts[j] - pos.entry_ts) // MINUTE + 1
+        self.log.minutes_in_market += (self.ts[j] + sim.bar - pos.entry_ts) // MINUTE
         self.log.status = "TRADED"
         self.pos = None
 
@@ -445,7 +452,7 @@ class _Session:
         optimistic = self.sim.mode == "optimistic"
         o, h, low, c = self.o[j], self.h[j], self.l[j], self.c[j]
         self.track(j)
-        if not intrabar_entry and self.ts[j] >= self.w.flatten_ns:
+        if not intrabar_entry and self.past_flatten(j):
             self.close(j, o, "TIME_EXIT", False)
             return True
         d = pos.direction
@@ -492,14 +499,15 @@ class _Session:
         """No bar at or after the flatten time: exit at the last bar's close (flagged)."""
         if self.pos is None:
             return
-        self.close(last, self.c[last], "LAST_BAR_CLOSE", False, at_ts=self.ts[last] + MINUTE)
+        end = self.ts[last] + self.sim.bar
+        self.close(last, self.c[last], "LAST_BAR_CLOSE", False, at_ts=end)
         result = self.sim.result
         if self.sim.record_equity:
             # The bar's mark was taken with the position still open: realized value replaces it.
-            if result.equity_ts and result.equity_ts[-1] == self.ts[last] + MINUTE:
+            if result.equity_ts and result.equity_ts[-1] == end:
                 result.equity[-1] = self.sim.cash
             else:
-                result.equity_ts.append(self.ts[last] + MINUTE)
+                result.equity_ts.append(end)
                 result.equity.append(self.sim.cash)
 
     def mark(self, j: int) -> None:
@@ -510,8 +518,22 @@ class _Session:
         if self.pos is not None and self.contract is not None:
             moved = (self.c[j] - self.pos.entry_ticks) * self.pos.direction
             equity += Decimal(moved) * self.contract.tick_value * sim.contracts_n
-        sim.result.equity_ts.append(self.ts[j] + MINUTE)
+        sim.result.equity_ts.append(self.ts[j] + sim.bar)
         sim.result.equity.append(equity)
+
+    # bar timing ----------------------------------------------------------------------------
+
+    def ends_after(self, j: int, moment: int) -> bool:
+        """Bar j isn't over before ``moment`` (for 1-minute bars: ``ts[j] >= moment``)."""
+        return bool(self.ts[j] + self.sim.bar > moment)
+
+    def past_flatten(self, j: int) -> bool:
+        """The flatten time falls inside or before bar j: exit at its open."""
+        return self.ends_after(j, self.w.flatten_ns)
+
+    def no_entry_at_open(self, k: int) -> bool:
+        """A market entry at bar k's open would be after the cutoff or need a time exit at once."""
+        return self.ts[k] >= self.w.entry_cutoff_ns or self.past_flatten(k)
 
     # rules -------------------------------------------------------------------------------
 
@@ -577,14 +599,14 @@ class _Session:
             last = len(self.ts) - 1
             if (
                 not self.sim.result.equity_ts
-                or self.sim.result.equity_ts[-1] != self.ts[last] + MINUTE
+                or self.sim.result.equity_ts[-1] != self.ts[last] + self.sim.bar
             ):
                 self.mark(last)
 
     def opening_range(self, rule: OpeningRangeBreakout) -> None:
         w, n = self.w, len(self.ts)
         range_end = w.start_ns + rule.range_minutes * MINUTE
-        in_range = [j for j in range(n) if self.ts[j] < range_end]
+        in_range = [j for j in range(n) if self.ts[j] + self.sim.bar <= range_end]
         if not in_range:
             self.log.status = "NO_RANGE"
             return
@@ -599,7 +621,9 @@ class _Session:
             return
         buy, sell = hi + rule.buffer_ticks, lo - rule.buffer_ticks
         longs, shorts = rule.direction in ("long", "both"), rule.direction in ("short", "both")
-        active = max(range_end + self.sim.spec.execution.latency_bars * MINUTE, self.entry_from)
+        active = max(
+            range_end + self.sim.spec.execution.latency_bars * self.sim.bar, self.entry_from
+        )
         if rule.entry == "stop_through_range":
             longs = longs and self.bias_ok(1, buy)
             shorts = shorts and self.bias_ok(-1, sell)
@@ -613,7 +637,7 @@ class _Session:
                     self.mark(j)
                     j += 1
                     continue
-                if self.ts[j] >= min(w.entry_cutoff_ns, w.flatten_ns):
+                if self.ends_after(j, min(w.entry_cutoff_ns, w.flatten_ns)):
                     break
                 o = self.o[j]
                 up = longs and self.h[j] >= buy
@@ -625,7 +649,7 @@ class _Session:
                         up = False
                     else:
                         self.log.status = "AMBIGUOUS_ENTRY"
-                        self.log.note = "both breakout stops inside one 1-minute bar"
+                        self.log.note = f"both breakout stops inside one {self.sim.unit} bar"
                         for p in pending:
                             if p is not None:
                                 self.close_order(p, "CANCELED", self.ts[j])
@@ -655,16 +679,16 @@ class _Session:
         # close_beyond_range: a completed bar beyond the range → market order next bar
         for j in range(first, n):
             self.mark(j)
-            known = self.ts[j] + MINUTE
+            known = self.ts[j] + self.sim.bar
             if known < self.entry_from:
                 continue
             long_signal = longs and self.c[j] > buy and self.bias_ok(1, self.c[j])
             short_signal = shorts and self.c[j] < sell and self.bias_ok(-1, self.c[j])
             if not (long_signal or short_signal):
                 continue
-            eligible = known + self.sim.spec.execution.latency_bars * MINUTE
+            eligible = known + self.sim.spec.execution.latency_bars * self.sim.bar
             k = next((i for i in range(j + 1, n) if self.ts[i] >= eligible), None)
-            if k is None or self.ts[k] >= min(w.entry_cutoff_ns, w.flatten_ns):
+            if k is None or self.no_entry_at_open(k):
                 self.log.note = "signal too late to execute before the entry cutoff"
                 return
             self.open(k, 1 if long_signal else -1, self.o[k], known, None, False, (hi, lo))
@@ -688,18 +712,19 @@ class _Session:
     def crossover(self, rule: MovingAverageCrossover) -> None:
         w, n = self.w, len(self.ts)
         longs, shorts = rule.direction in ("long", "both"), rule.direction in ("short", "both")
-        # Decision points: the end of each 1-minute bar, or of each N-minute bar built from
-        # them (aligned to the session start; known only once its period has ended).
-        span = rule.bar_minutes * MINUTE
-        decide: dict[int, int] = {}  # 1-minute bar index → known_at of the bar it completes
+        # Decision points: the end of each bar, or of each N-minute bar built from them
+        # (aligned to the session start; known only once its period has ended).
+        per_bar = rule.bar_minutes * MINUTE <= self.sim.bar
+        span = max(rule.bar_minutes * MINUTE, self.sim.bar)
+        decide: dict[int, int] = {}  # bar index → known_at of the bar it completes
         closes: list[int] = []
         for j in range(n):
             bucket = (self.ts[j] - w.start_ns) // span
             if j + 1 < n and (self.ts[j + 1] - w.start_ns) // span == bucket:
                 continue
             decide[j] = (
-                self.ts[j] + MINUTE
-                if rule.bar_minutes == 1
+                self.ts[j] + self.sim.bar
+                if per_bar
                 else min(w.start_ns + (bucket + 1) * span, w.end_ns)
             )
             closes.append(self.c[j])
@@ -715,7 +740,7 @@ class _Session:
             return fast * rule.slow - slow * rule.fast  # sign of SMA(fast) − SMA(slow), exact
 
         pending: tuple[int, int] | None = None  # (wanted position, known_at)
-        latency = self.sim.spec.execution.latency_bars * MINUTE
+        latency = self.sim.spec.execution.latency_bars * self.sim.bar
         k = -1
         for j in range(n):
             ts = self.ts[j]
@@ -723,7 +748,7 @@ class _Session:
                 wanted, known = pending
                 pending = None
                 current = self.pos.direction if self.pos else 0
-                if ts < w.flatten_ns and wanted != current:
+                if not self.past_flatten(j) and wanted != current:
                     if self.pos is not None:
                         self.close(j, self.o[j], "SIGNAL_EXIT", False, order_kind="MARKET_EXIT")
                     if wanted != 0 and ts < w.entry_cutoff_ns:
@@ -756,7 +781,7 @@ class _Session:
         """(high, low, first bar after the range, range end ns) — or None, logged."""
         w, n = self.w, len(self.ts)
         range_end = w.start_ns + minutes * MINUTE
-        in_range = [j for j in range(n) if self.ts[j] < range_end]
+        in_range = [j for j in range(n) if self.ts[j] + self.sim.bar <= range_end]
         if not in_range:
             self.log.status = "NO_RANGE"
             self.mark_from(0)
@@ -774,7 +799,7 @@ class _Session:
 
     def _ambiguous(self, j: int, orders: list[Order | None]) -> None:
         self.log.status = "AMBIGUOUS_ENTRY"
-        self.log.note = "both sides triggered inside one 1-minute bar"
+        self.log.note = f"both sides triggered inside one {self.sim.unit} bar"
         for record in orders:
             if record is not None:
                 self.close_order(record, "CANCELED", self.ts[j])
@@ -783,11 +808,11 @@ class _Session:
     def _market_entry(self, j: int, direction: int, extreme: int | None,
                       range_hl: tuple[int, int] | None) -> None:  # fmt: skip
         """A signal on the close of bar j → market order at the next eligible bar's open."""
-        w, n = self.w, len(self.ts)
-        known = self.ts[j] + MINUTE
-        eligible = known + self.sim.spec.execution.latency_bars * MINUTE
+        n = len(self.ts)
+        known = self.ts[j] + self.sim.bar
+        eligible = known + self.sim.spec.execution.latency_bars * self.sim.bar
         k = next((i for i in range(j + 1, n) if self.ts[i] >= eligible), None)
-        if k is None or self.ts[k] >= min(w.entry_cutoff_ns, w.flatten_ns):
+        if k is None or self.no_entry_at_open(k):
             self.log.note = "signal too late to execute before the entry cutoff"
             self.mark_from(j + 1)
             return
@@ -798,7 +823,7 @@ class _Session:
 
     def sweep(self, rule: LevelSweepReclaim) -> None:
         w, n = self.w, len(self.ts)
-        latency = self.sim.spec.execution.latency_bars * MINUTE
+        latency = self.sim.spec.execution.latency_bars * self.sim.bar
         range_hl: tuple[int, int] | None = None
         if rule.level == "opening_range":
             assert rule.range_minutes is not None
@@ -834,7 +859,7 @@ class _Session:
             if ts < usable + latency:
                 self.mark(j)
                 continue
-            if ts >= limit:
+            if self.ends_after(j, limit):
                 break
             o, h, low, c = self.o[j], self.h[j], self.l[j], self.c[j]
             if rule.reclaim == "stop_back_through":
@@ -889,7 +914,11 @@ class _Session:
                         if self.bias_ok(-side, price):
                             what = "high" if side == 1 else "low"
                             orders[side] = self.order(
-                                ts + MINUTE, "STOP_ENTRY", -side, price, note=f"sweep of {what}"
+                                ts + self.sim.bar,
+                                "STOP_ENTRY",
+                                -side,
+                                price,
+                                note=f"sweep of {what}",
                             )
                         else:
                             sweep[side], armed[side] = None, False
@@ -898,7 +927,7 @@ class _Session:
                     sw[1] = max(sw[1], h) if side == 1 else min(sw[1], low)
                 if rule.reclaim == "close_back_inside" and sw is not None:
                     if inside:
-                        known = ts + MINUTE
+                        known = ts + self.sim.bar
                         if known >= self.entry_from and self.bias_ok(-side, c):
                             signals.append((side, sw[1]))
                         sweep[side] = None  # used (or filtered); the side is inside again
@@ -921,7 +950,9 @@ class _Session:
         for record in orders.values():
             if record is not None:
                 self.close_order(record, "EXPIRED", limit)
-        self.mark_from(max(first, min(n, next((i for i in range(n) if self.ts[i] >= limit), n))))
+        self.mark_from(
+            max(first, min(n, next((i for i in range(n) if self.ends_after(i, limit)), n)))
+        )
 
     def retest(self, rule: OpeningRangeRetest) -> None:
         w, n = self.w, len(self.ts)
@@ -929,7 +960,7 @@ class _Session:
         if got is None:
             return
         hi, lo, first, range_end = got
-        latency = self.sim.spec.execution.latency_bars * MINUTE
+        latency = self.sim.spec.execution.latency_bars * self.sim.bar
         limit = min(w.entry_cutoff_ns, w.flatten_ns)
         sides = []
         if rule.direction in ("long", "both"):
@@ -944,7 +975,7 @@ class _Session:
             if ts < range_end + latency:
                 self.mark(j)
                 continue
-            if ts >= limit:
+            if self.ends_after(j, limit):
                 break
             low, h, c = self.l[j], self.h[j], self.c[j]
             signals: list[tuple[int, int]] = []
@@ -968,7 +999,7 @@ class _Session:
                 touched = low <= edge + tol if side == 1 else h >= edge - tol
                 if touched:
                     broke[side], armed[side] = None, False
-                    known = ts + MINUTE
+                    known = ts + self.sim.bar
                     if known >= self.entry_from and self.bias_ok(side, c):
                         signals.append((side, low if side == 1 else h))
             if len(signals) > 1:
@@ -980,7 +1011,9 @@ class _Session:
                 self._market_entry(j, side, extreme, (hi, lo))
                 return
             self.mark(j)
-        self.mark_from(max(first, min(n, next((i for i in range(n) if self.ts[i] >= limit), n))))
+        self.mark_from(
+            max(first, min(n, next((i for i in range(n) if self.ends_after(i, limit)), n)))
+        )
 
 
 class _Simulator:
@@ -992,7 +1025,12 @@ class _Simulator:
         mode: Mode,
         cost_multiplier: float,
         record_equity: bool,
+        bar_minutes: int = 1,
     ) -> None:
+        if bar_minutes < 1:
+            raise ValueError("bar_minutes must be at least 1")
+        self.bar = bar_minutes * MINUTE
+        self.unit = f"{bar_minutes}-minute"
         self.spec = spec
         self.bars = bars
         self.contracts = contracts
@@ -1013,6 +1051,7 @@ class _Simulator:
             capital=self.cash,
             fee_per_side=self.fee_per_side,
             slippage_ticks=self.slippage,
+            bar_minutes=bar_minutes,
         )
 
 
@@ -1060,8 +1099,11 @@ def simulate(
     record_equity: bool = True,
     cancelled: Callable[[], bool] | None = None,
     context: list[Window] | None = None,
+    bar_minutes: int = 1,
 ) -> Result:
-    sim = _Simulator(spec, bars, contracts, mode, cost_multiplier, record_equity)
+    """Simulate ``spec`` on ``bars`` of ``bar_minutes`` each (1-minute data or N-minute bars
+    from ``resample.resample``; the caller states which — bars carry no duration)."""
+    sim = _Simulator(spec, bars, contracts, mode, cost_multiplier, record_equity, bar_minutes)
     ts = bars.ts
     before = predecessors(windows, context)
     for number, window in enumerate(windows):

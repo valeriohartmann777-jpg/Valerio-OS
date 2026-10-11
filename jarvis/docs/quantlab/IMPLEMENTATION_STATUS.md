@@ -1,10 +1,15 @@
 # QuantLab Implementation Status
 
-Updated: 2026-10-10
+Updated: 2026-10-11
 Repo location: `Valerio-OS/jarvis` (the repo root holds an unrelated Next.js project, untouched)
 Branch: `claude/jarvis-foundation-mxnsz4`
 
-QuantLab has three parts:
+QuantLab has these parts:
+
+- **Local Data First (D-031)** — Backtest Lab (strategy → market → timeframe → Backtest, local
+  data only) and the Data Vault (imports, one-time Databento batch purchase, derived
+  timeframes, audit, backup, offline mode). Built from `LOCAL_DATA_FIRST_DIRECTIVE.md`;
+  spec `LOCAL_DATA_FIRST.md`; evidence `LOCAL_DATA_FIRST_TEST_EVIDENCE.md`. Status below.
 
 0. **Idea-to-Edge (QuantLab 3.0)** — the Idea Inbox, research missions and evolution, built
    from `IDEA_TO_EDGE_DIRECTIVE.md`. Decision D-029; spec `IDEA_TO_EDGE_SPEC.md`; status per
@@ -26,6 +31,46 @@ Evidence for everything below: `TEST_EVIDENCE.md`. Release state per milestone:
 - No Databento key was available in this environment. Every market-data path ran against the
   offline fixture provider with synthetic prices.
 - No historical data has been bought or downloaded from Databento.
+
+## Local Data First (D-031)
+
+### DONE (implemented and tested here)
+
+- [x] Timeframes 1/2/3/5/10/15/30/60 min derived from 1-minute bars (`ql-resample-1`),
+  session-anchored, bar-start stamps, no gap filling, split at contract changes; derived
+  cache verified on use and rebuilt offline; engine 1.1.0 with bar duration (1m unchanged).
+- [x] Strategy ↔ timeframe compatibility (blocking issues and notes), effective spec per
+  market (NQ / MNQ / ES / MES contract master, cost profiles), run identity incl. timeframe.
+- [x] Backtest Lab: strategy search, market, timeframe buttons with readiness, advanced
+  settings, provenance card; no provider path.
+- [x] Data Vault: DBN / DBN.ZST / Parquet / CSV import with mapping and strict checks; coverage
+  per XNYS session; readiness states; audit, repair, rebuild; backup / restore; offline
+  switch; storage view; provider comparison.
+- [x] One-time Databento batch purchase: free quote for missing days only, explicit approval
+  (exact hash, maximum, caps, expiry, append-only), re-price, single submission, reconcile
+  instead of resubmit, resumable verified download, ingest, restart recovery.
+- [x] Tests: 28 in `test_quantlab_vault.py` (all 20 of §K plus extras); E2E step
+  "QuantLab local data first" (31/31 E2E).
+
+### MOCKED (labelled)
+
+- Databento batch API → `hub/fixture.py` `_Batch` (jobs, monthly zstd DBN files, one
+  scripted download cut). Synthetic prices.
+- DBN "from Databento" in tests → files written locally with the official encoder.
+
+### NOT VERIFIED
+
+- [ ] A real Databento batch job and its real charge.
+- [ ] Real DBN files downloaded from Databento; multi-year import speed.
+- [ ] macOS Keychain and the Mac app with this build.
+
+### NEXT
+
+1. On the Mac: Data Vault → (Databento connected) → Acquire once: `NQ.v.0`, e.g.
+   2020-01-01 → yesterday → **Get free quote** → decide → approve → Start download. Then
+   Backtest Lab: strategy → NQ → 5m → Backtest with offline mode on.
+2. Same for `MNQ.v.0` if MNQ results are wanted (a separate contract).
+3. A second engine for timeframes > 1 minute (SENTINEL's check reports "not run" today).
 
 ## Institutional Edition
 
