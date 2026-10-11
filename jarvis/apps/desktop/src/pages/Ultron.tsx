@@ -1,9 +1,14 @@
-import type { UlAgent, UlArtifact, UlEvent, UlKnowledge, UlMission, UlMissionRow, UlOverview, UlProjectKind } from "@jarvis/protocol";
+import type { HqRoom, HqRoomId, HqSnapshot, UlAgent, UlArtifact, UlEvent, UlKnowledge, UlMission, UlMissionRow, UlOverview, UlProjectKind } from "@jarvis/protocol";
 import { useCallback, useEffect, useState } from "react";
 
 import { Badge, Hash, compactInputClass, inputClass } from "../components/quantlab/ui";
 import { Button, cx } from "../components/ui/primitives";
+import { Inspector } from "../components/ultron/hq/Inspector";
+import { Crew, ROOM_LOOK, World } from "../components/ultron/hq/World";
 import { MissionCard, MissionView, Timeline } from "../components/ultron/MissionView";
+import { Panel } from "../components/ui/shell";
+import { go } from "../lib/history";
+import { useInterfacePrefs } from "../lib/interface";
 import { AgentName, ArtifactViewer, MissionState, Section, time, usd } from "../components/ultron/parts";
 import { ApiError, api } from "../lib/api";
 import { dispatch, useJarvis } from "../store/store";
@@ -27,20 +32,46 @@ function useUltronTick(): string | null {
   });
 }
 
+const WORKSHOP_VIEWS = ["Overview", "Mission Control", "Projects", "Activity", "Permissions"] as const;
+const ROOMS: HqRoomId[] = ["homebase", "workshop", "quantlab", "research", "academy"];
+
+/** Refresh on any event that can change a robot: ULTRON, QuantLab missions, desktop agents. */
+function useHqTick(): string | null {
+  return useJarvis((s) => {
+    for (let i = s.activity.length - 1; i >= 0; i--) {
+      const event = s.activity[i];
+      if (event && (event.type.startsWith("ultron.") || event.type.startsWith("quantlab.mission") || event.type.startsWith("agent."))) return event.id;
+    }
+    return null;
+  });
+}
+
+/**
+ * Team ULTRON — the HQ (brief §7): five rooms, nine robots placed by their real work, an
+ * inspector, and each room's real content. The complete Mission Control lives in the Workshop.
+ */
 export function Ultron() {
-  const [view, setView] = useState<ViewName>("Overview");
+  const route = useJarvis((s) => s.view);
+  const room: HqRoomId = route.name === "ultron" && ROOMS.includes(route.room as HqRoomId) ? (route.room as HqRoomId) : route.name === "ultron" && route.mission ? "workshop" : "homebase";
+  const routeMission = route.name === "ultron" ? (route.mission ?? null) : null;
+  const [view, setView] = useState<ViewName>(routeMission ? "Mission Control" : "Overview");
   const [overview, setOverview] = useState<UlOverview | null>(null);
   const [missions, setMissions] = useState<UlMissionRow[]>([]);
-  const [missionId, setMissionId] = useState<string | null>(null);
+  const [missionId, setMissionId] = useState<string | null>(routeMission);
+  const [hq, setHq] = useState<HqSnapshot | null>(null);
+  const [robot, setRobot] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tick = useUltronTick();
+  const hqTick = useHqTick();
   const connection = useJarvis((s) => s.connection);
+  const prefs = useInterfacePrefs();
 
   const refresh = useCallback(async () => {
     try {
-      const [o, m] = await Promise.all([api.ulOverview(), api.ulMissions()]);
+      const [o, m, h] = await Promise.all([api.ulOverview(), api.ulMissions(), api.teamHq()]);
       setOverview(o);
       setMissions(m);
+      setHq(h);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "ULTRON isn't reachable.");
@@ -50,19 +81,30 @@ export function Ultron() {
   useEffect(() => {
     const id = window.setTimeout(() => void refresh(), 120); // coalesce bursts of events
     return () => window.clearTimeout(id);
-  }, [refresh, tick, connection]);
+  }, [refresh, tick, hqTick, connection]);
 
+  useEffect(() => {
+    if (routeMission) {
+      setMissionId(routeMission);
+      setView("Mission Control");
+    }
+  }, [routeMission]);
+
+  const goRoom = (next: HqRoomId) => go({ name: "ultron", room: next });
   const open = (id: string) => {
     setMissionId(id);
     setView("Mission Control");
+    if (room !== "workshop") goRoom("workshop");
   };
+  const selected = hq?.robots.find((r) => r.id === robot) ?? null;
+  const roomInfo = hq?.rooms.find((r) => r.id === room) ?? null;
 
   return (
     <div className="h-full overflow-y-auto px-7" data-testid="ultron-page" style={{ "--area": "var(--color-ultron)" } as React.CSSProperties}>
-      <div className="mx-auto max-w-[1400px] pb-8">
+      <div className="mx-auto max-w-[1440px] pb-8">
         <header className="mb-5 flex flex-wrap items-end gap-4 pt-7">
           <div className="mr-auto">
-            <p className="text-[12px] font-extrabold tracking-[0.22em] text-[var(--area)] uppercase">JARVIS / Autonomous team / {view}</p>
+            <p className="text-[12px] font-extrabold tracking-[0.22em] text-[var(--area)] uppercase">JARVIS / Autonomous team / {roomInfo?.name ?? "HQ"}</p>
             <h1 className="mt-1.5 text-[clamp(28px,3.2vw,44px)] leading-none font-black tracking-[-0.02em] text-fg uppercase">ULTRON HQ.</h1>
             <p className="mt-2 text-[14px] text-fg-muted" data-testid="ul-status-line">
               {overview ? (
@@ -71,6 +113,7 @@ export function Ultron() {
                     {overview.workers.busy} of {overview.workers.limit} worker slot(s) busy
                   </span>{" "}
                   · {overview.counts.active} active mission(s) · {overview.pending_approvals.length} approval(s) waiting
+                  {hq && ` · JARVIS: ${hq.jarvis.label}`}
                 </>
               ) : (
                 "Connecting…"
@@ -87,38 +130,202 @@ export function Ultron() {
           </p>
         )}
         {overview && !overview.model_ready && !overview.scripted && (
-          <div className="mb-4 flex items-center gap-3 rounded-xl border border-ql-border bg-ql-surface px-4 py-3 text-[13px] text-fg-muted">
-            ULTRON's agents run on Claude. Connect your Claude plan (or approve the paid API) in Settings → AI &amp; Billing to start missions.
+          <div className="mb-4 flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/5 px-4 py-3 text-[13px] text-fg-muted" data-testid="ul-no-route">
+            ULTRON's agents run on Claude. Connect your Claude plan (or approve the paid API) in Settings → AI &amp; Billing to start missions. Robots that need Claude show as offline until then.
             <Button className="ml-auto" onClick={() => dispatch({ type: "navigate", view: { name: "settings", section: "ai" } })}>
               Open AI &amp; Billing
             </Button>
           </div>
         )}
-
-        <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-ql-border bg-ql-surface p-1" aria-label="ULTRON">
-          {VIEWS.map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={cx("flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] transition-colors", view === v ? "bg-ql-raised text-fg" : "text-fg-faint hover:text-fg-muted")}
-              data-testid={`ul-view-${v.toLowerCase().replace(/\s+/g, "-")}`}
-            >
-              {v}
-            </button>
-          ))}
-        </nav>
         {error && <p className="mb-4 text-[13px] text-ql-danger">{error}</p>}
 
-        {view === "Overview" && overview && <OverviewView overview={overview} missions={missions} onOpen={open} onCreated={(m) => open(m.id)} />}
-        {view === "Mission Control" && <MissionControl missions={missions} selected={missionId} onSelect={setMissionId} tick={tick} />}
-        {view === "Agent Matrix" && overview && <AgentMatrix agents={overview.agents} onOpen={open} />}
-        {view === "Projects" && <Projects missions={missions} onOpen={open} tick={tick} />}
-        {view === "Knowledge" && <Knowledge tick={tick} />}
-        {view === "Activity" && <Activity missions={missions} tick={tick} />}
-        {view === "Permissions" && overview && <Permissions overview={overview} onSaved={refresh} />}
+        {hq && (
+          <>
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,1fr)]">
+              <Panel
+                title={
+                  <span className="flex flex-col">
+                    <span className="text-[11px] font-extrabold tracking-[0.2em] text-ultron">Your little robot base</span>
+                    ULTRON headquarters
+                  </span>
+                }
+                aside={<span className="rounded-md border border-hairline-strong px-2 py-0.5 text-[12px] font-bold text-fg-muted">5 rooms</span>}
+              >
+                {prefs.world === "simple" ? <RoomList hq={hq} room={room} onRoom={goRoom} /> : <World hq={hq} room={room} robot={robot} onRoom={goRoom} onRobot={setRobot} />}
+              </Panel>
+              <div className="flex flex-col gap-5">
+                <RoomCard room={room} info={roomInfo} hq={hq} onRoom={goRoom} />
+                <Inspector robot={selected} onRoom={goRoom} />
+              </div>
+            </div>
+            <Panel title="Your crew" aside={<span className="text-[12px] text-fg-muted">{hq.evidence}</span>} className="mt-5">
+              <Crew robots={hq.robots} selected={robot} onRobot={setRobot} />
+            </Panel>
+          </>
+        )}
+
+        <section className="mt-6" data-testid={`hq-room-content-${room}`}>
+          {room === "workshop" && (
+            <>
+              <nav className="mb-5 flex gap-1 overflow-x-auto rounded-xl border border-hairline-strong bg-surface/80 p-1" aria-label="Workshop">
+                {WORKSHOP_VIEWS.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setView(v)}
+                    aria-current={view === v ? "page" : undefined}
+                    className={cx("min-h-10 flex-1 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold transition-colors", view === v ? "bg-surface-2 text-fg shadow-[inset_0_-3px_0_var(--area)]" : "text-fg-muted hover:bg-white/5 hover:text-fg")}
+                    data-testid={`ul-view-${v.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </nav>
+              {view === "Overview" && overview && <OverviewView overview={overview} missions={missions} onOpen={open} onCreated={(m) => open(m.id)} />}
+              {view === "Mission Control" && <MissionControl missions={missions} selected={missionId} onSelect={setMissionId} tick={tick} />}
+              {view === "Projects" && <Projects missions={missions} onOpen={open} tick={tick} />}
+              {view === "Activity" && <Activity missions={missions} tick={tick} />}
+              {view === "Permissions" && overview && <Permissions overview={overview} onSaved={refresh} />}
+            </>
+          )}
+          {room === "homebase" && overview && <Homebase overview={overview} hq={hq} onOpen={open} onRoom={goRoom} />}
+          {room === "research" && <ResearchRoomContent tick={tick} />}
+          {room === "academy" && overview && <Academy overview={overview} onOpen={open} />}
+          {room === "quantlab" && <TeamQuantLabRoom hq={hq} />}
+        </section>
       </div>
     </div>
+  );
+}
+
+/** The accessible / low-detail alternative to the drawn base (Settings → Interface). */
+function RoomList({ hq, room, onRoom }: { hq: HqSnapshot; room: HqRoomId; onRoom: (r: HqRoomId) => void }) {
+  return (
+    <ul className="divide-y divide-hairline" data-testid="hq-room-list">
+      {hq.rooms.map((r) => (
+        <li key={r.id}>
+          <button type="button" onClick={() => onRoom(r.id)} aria-pressed={room === r.id} className={cx("flex w-full items-center justify-between gap-3 px-2 py-3 text-left", room === r.id && "bg-surface-2")}>
+            <span>
+              <span className="block text-[14px] font-black text-fg uppercase">{ROOM_LOOK[r.id].no} / {r.name}</span>
+              <span className="block text-[12px] text-fg-muted">{r.description}</span>
+            </span>
+            <span className="text-[12px] text-fg-muted">{r.robots.map((id) => hq.robots.find((x) => x.id === id)?.name).join(", ") || "empty"}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RoomCard({ room, info, hq, onRoom }: { room: HqRoomId; info: HqRoom | null; hq: HqSnapshot; onRoom: (r: HqRoomId) => void }) {
+  const working = hq.robots.filter((r) => r.room === room && r.state !== "idle" && r.state !== "offline");
+  return (
+    <Panel title={info?.name ?? room} aside={<span className="rounded-md border border-hairline-strong px-2 py-0.5 text-[12px] font-bold text-fg-muted">Room details</span>} testId="hq-room-card">
+      <p className="text-[13px] leading-relaxed text-fg-muted">{info?.description}</p>
+      <p className="mt-3 rounded-lg border border-hairline bg-canvas-2/50 px-3 py-2 text-[13px] text-fg-muted">
+        {room === "homebase"
+          ? `${hq.robots.filter((r) => r.room === "homebase").length} robot(s) docked. Docked = no task; standby = a planned task; active work moves a robot into its room.`
+          : working.length > 0
+            ? `Working here now: ${working.map((r) => r.name).join(", ")}.`
+            : "Nobody works here right now."}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {room === "homebase" && (
+          <Button variant="primary" onClick={() => onRoom("workshop")} data-testid="hq-create-mission">
+            Create a mission
+          </Button>
+        )}
+        {room !== "quantlab" && (
+          <Button onClick={() => onRoom("quantlab")}>ULTRON QuantLab</Button>
+        )}
+        <Button onClick={() => go({ name: "quantlab" })}>Solo QuantLab ↗</Button>
+      </div>
+    </Panel>
+  );
+}
+
+function Homebase({ overview, hq, onOpen, onRoom }: { overview: UlOverview; hq: HqSnapshot | null; onOpen: (id: string) => void; onRoom: (r: HqRoomId) => void }) {
+  const waiting = overview.pending_approvals;
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <Panel title="Waiting for you">
+        {waiting.length === 0 ? (
+          <p className="text-[13px] text-fg-muted">No approval is waiting. Missions stop at consequence boundaries and ask here.</p>
+        ) : (
+          <ul className="space-y-2">
+            {waiting.map((a) => (
+              <li key={a.id}>
+                <button type="button" onClick={() => onOpen(a.mission_id)} className="text-left text-[13px] text-warning hover:underline">
+                  {a.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+      <Panel title="Recent missions">
+        {overview.missions.length === 0 ? (
+          <p className="text-[13px] text-fg-muted">
+            No mission yet. <button type="button" className="font-semibold text-ultron hover:underline" onClick={() => onRoom("workshop")}>Create one in the Workshop</button> — or tell JARVIS on Home.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {overview.missions.slice(0, 6).map((m) => (
+              <li key={m.id} className="flex items-center justify-between gap-3 text-[13px]">
+                <button type="button" className="truncate text-left text-fg hover:underline" onClick={() => onOpen(m.id)}>
+                  {m.title}
+                </button>
+                <MissionState state={m.state} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {hq && <p className="mt-3 text-[12px] text-fg-muted">AI route: {hq.ai.ready ? hq.ai.route : "none"} — {hq.ai.reason}</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function ResearchRoomContent({ tick }: { tick: string | null }) {
+  return (
+    <div className="space-y-5">
+      <Panel title="Research room">
+        <p className="text-[13px] leading-relaxed text-fg-muted">
+          ATLAS extracts quoted claims from your sources and ARCHIVE keeps lineage and the trial ledger — both inside QuantLab
+          research missions. Specs, reports and SENTINEL reviews from software missions are kept below.
+        </p>
+        <Button className="mt-3" onClick={() => go({ name: "quantlab", section: "research-room" })}>
+          Open research missions (QuantLab) ↗
+        </Button>
+      </Panel>
+      <Knowledge tick={tick} />
+    </div>
+  );
+}
+
+function Academy({ overview, onOpen }: { overview: UlOverview; onOpen: (id: string) => void }) {
+  return (
+    <div className="space-y-5">
+      <Panel title="Academy · Test chamber">
+        <p className="text-[13px] leading-relaxed text-fg-muted">
+          SENTINEL checks work independently before anything counts as done: software reviews with test evidence, and an audit of
+          every QuantLab run. The matrix below shows each agent&apos;s real runs and reviews. JARVIS&apos;s own learning and
+          evaluations are in the Training Hub.
+        </p>
+        <Button className="mt-3" onClick={() => go({ name: "training" })}>Training Hub ↗</Button>
+      </Panel>
+      <AgentMatrix agents={overview.agents} onOpen={onOpen} />
+    </div>
+  );
+}
+
+/** J2-5 replaces this with the collaborative workspace; until then it says what exists. */
+function TeamQuantLabRoom({ hq }: { hq: HqSnapshot | null }) {
+  const members = hq?.robots.filter((r) => ["cipher", "atlas", "sentinel", "archive", "vector"].includes(r.id)) ?? [];
+  return (
+    <Panel title="ULTRON QuantLab" testId="team-quantlab">
+      <p className="text-[13px] text-fg-muted">Members: {members.map((m) => `${m.name} (${m.state_label})`).join(" · ")}</p>
+    </Panel>
   );
 }
 

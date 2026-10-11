@@ -7,3 +7,4 @@ export * from "./quantlab-research";
 export * from "./quantlab-ideas";
 export * from "./ai";
 export * from "./quantlab-vault";
+export * from "./team";

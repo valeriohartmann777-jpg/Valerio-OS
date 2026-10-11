@@ -1596,6 +1596,16 @@ class UltronService:
             )
         return out
 
+    def planning_missions(self) -> list[str]:
+        """Missions JARVIS is planning right now (for the HQ's orchestrator status)."""
+        return [k.split(":", 1)[1] for k in self._running if k.startswith("plan:")]
+
+    async def hq_tasks(self, since: str) -> list[dict[str, Any]]:
+        return await self._store.hq_tasks(since)
+
+    async def last_done_by_agent(self) -> dict[str, dict[str, Any]]:
+        return await self._store.last_done_by_agent()
+
     def set_research_tasks(self, provider: Callable[[], Any] | None) -> None:
         """QuantLab research missions report their running agent tasks here (real work only)."""
         self._research_tasks = provider

@@ -17,6 +17,7 @@ from jarvis.api.quantlab_source_routes import router as source_router
 from jarvis.api.quantlab_vault_routes import router as vault_router
 from jarvis.api.routes import router
 from jarvis.api.security import OriginGuard
+from jarvis.api.team_routes import router as team_router
 from jarvis.runtime import Runtime
 from jarvis.settings import Settings, load_settings
 
@@ -49,4 +50,5 @@ def create_app(settings: Settings | None = None, *, runtime: Runtime | None = No
     app.include_router(mission_router)
     app.include_router(ai_router)
     app.include_router(vault_router)
+    app.include_router(team_router)
     return app

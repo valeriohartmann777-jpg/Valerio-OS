@@ -122,10 +122,17 @@ try {
         await page.locator("nav:not([aria-label='Main']) button").filter({ hasText: label }).first().click();
       });
     }
+    // ULTRON HQ rooms are entered by clicking the room, not a nav.
+    for (const room of ["homebase", "workshop", "quantlab", "research", "academy"]) {
+      const opener = page.getByTestId(`hq-room-open-${room}`);
+      if (await opener.count()) {
+        await visit(`${name} › room ${room}`, () => opener.first().click());
+      }
+    }
     // QuantLab detail levels reveal more sections.
     for (const level of ["Research", "Institutional"]) {
       const radio = page.getByRole("radio", { name: level });
-      if (name === "QuantLab" && (await radio.count())) {
+      if (name.toLowerCase() === "quantlab" && (await radio.count())) {
         await radio.first().click();
         const more = [...new Set((await page.locator("nav[aria-label='QuantLab'] button").allInnerTexts()).map((t) => t.trim()))];
         for (const label of more.filter((l) => !labels.includes(l))) {

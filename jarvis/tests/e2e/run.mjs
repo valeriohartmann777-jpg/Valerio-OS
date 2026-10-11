@@ -662,10 +662,24 @@ try {
 
   await step("ULTRON: a goal becomes a plan; AXIOM specs, FORGE codes and retries, SENTINEL verifies, export approved", async () => {
     await page.getByTestId("tab-ultron").click();
+    // JARVIS 2.0 HQ: nine robots; with no software mission running, nobody is in the Workshop.
+    await page.getByTestId("hq-world").waitFor();
+    assert.equal(await page.locator('[data-testid^="hq-robot-"]').count(), 9);
+    assert.equal(await page.locator('[data-testid^="hq-robot-"][data-room="workshop"]').count(), 0);
+    assert.equal(await page.locator('[data-testid="hq-robot-forge"][data-room="homebase"]').count(), 1);
+    await page.getByTestId("hq-room-open-homebase").click();
+    await page.waitForTimeout(400);
+    await shot("11v-ultron-hq-docked");
+    await page.getByTestId("hq-room-open-workshop").click(); // Mission Control lives in the Workshop
     await page.getByTestId("ul-overview").waitFor();
     await page.getByTestId("ul-scripted").waitFor(); // the test model is labelled, always
     await page.getByTestId("ul-goal").fill("Build a tested slugify(text) utility in a new Python package.");
     await page.getByTestId("ul-start").click();
+    // A robot moves to the Workshop only while it really works on a task of this mission.
+    await page.locator('[data-testid="hq-robot-forge"][data-state="working"][data-room="workshop"]').waitFor({ timeout: 90_000 });
+    await page.getByTestId("hq-robot-forge").click();
+    await page.getByTestId("hq-inspector-now").getByText("Mission 001").waitFor();
+    await shot("11w-ultron-hq-forge-working");
     const mission = page.getByTestId("ul-mission");
     await mission.waitFor();
     await page.locator('[data-testid="ul-mission"][data-state="WAITING_APPROVAL"]').waitFor({ timeout: 90_000 });
@@ -687,10 +701,15 @@ try {
     assert.ok(existsSync(path.join(ultronExports, exported[0], "textutil", "__init__.py")));
     await page.getByTestId("ul-view-activity").click();
     await page.getByTestId("ul-activity").getByText("denied").first().waitFor(); // the out-of-scope write
-    await page.getByTestId("ul-view-agent-matrix").click();
+    // Done: FORGE is back at the dock with its verified output; the matrix is in the Academy.
+    await page.locator('[data-testid="hq-robot-forge"][data-room="homebase"]').waitFor({ timeout: 30_000 });
+    await page.getByTestId("hq-robot-forge").click();
+    await page.getByTestId("hq-inspector-last").getByText("slugify", { exact: false }).waitFor();
+    await page.getByTestId("hq-room-open-academy").click();
     await page.getByTestId("ul-agents").waitFor();
     await page.waitForTimeout(300); // let the tab's colour transition finish
     await shot("11j-ultron-agents");
+    await page.getByTestId("hq-room-open-workshop").click();
     await page.getByTestId("ul-view-overview").click();
     await page.getByTestId("ul-mission-card").first().waitFor();
     await page.waitForTimeout(300);

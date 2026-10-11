@@ -146,6 +146,28 @@ class UltronStore:
         )
         return [self._task(r) for r in rows]
 
+    async def hq_tasks(self, since: str) -> list[dict[str, Any]]:
+        """Tasks the HQ projects onto the robots: every task of an unfinished mission, plus
+        tasks that finished at or after ``since`` (shown as just completed / failed)."""
+        rows = await self._db.fetch_all(
+            "SELECT t.id, t.mission_id, t.key, t.title, t.owner, t.state, t.cost_usd, "
+            "t.started_at, t.finished_at, m.state AS mission_state, m.title AS mission_title, "
+            "m.number AS mission_number FROM ul_tasks t JOIN ul_missions m ON m.id = t.mission_id "
+            "WHERE m.state NOT IN ('COMPLETE', 'FAILED', 'CANCELLED') OR t.finished_at >= ? "
+            "ORDER BY t.rowid",
+            (since,),
+        )
+        return [dict(r) for r in rows]
+
+    async def last_done_by_agent(self) -> dict[str, dict[str, Any]]:
+        """Each agent's most recent completed task (its last verified output)."""
+        rows = await self._db.fetch_all(
+            "SELECT t.owner, t.title, t.finished_at, t.mission_id, m.title AS mission_title "
+            "FROM ul_tasks t JOIN ul_missions m ON m.id = t.mission_id "
+            "WHERE t.state = 'COMPLETE' ORDER BY t.finished_at"
+        )
+        return {r["owner"]: dict(r) for r in rows}
+
     @staticmethod
     def _task(row: Any) -> dict[str, Any]:
         out = dict(row)

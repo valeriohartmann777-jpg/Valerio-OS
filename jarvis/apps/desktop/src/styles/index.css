@@ -190,3 +190,36 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ULTRON HQ robots: a gentle bob only while a robot really works; a drifting "z" while docked. */
+@keyframes hq-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes hq-z {
+  0% {
+    opacity: 0;
+    transform: translate(0, 2px);
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(3px, -5px);
+  }
+}
+
+.hq-bob {
+  animation: hq-bob 1.8s ease-in-out infinite;
+}
+
+.hq-z {
+  animation: hq-z 3.2s ease-in-out infinite;
+}

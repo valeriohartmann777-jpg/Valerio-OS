@@ -1,4 +1,5 @@
 import type {
+  HqSnapshot,
   BlAdvanced,
   BlLaunch,
   BlOptions,
@@ -398,6 +399,7 @@ export const api = {
   qmDossier: (id: string) => request<QmDossier>(`/quantlab/research/missions/${encodeURIComponent(id)}/dossier`),
   // QuantLab Data Vault + Backtest Lab (local data first)
   blOptions: () => request<BlOptions>("/quantlab/backtest/options"),
+  teamHq: () => request<HqSnapshot>("/team/hq"),
   blReadiness: (symbol: string, versionId?: string | null, start?: string | null, end?: string | null) => {
     const q = new URLSearchParams({ symbol });
     if (versionId) q.set("version_id", versionId);

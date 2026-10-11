@@ -66,6 +66,7 @@ from jarvis.settings import PROJECT_ROOT, Settings
 from jarvis.storage.audit import AuditLog
 from jarvis.storage.database import Database
 from jarvis.storage.preferences import Preferences
+from jarvis.team.hq import HQSources, TeamHQ
 from jarvis.tools.bots import register_bot_tools
 from jarvis.tools.briefing import register_briefing_tools
 from jarvis.tools.executor import ToolExecutor
@@ -393,6 +394,19 @@ class Runtime:
             checkpoints=lambda key: RunCheckpoint(self.ai.store, key),
         )
         self.ultron.set_research_tasks(lambda: self.quant_missions.store.tasks_in("RUNNING"))
+        # JARVIS 2.0: the ULTRON HQ projects every robot's real state from these sources.
+        self.team_hq = TeamHQ(
+            HQSources(
+                ultron_tasks=self.ultron.hq_tasks,
+                research_tasks=self.quant_missions.store.hq_tasks,
+                ultron_last=self.ultron.last_done_by_agent,
+                research_last=self.quant_missions.store.last_done_by_agent,
+                ultron_agents=self.ultron.agents,
+                desktop_operator=lambda: self.agents.state("operator").model_dump(mode="json"),
+                ai=self._hq_ai,
+                jarvis_planning=self.ultron.planning_missions,
+            )
+        )
 
         self.training = TrainingService(
             settings=settings.training,
@@ -509,6 +523,21 @@ class Runtime:
                 lab.architect_timeout_seconds,
             )
         )
+
+    def _hq_ai(self) -> tuple[bool, str, str]:
+        """Can model-driven robots work now? (ready, route, reason) for the ULTRON HQ."""
+        if self.settings.ultron.scripted_model or self.settings.quantlab.architect_script:
+            return True, "scripted", "Test script (labelled) — not Claude."
+        current = self.ai.current()
+        if current["route"] in ("plan", "api"):
+            return True, current["route"], current["reason"]
+        if not self.ai.configured():
+            return (
+                False,
+                current["route"],
+                "No AI route — connect your Claude plan in Settings → AI & Billing.",
+            )
+        return False, current["route"], f"AI paused — {current['reason']}"
 
     def _quant_model(self, role: str) -> ChatModel | None:
         """Claude for a research-mission role (jarvis, atlas, cipher), or the test script."""

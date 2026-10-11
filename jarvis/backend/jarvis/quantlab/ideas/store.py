@@ -141,6 +141,28 @@ class MissionStore:
         )
         return [_decode(r, _TASK_JSON) for r in rows]
 
+    async def hq_tasks(self, since: str) -> list[dict[str, Any]]:
+        """Research-mission tasks for the ULTRON HQ: unfinished missions, plus tasks that
+        finished at or after ``since``."""
+        rows = await self._db.fetch_all(
+            "SELECT t.id, t.mission_id, t.agent, t.kind, t.objective, t.state, t.cost_usd, "
+            "t.started_at, t.finished_at, t.error, m.state AS mission_state, "
+            "m.title AS mission_title, m.kind AS mission_kind FROM qm_tasks t "
+            "JOIN qm_missions m ON m.id = t.mission_id "
+            "WHERE m.state NOT IN ('COMPLETE', 'FAILED', 'CANCELED') OR t.finished_at >= ? "
+            "ORDER BY t.created_at",
+            (since,),
+        )
+        return [dict(r) for r in rows]
+
+    async def last_done_by_agent(self) -> dict[str, dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            "SELECT t.agent, t.objective, t.finished_at, t.mission_id, m.title AS mission_title "
+            "FROM qm_tasks t JOIN qm_missions m ON m.id = t.mission_id "
+            "WHERE t.state = 'COMPLETE' ORDER BY t.finished_at"
+        )
+        return {r["agent"]: dict(r) for r in rows}
+
     async def agent_stats(self) -> dict[str, dict[str, Any]]:
         rows = await self._db.fetch_all(
             "SELECT agent, state, COUNT(*) AS n, SUM(cost_usd) AS usd FROM qm_tasks "
