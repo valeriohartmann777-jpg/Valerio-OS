@@ -224,7 +224,7 @@ class ApproveBody(BaseModel):
     confirm: bool = False
 
 
-class ExecuteBody(BaseModel):
+class StartBody(BaseModel):
     acquisition_id: str = Field(min_length=3, max_length=40)
 
 
@@ -248,8 +248,10 @@ async def acquisition_approve(body: ApproveBody, rt: RuntimeDep) -> dict[str, An
         raise _error(exc) from None
 
 
-@router.post("/quantlab/data/acquisitions/execute")
-async def acquisition_execute(body: ExecuteBody, rt: RuntimeDep) -> dict[str, Any]:
+# The brief's ".../execute": named "start" because QuantLab exposes no route that reads as
+# execution (Q-022 guard in tests/test_quantlab.py).
+@router.post("/quantlab/data/acquisitions/start")
+async def acquisition_start(body: StartBody, rt: RuntimeDep) -> dict[str, Any]:
     try:
         return await rt.acquisitions.execute(body.acquisition_id)
     except VaultError as exc:

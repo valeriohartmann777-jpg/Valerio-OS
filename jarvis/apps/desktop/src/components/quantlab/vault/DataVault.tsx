@@ -558,7 +558,7 @@ function Acquire({ overview, onDone }: { overview: QvOverview; onDone: () => voi
             </div>
           )}
           {acq.status === "APPROVED" && (
-            <Button variant="warning" disabled={busy} onClick={() => void act(() => api.qvExecute(acq.id))} data-testid="qv-acq-execute">
+            <Button variant="warning" disabled={busy} onClick={() => void act(() => api.qvStart(acq.id))} data-testid="qv-acq-execute">
               Start the purchase (up to {usd(acq.max_usd ?? 0)})
             </Button>
           )}

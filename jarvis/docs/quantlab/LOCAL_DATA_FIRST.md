@@ -115,7 +115,7 @@ zero across 100 reruns.
 2. **approve** — requires `confirm: true`, the exact request hash, a maximum ≥ the quote,
    and the Data Hub caps (per request, per month). Approvals are append-only and expire
    after 30 minutes.
-3. **execute** — re-prices (price above your maximum → `PRICE_CHANGED`, nothing submitted),
+3. **start** (the brief's *execute*) — re-prices (price above your maximum → `PRICE_CHANGED`, nothing submitted),
    then a compare-and-set `APPROVED → SUBMITTING` so two clicks can't submit twice. The
    SUBMITTING state is written **before** `batch.submit_job`.
    - If the submit answer is lost, JARVIS looks the job up with `batch.list_jobs`; if it
@@ -189,7 +189,7 @@ POST /quantlab/data/vault/offline          {offline: bool}
 POST /quantlab/data/vault/backups          {folder}
 POST /quantlab/data/vault/restore          {folder}
 POST /quantlab/data/quotes                 = acquisitions/prepare
-POST /quantlab/data/acquisitions/prepare|approve|execute
+POST /quantlab/data/acquisitions/prepare|approve|start   (brief: execute — renamed, see below)
 POST /quantlab/data/acquisitions/{id}/resume|abandon
 GET  /quantlab/data/acquisitions[/{id}]
 GET  /quantlab/instruments · /quantlab/strategies · /quantlab/backtest/options · /quantlab/backtest/readiness
@@ -198,6 +198,10 @@ GET  /quantlab/backtests/{id} · /trades · /validation
 ```
 
 Events: `quantlab.vault`, `quantlab.backtest`.
+
+The brief's `POST /quantlab/data/acquisitions/execute` is `/start` here: QuantLab's existing
+guard (Q-022, `test_no_trading_or_code_execution_surface`) forbids any QuantLab route that
+reads like order or code execution, and that guard stays.
 
 ## 10. Limits (honest)
 

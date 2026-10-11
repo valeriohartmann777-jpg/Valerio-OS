@@ -459,7 +459,7 @@ _Last updated: 2026-10-10_
   approval (exact hash, maximum, caps, expiry, append-only), single submission, reconcile
   instead of resubmit, resumable SHA-256-verified download into a read-only archive.
 - Tests: 28 vault tests (all 20 required acceptance tests plus extras); full backend suite
-  BACKEND_TOTAL passed; vitest VITEST_TOTAL; **31/31 E2E steps** incl. "Data Vault buys MNQ once,
+  596 passed; vitest 40; **31/31 E2E steps** incl. "Data Vault buys MNQ once,
   then Strategy → NQ → 5m → Backtest runs offline".
 - Mocked here: the Databento batch API (fixture, synthetic prices, labelled). Not verified: a
   real batch job and charge, real Databento DBN files, multi-year import speed, macOS.

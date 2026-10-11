@@ -437,7 +437,7 @@ export const api = {
       max_usd: maxUsd,
       confirm: true,
     }),
-  qvExecute: (id: string) => post<QvAcquisition>("/quantlab/data/acquisitions/execute", { acquisition_id: id }),
+  qvStart: (id: string) => post<QvAcquisition>("/quantlab/data/acquisitions/start", { acquisition_id: id }),
   qvAcquisitions: () => request<QvAcquisition[]>("/quantlab/data/acquisitions"),
   qvResume: (id: string) => post<QvAcquisition>(`/quantlab/data/acquisitions/${encodeURIComponent(id)}/resume`),
   qvAbandon: (id: string) => post<QvAcquisition>(`/quantlab/data/acquisitions/${encodeURIComponent(id)}/abandon`),
