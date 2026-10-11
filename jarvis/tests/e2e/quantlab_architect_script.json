@@ -743,6 +743,24 @@
      }
     ]
    }
+  },
+  {
+   "tool": "propose_variants",
+   "input": {
+    "variants": [
+     {
+      "title": "Narrow opening ranges only",
+      "changes": [
+       {
+        "path": "filters.max_range_ticks",
+        "value": 160
+       }
+      ],
+      "mechanism": "Very wide opening ranges leave little room between entry and target.",
+      "prediction": "Out-of-sample net per trade rises while trades stay above the minimum."
+     }
+    ]
+   }
   }
  ]
 }

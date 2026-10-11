@@ -1,0 +1,34 @@
+# Curated behaviour cases for JARVIS (Training Hub → Evaluations).
+#
+# Each case is something the owner says and what JARVIS must understand from it — which kind
+# of request it is, which tool it picks, which apps it targets. They run against the local
+# command router only: offline, free, no app is opened, nothing is changed. Requests the router
+# hands to the AI route ("unsupported" here) are answered by Claude; their quality shows up in
+# your 👍 / 👎 feedback, not in this check.
+#
+# Add a case by pinning a 👍 reply in Training Hub → Feedback, or add one here by hand.
+cases:
+  - text: "Open Notepad."
+    expect: { kind: action, tool: open_application, targets: [notepad] }
+  - text: "Jarvis, launch the calculator app please"
+    expect: { kind: action, tool: open_application, targets: [calculator] }
+  - text: "öffne den Rechner"
+    expect: { kind: action, tool: open_application, targets: [rechner] }
+  - text: "open notepad, paint & calculator"
+    expect: { kind: action, tool: open_application, targets: [notepad, paint, calculator] }
+  - text: "What am I looking at?"
+    expect: { kind: query, tool: get_active_window }
+  - text: "list running apps"
+    expect: { kind: query, tool: list_running_apps }
+  - text: "how is the system"
+    expect: { kind: query, tool: get_system_info }
+  - text: "hello"
+    expect: { kind: conversation, topic: greeting }
+  - text: "What time is it?"
+    expect: { kind: conversation, topic: clock }
+  - text: "Wie spät ist es?"
+    expect: { kind: conversation, topic: clock }
+  - text: "what can you do"
+    expect: { kind: conversation, topic: capabilities }
+  - text: "research competitors and summarize what matters"
+    expect: { kind: unsupported }

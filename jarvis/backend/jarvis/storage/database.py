@@ -1154,6 +1154,98 @@ MIGRATIONS: list[list[str]] = [
         "CREATE INDEX idx_qv_acq_status ON qv_acquisitions(status)",
         "CREATE INDEX idx_qv_imports_sha ON qv_imports(raw_sha256)",
     ],
+    # 17 — JARVIS 2.0 team workspaces (ULTRON QuantLab): projects that hold a *copy* of one
+    # Solo strategy, the owner's grants, an append-only audit and the robots' tasks.
+    [
+        """
+        CREATE TABLE tm_projects (
+            id                TEXT PRIMARY KEY,
+            name              TEXT NOT NULL,
+            solo_strategy_id  TEXT NOT NULL,
+            solo_version_id   TEXT NOT NULL,
+            team_strategy_id  TEXT NOT NULL UNIQUE,
+            grants            TEXT NOT NULL,
+            state             TEXT NOT NULL,
+            created_at        TEXT NOT NULL,
+            updated_at        TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE tm_audit (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id  TEXT NOT NULL REFERENCES tm_projects(id),
+            at          TEXT NOT NULL,
+            actor       TEXT NOT NULL,
+            action      TEXT NOT NULL,
+            detail      TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER tm_audit_no_update BEFORE UPDATE ON tm_audit
+        BEGIN SELECT RAISE(ABORT, 'the team audit is append-only'); END
+        """,
+        """
+        CREATE TRIGGER tm_audit_no_delete BEFORE DELETE ON tm_audit
+        BEGIN SELECT RAISE(ABORT, 'the team audit is append-only'); END
+        """,
+        """
+        CREATE TABLE tm_tasks (
+            id           TEXT PRIMARY KEY,
+            project_id   TEXT NOT NULL REFERENCES tm_projects(id),
+            agent        TEXT NOT NULL,
+            kind         TEXT NOT NULL,
+            state        TEXT NOT NULL,
+            request      TEXT NOT NULL,
+            result       TEXT,
+            mission_id   TEXT,
+            error        TEXT,
+            created_at   TEXT NOT NULL,
+            started_at   TEXT,
+            finished_at  TEXT
+        )
+        """,
+        "CREATE INDEX idx_tm_tasks_project ON tm_tasks(project_id)",
+        "CREATE INDEX idx_tm_tasks_state ON tm_tasks(state)",
+    ],
+    # 18 — JARVIS 2.0 Training Hub: the owner's 👍 / 👎 on replies (evidence, not training).
+    [
+        """
+        CREATE TABLE fb_feedback (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            at        TEXT NOT NULL,
+            event_id  TEXT NOT NULL UNIQUE,
+            trace_id  TEXT,
+            rating    INTEGER NOT NULL CHECK (rating IN (-1, 1)),
+            note      TEXT,
+            reply     TEXT NOT NULL,
+            command   TEXT,
+            intent    TEXT,
+            route     TEXT
+        )
+        """,
+        "CREATE INDEX idx_fb_feedback_at ON fb_feedback(at)",
+    ],
+    # 19 — Training Hub evaluations: cases pinned from 👍 replies and stored behaviour runs.
+    [
+        """
+        CREATE TABLE ev_cases (
+            id                 TEXT PRIMARY KEY,
+            text               TEXT NOT NULL,
+            expect             TEXT NOT NULL,
+            feedback_event_id  TEXT UNIQUE,
+            created_at         TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE ev_runs (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            at       TEXT NOT NULL,
+            total    INTEGER NOT NULL,
+            passed   INTEGER NOT NULL,
+            results  TEXT NOT NULL
+        )
+        """,
+    ],
 ]
 
 

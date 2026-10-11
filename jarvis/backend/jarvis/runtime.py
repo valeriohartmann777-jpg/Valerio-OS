@@ -36,6 +36,8 @@ from jarvis.core.state import StateService
 from jarvis.events.bus import EventBus
 from jarvis.events.store import EventStore
 from jarvis.events.types import EventType, Severity
+from jarvis.feedback.evals import BehaviorEvals
+from jarvis.feedback.service import FeedbackService
 from jarvis.learning.journal import LearningJournal
 from jarvis.learning.market import MarketData
 from jarvis.learning.service import LearningService, ResearchModel
@@ -67,6 +69,8 @@ from jarvis.storage.audit import AuditLog
 from jarvis.storage.database import Database
 from jarvis.storage.preferences import Preferences
 from jarvis.team.hq import HQSources, TeamHQ
+from jarvis.team.store import TeamStore
+from jarvis.team.workspace import TeamWorkspace
 from jarvis.tools.bots import register_bot_tools
 from jarvis.tools.briefing import register_briefing_tools
 from jarvis.tools.executor import ToolExecutor
@@ -405,7 +409,25 @@ class Runtime:
                 desktop_operator=lambda: self.agents.state("operator").model_dump(mode="json"),
                 ai=self._hq_ai,
                 jarvis_planning=self.ultron.planning_missions,
+                team_tasks=lambda since: self.team_store.hq_tasks(since),
             )
+        )
+        # ULTRON QuantLab: team workspaces on the same engine, vault and registry as Solo.
+        self.team_store = TeamStore(self.db)
+        self.team = TeamWorkspace(
+            self.team_store,
+            self.research,
+            self.backtests,
+            self.quant_missions,
+            self.bus,
+            ai_ready=lambda: (self._hq_ai()[0], self._hq_ai()[2]),
+        )
+        self.backtests.team_strategies = self.team_store.team_strategy_ids
+        self.backtests.project_strategy = self._team_strategy_of
+        # Training Hub: 👍 / 👎 on replies, kept as evidence (never applied automatically).
+        self.feedback = FeedbackService(self.db, self.bus)
+        self.evals = BehaviorEvals(
+            self.db, RuleBasedRouter(), self.bus, PROJECT_ROOT / "config" / "evals.yaml"
         )
 
         self.training = TrainingService(
@@ -523,6 +545,10 @@ class Runtime:
                 lab.architect_timeout_seconds,
             )
         )
+
+    async def _team_strategy_of(self, project_id: str) -> str | None:
+        project = await self.team_store.project(project_id)
+        return str(project["team_strategy_id"]) if project else None
 
     def _hq_ai(self) -> tuple[bool, str, str]:
         """Can model-driven robots work now? (ready, route, reason) for the ULTRON HQ."""
@@ -655,6 +681,7 @@ class Runtime:
         await self.research.start()
         await self.vault.start()  # offline switch, derived cache
         await self.acquisitions.start()  # resumes interrupted purchases, never resubmits
+        await self.team.start()  # marks interrupted in-process team checks, never fakes them
         await self.sources.start()
         await self.quant_missions.start()
         await self.ultron.start()
@@ -687,6 +714,7 @@ class Runtime:
         await self.quant_missions.stop()
         await self.sources.stop()
         await self.acquisitions.stop()
+        await self.team.stop()
         await self.research.stop()
         await self.hub.stop()
         await self.quantlab.stop()

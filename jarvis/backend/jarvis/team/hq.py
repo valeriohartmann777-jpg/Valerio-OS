@@ -213,6 +213,33 @@ def from_research(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+_TM = {"QUEUED": "reserved", "RUNNING": "working", "COMPLETE": "complete", "FAILED": "failed"}
+
+
+def from_team(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """ULTRON QuantLab tasks run in-process (SENTINEL's challenge). CIPHER's improvement
+    rounds are QuantLab evolution missions and already come in through ``qm_tasks``."""
+    out = []
+    for r in rows:
+        if r.get("mission_id") or r["state"] not in _TM:
+            continue
+        out.append(
+            _work(
+                source="team",
+                agent=r["agent"],
+                state=_TM[r["state"]],
+                room="quantlab",
+                mission_id=r["project_id"],
+                mission_title=f"Team · {r.get('project_name') or r['project_id']}",
+                task_id=r["id"],
+                title="Challenge the latest team run" if r["kind"] == "challenge" else r["kind"],
+                finished_at=r.get("finished_at"),
+                detail=r.get("error"),
+            )
+        )
+    return out
+
+
 def from_desktop(agent: dict[str, Any] | None) -> list[dict[str, Any]]:
     """OPERATOR's live state from JARVIS's desktop agent registry (in memory, real)."""
     if not agent or agent.get("status") not in ("active", "waiting"):
@@ -294,6 +321,7 @@ class HQSources:
     desktop_operator: Callable[[], dict[str, Any] | None]
     ai: Callable[[], tuple[bool, str, str]]  # (ready, route, reason)
     jarvis_planning: Callable[[], list[str]]
+    team_tasks: Callable[[str], Awaitable[list[dict[str, Any]]]] | None = None
 
 
 class TeamHQ:
@@ -305,9 +333,11 @@ class TeamHQ:
         since = (now - RECENT).isoformat()
         ultron_rows = await self._src.ultron_tasks(since)
         research_rows = await self._src.research_tasks(since)
+        team_rows = await self._src.team_tasks(since) if self._src.team_tasks else []
         work = (
             from_ultron(ultron_rows)
             + from_research(research_rows)
+            + from_team(team_rows)
             + from_desktop(self._src.desktop_operator())
         )
         ai_ready, route, ai_reason = self._src.ai()

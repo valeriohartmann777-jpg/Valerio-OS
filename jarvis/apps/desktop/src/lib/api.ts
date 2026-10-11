@@ -1,5 +1,10 @@
 import type {
+  EvalOverview,
+  FeedbackOverview,
   HqSnapshot,
+  TmGrant,
+  TmProject,
+  TmTask,
   BlAdvanced,
   BlLaunch,
   BlOptions,
@@ -398,8 +403,29 @@ export const api = {
     }),
   qmDossier: (id: string) => request<QmDossier>(`/quantlab/research/missions/${encodeURIComponent(id)}/dossier`),
   // QuantLab Data Vault + Backtest Lab (local data first)
-  blOptions: () => request<BlOptions>("/quantlab/backtest/options"),
+  blOptions: (workspace?: string) =>
+    request<BlOptions>(`/quantlab/backtest/options${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ""}`),
   teamHq: () => request<HqSnapshot>("/team/hq"),
+  feedback: () => request<FeedbackOverview>("/feedback"),
+  evals: () => request<EvalOverview>("/training/evals"),
+  runEvals: () => post<EvalOverview>("/training/evals/run"),
+  pinCase: (eventId: string) => post<EvalOverview>("/training/evals/cases", { event_id: eventId }),
+  unpinCase: (id: string) => request<EvalOverview>(`/training/evals/cases/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  rateReply: (eventId: string, rating: 1 | -1, note?: string) =>
+    post<FeedbackOverview>("/feedback", { event_id: eventId, rating, note: note ?? null }),
+  tmProjects: () => request<TmProject[]>("/team/quantlab/projects"),
+  tmProject: (id: string) => request<TmProject>(`/team/quantlab/projects/${encodeURIComponent(id)}`),
+  tmShare: (body: { version_id: string; grants: Partial<Record<TmGrant, boolean>>; confirm: boolean; name?: string }) =>
+    post<TmProject>("/team/quantlab/projects", body),
+  tmGrants: (id: string, grants: Partial<Record<TmGrant, boolean>>, confirm: boolean) =>
+    post<TmProject>(`/team/quantlab/projects/${encodeURIComponent(id)}/grants`, { grants, confirm }),
+  tmBacktest: (id: string, body: { version_id: string; symbol: string; timeframe: string; advanced?: BlAdvanced }) =>
+    post<BlLaunch>(`/team/quantlab/projects/${encodeURIComponent(id)}/backtests`, body),
+  tmAsk: (id: string, agent: "sentinel" | "cipher", kind: "challenge" | "improve", runId?: string) =>
+    post<TmTask>(`/team/quantlab/projects/${encodeURIComponent(id)}/ask`, { agent, kind, run_id: runId ?? null }),
+  tmReturn: (id: string, versionId: string, confirm: boolean) =>
+    post<{ solo_version_id: string }>(`/team/quantlab/projects/${encodeURIComponent(id)}/return`, { version_id: versionId, confirm }),
+  tmClose: (id: string) => post<TmProject>(`/team/quantlab/projects/${encodeURIComponent(id)}/close`),
   blReadiness: (symbol: string, versionId?: string | null, start?: string | null, end?: string | null) => {
     const q = new URLSearchParams({ symbol });
     if (versionId) q.set("version_id", versionId);

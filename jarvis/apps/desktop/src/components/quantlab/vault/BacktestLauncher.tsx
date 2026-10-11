@@ -1,7 +1,8 @@
-import type { BlAdvanced, BlOptions, BlReadiness, BlReadinessStatus } from "@jarvis/protocol";
+import type { BlAdvanced, BlCostProfile, BlOptions, BlReadiness, BlReadinessStatus, BlStrategy } from "@jarvis/protocol";
 import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "../../../lib/api";
+import { Icon } from "../../ui/icons";
 import { Button, cx } from "../../ui/primitives";
 import { FixtureBadge, verdictLabel } from "../research/common";
 import { Badge, Card, inputClass } from "../ui";
@@ -43,11 +44,17 @@ export function BacktestLauncher({
   onRun,
   onVault,
   onIdeas,
+  teamProject,
 }: {
   tick: string | null;
   onRun: (runId: string) => void;
   onVault: () => void;
-  onIdeas: () => void;
+  onIdeas?: () => void;
+  /**
+   * The ULTRON QuantLab uses this same form: with a team project it lists only that
+   * project's strategy and starts runs through the team endpoint (same engine, same vault).
+   */
+  teamProject?: string;
 }) {
   const [options, setOptions] = useState<BlOptions | null>(null);
   const [query, setQuery] = useState("");
@@ -62,14 +69,14 @@ export function BacktestLauncher({
   const [launched, setLaunched] = useState<string | null>(null);
 
   useEffect(() => {
-    api.blOptions().then(
+    api.blOptions(teamProject ? `team:${teamProject}` : undefined).then(
       (o) => {
         setOptions(o);
         setStrategyId((current) => current ?? o.strategies.find((s) => s.state === "READY")?.id ?? o.strategies[0]?.id ?? null);
       },
       (e: unknown) => setError(e instanceof ApiError ? e.message : "Backtest Lab isn't reachable."),
     );
-  }, [tick]);
+  }, [tick, teamProject]);
 
   const strategy = options?.strategies.find((s) => s.id === strategyId) ?? null;
   useEffect(() => {
@@ -95,7 +102,8 @@ export function BacktestLauncher({
     setBusy(true);
     setError(null);
     try {
-      const out = await api.blStart({ version_id: strategy.version_id, symbol, timeframe, advanced });
+      const body = { version_id: strategy.version_id, symbol, timeframe, advanced };
+      const out = teamProject ? await api.tmBacktest(teamProject, body) : await api.blStart(body);
       setLaunched(out.run.id);
       onRun(out.run.id);
     } catch (e) {
@@ -160,9 +168,11 @@ export function BacktestLauncher({
               <p className="text-[12px] text-fg-faint">No saved strategy{query ? " matches" : " yet"}.</p>
             )}
           </div>
-          <button type="button" className="no-drag mt-2 text-xs text-ql hover:underline" onClick={onIdeas} data-testid="bl-create">
-            + Create with JARVIS (Idea Inbox)
-          </button>
+          {onIdeas && (
+            <button type="button" className="no-drag mt-2 text-xs text-ql hover:underline" onClick={onIdeas} data-testid="bl-create">
+              + Create with JARVIS (Idea Inbox)
+            </button>
+          )}
         </div>
 
         <div>
@@ -334,6 +344,7 @@ export function BacktestLauncher({
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-ql-border pt-4">
         <Button
           variant="primary"
+          size="lg"
           disabled={busy || !strategy || strategy.state !== "READY" || !current?.runnable}
           reason={
             !strategy
@@ -347,9 +358,14 @@ export function BacktestLauncher({
           onClick={() => void launch()}
           data-testid="bl-run"
         >
-          {busy ? "Starting…" : "Backtest"}
+          <Icon name="play" size={15} /> {busy ? "Starting…" : "Run backtest"}
         </Button>
-        <span className="text-2xs text-fg-faint">
+        {strategy && current?.runnable && (
+          <span className="text-[12px] text-fg-muted" data-testid="bl-assumptions">
+            {assumptions(strategy, current, advanced, options?.cost_profiles ?? []).join(" · ")}
+          </span>
+        )}
+        <span className="basis-full text-2xs text-fg-faint">
           {options?.network ?? "Local data only."} Changing the timeframe never buys data.
         </span>
         {strategy?.state === "DRAFT" && <span className="text-2xs text-ql-warning">Answer the strategy's open questions first.</span>}
@@ -362,4 +378,18 @@ export function BacktestLauncher({
       </div>
     </Card>
   );
+}
+
+/** The material assumptions of the run about to start, in one line next to Run (brief §6.1). */
+function assumptions(strategy: BlStrategy, ready: BlReadiness, advanced: BlAdvanced, profiles: BlCostProfile[]): string[] {
+  const range = advanced.start || advanced.end ? `${advanced.start ?? "start"} → ${advanced.end ?? "end"}` : ready.range ? `${ready.range.start} → ${ready.range.end}` : "all local data";
+  const profile = profiles.find((p) => p.id === advanced.cost_profile);
+  return [
+    range,
+    `session ${strategy.session}`,
+    advanced.kind === "validation" ? "validation (in-sample → out-of-sample, holdout sealed)" : "backtest",
+    profile ? `costs: ${profile.label}` : "costs from the strategy",
+    advanced.contracts ? `${advanced.contracts} contract${advanced.contracts === 1 ? "" : "s"}` : "size from the strategy",
+    advanced.direction && advanced.direction !== "both" ? `${advanced.direction} only` : "",
+  ].filter(Boolean);
 }

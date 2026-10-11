@@ -717,6 +717,51 @@ try {
     await page.getByTestId("tab-home").click();
   });
 
+  await step("ULTRON QuantLab: a Solo strategy is shared on purpose; SENTINEL challenges and CIPHER proposes on the team copy; Solo stays unchanged", async () => {
+    const solo = await fetch(`${backendUrl}/quantlab/backtest/options`).then((r) => r.json());
+    const mine = solo.strategies.find((x) => x.name.toLowerCase().includes("opening range"));
+    assert.ok(mine, "a saved Solo strategy to share");
+    await page.getByTestId("tab-ultron").click();
+    await page.getByTestId("hq-room-open-quantlab").click();
+    await page.getByTestId("team-quantlab").waitFor();
+    // Nothing reaches the team without the owner's explicit share (a copy, with chosen grants).
+    await page.getByTestId("tm-share-version").selectOption(mine.version_id);
+    await page.getByTestId("tm-share-grant-propose_versions").check();
+    assert.equal(await page.getByTestId("tm-share-submit").isDisabled(), true, "the share needs a confirmation");
+    await page.getByTestId("tm-share-confirm").check();
+    await page.getByTestId("tm-share-submit").click();
+    await page.getByTestId("tm-project-view").waitFor();
+    await page.getByTestId("workspace-team").first().waitFor();
+    // The same backtest form and engine as Solo, listing only the team's copy.
+    await page.getByTestId("bl-market-NQ").click();
+    await page.getByTestId("bl-tf-5m").click();
+    await page.getByTestId("bl-readiness").and(page.locator('[data-status="READY"]')).waitFor();
+    await page.getByTestId("bl-run").click();
+    const projects = () => fetch(`${backendUrl}/team/quantlab/projects`).then((r) => r.json());
+    for (let i = 0; i < 300 && (await projects())[0]?.runs[0]?.status !== "COMPLETED"; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    assert.equal((await projects())[0].runs[0].status, "COMPLETED", "the team backtest finished");
+    // SENTINEL challenges the run independently; CIPHER proposes variants on the team copy.
+    await page.getByTestId("tm-ask-sentinel").click();
+    await page.locator('[data-testid="tm-task"][data-agent="sentinel"][data-state="COMPLETE"]').waitFor({ timeout: 60_000 });
+    await page.getByTestId("tm-ask-cipher").click();
+    await page.locator('[data-testid="tm-task"][data-agent="cipher"][data-state="COMPLETE"]').waitFor({ timeout: 300_000 });
+    await page.getByTestId("tm-trial").nth(1).waitFor();
+    await page.getByTestId("tm-version").filter({ hasText: "proposed by CIPHER" }).waitFor();
+    await page.getByTestId("tm-ask").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("11x-ultron-quantlab-team");
+    // The private Solo strategy is unchanged and still the only one Solo lists.
+    const after = await fetch(`${backendUrl}/quantlab/backtest/options`).then((r) => r.json());
+    const same = after.strategies.find((x) => x.id === mine.id);
+    assert.equal(same.version_number, mine.version_number, "no new Solo version without the owner");
+    assert.equal(after.strategies.length, solo.strategies.length, "the team copy isn't listed in Solo");
+    const [project] = await projects();
+    assert.deepEqual(project.audit.map((a) => a.action), ["share", "backtest", "ask", "ask"]);
+    await page.getByTestId("tab-home").click();
+  });
+
   await step("memory: added in the Training Hub, kept, forgotten; the morning briefing is set in Settings", async () => {
     await page.getByTestId("tab-training").click();
     await page.getByTestId("subnav-knowledge").click();
@@ -737,6 +782,64 @@ try {
     await page.getByTestId("briefing-next").filter({ hasText: ":00" }).waitFor();
     await page.getByTestId("briefing-toggle").click(); // back off: no real market data here
     await page.getByTestId("briefing-toggle").and(page.locator('[aria-checked="false"]')).waitFor();
+    await page.getByTestId("tab-home").click();
+  });
+
+  await step("feedback: 👍 / 👎 on replies reach the Training Hub; a 👍 becomes a behaviour test case, a 👎 note a correction", async () => {
+    await page.getByTestId("tab-home").click();
+    const replies = page.getByTestId("jarvis-reply");
+    const ask = async (text) => {
+      const before = await replies.count();
+      await command(text);
+      await page.waitForFunction(
+        (n) => document.querySelectorAll('[data-testid="jarvis-reply"]').length > n,
+        before,
+      );
+      return replies.last();
+    };
+    const good = await ask("What time is it?");
+    await good.getByTestId("rate-up").click();
+    await good.locator('[data-testid="reply-rating"][data-rated="1"]').waitFor();
+    const wrong = await ask("hello");
+    await wrong.getByTestId("rate-down").click();
+    await wrong.getByTestId("rate-note").fill("Say which app opened.");
+    await wrong.getByTestId("rate-send").click();
+    await wrong.locator('[data-testid="reply-rating"][data-rated="-1"]').waitFor();
+
+    await page.getByTestId("tab-training").click();
+    await page.getByTestId("subnav-feedback").click();
+    await page.getByTestId("feedback-by-route").waitFor();
+    const down = page.getByTestId("feedback-item").filter({ hasText: "Say which app opened." });
+    assert.equal(await down.getAttribute("data-rating"), "-1");
+    await down.getByTestId("feedback-keep").click();
+    await down.getByTestId("feedback-keep").filter({ hasText: "Kept as correction" }).waitFor();
+    const up = page.getByTestId("feedback-item").filter({ hasText: "What time is it?" }).first();
+    await up.getByTestId("feedback-pin").click();
+    await up.getByTestId("feedback-pin").filter({ hasText: "Pinned as test case" }).waitFor();
+    await page.waitForTimeout(300);
+    await shot("10e-feedback");
+
+    // Evaluations: the behaviour check runs the curated + pinned sentences locally and is stored.
+    await page.getByTestId("subnav-evaluations").click();
+    await page.getByTestId("eval-pinned").filter({ hasText: "What time is it?" }).waitFor();
+    await page.getByTestId("eval-run").click();
+    const last = page.getByTestId("eval-last");
+    await last.waitFor();
+    assert.equal(await last.getAttribute("data-passed"), await last.getAttribute("data-total"), "every case understood");
+    await page.getByTestId("eval-quantlab").waitFor(); // stored QuantLab verdicts from the runs above
+    await page.getByTestId("eval-research").waitFor();
+    await page.waitForTimeout(300);
+    await shot("10f-evaluations");
+    await page.getByTestId("eval-pinned").getByTestId("eval-unpin").click();
+    await page.getByTestId("eval-pinned").waitFor({ state: "detached" });
+
+    // The correction is an ordinary memory: visible under Knowledge and removable.
+    await page.getByTestId("subnav-knowledge").click();
+    const memory = page.getByTestId("memory-item").filter({ hasText: "Say which app opened." });
+    await memory.waitFor();
+    await memory.hover();
+    await memory.getByRole("button", { name: /^Forget M/ }).click();
+    await memory.waitFor({ state: "detached" });
     await page.getByTestId("tab-home").click();
   });
 
@@ -810,6 +913,83 @@ try {
     await page.getByTestId("ai-plan-disable").click();
     await page.getByTestId("ai-plan-enable").waitFor();
     fakeClaudeConfig({ mode: "ok" });
+    await page.getByTestId("tab-home").click();
+  });
+
+  await step("navigation: five tabs by keyboard, deep links survive reload and history, usable at 1366×768 and the minimum window; no secrets in browser storage", async () => {
+    const tabIds = await page
+      .getByRole("navigation", { name: "Main" })
+      .locator('[data-testid^="tab-"]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
+    assert.deepEqual(tabIds, ["tab-home", "tab-training", "tab-quantlab", "tab-ultron", "tab-settings"]);
+    const current = (id) => page.getByTestId(`tab-${id}`).and(page.locator('[aria-current="page"]'));
+    // Keyboard: arrows move along the tabs, Enter opens one.
+    await page.getByTestId("tab-home").click();
+    await page.getByTestId("tab-home").focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    await current("quantlab").waitFor();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await current("settings").waitFor();
+
+    // Deep link → reload keeps the page; back/forward walk the history.
+    await page.evaluate(() => (location.hash = "#/training/evaluations"));
+    await page.getByTestId("training-evaluations").waitFor();
+    await page.reload();
+    await page.getByTestId("training-evaluations").waitFor({ timeout: 30_000 });
+    await current("training").waitFor();
+    await page.getByTestId("tab-ultron").click();
+    await page.getByTestId("hq-world").or(page.getByTestId("hq-room-list")).first().waitFor();
+    await page.evaluate(() => history.back());
+    await page.getByTestId("training-evaluations").waitFor();
+    await page.evaluate(() => history.forward());
+    await current("ultron").waitFor();
+    // Old links still land on their new homes.
+    await page.evaluate(() => (location.hash = "#/learning"));
+    await current("training").waitFor();
+    await page.evaluate(() => (location.hash = "#/bots"));
+    await current("quantlab").waitFor();
+    await page.getByTestId("ql-nav-mt5-bots").and(page.locator('[aria-current="page"]')).waitFor();
+
+    // Main controls stay reachable at 1366×768 and at the window's minimum size (1120×720).
+    // The real window is resized (not an emulated viewport), as the owner would drag it.
+    const resize = async (width, height) => {
+      await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0].setContentSize(w, h), [width, height]);
+      await page.setViewportSize({ width, height }).catch(() => {});
+      await page.waitForFunction(([w, h]) => window.innerWidth === w && window.innerHeight === h, [width, height]);
+    };
+    for (const [width, height] of [[1366, 768], [1120, 720]]) {
+      await resize(width, height);
+      const inside = async (testId) => {
+        const box = await page.getByTestId(testId).first().boundingBox();
+        assert.ok(box, `${testId} is rendered at ${width}×${height}`);
+        assert.ok(box.x >= 0 && box.x + box.width <= width + 1 && box.y >= 0 && box.y + box.height <= height + 1, `${testId} fits ${width}×${height}`);
+      };
+      for (const id of ["home", "training", "quantlab", "ultron", "settings"]) await inside(`tab-${id}`);
+      await page.getByTestId("tab-home").click();
+      await inside("command-input");
+      await inside("command-send");
+      await page.getByTestId("tab-quantlab").click();
+      await page.getByTestId("ql-nav-backtest-lab").click();
+      await page.getByTestId("bl-run").scrollIntoViewIfNeeded();
+      await inside("bl-run");
+      await page.getByTestId("tab-ultron").click();
+      await page.getByTestId("hq-room-open-homebase").scrollIntoViewIfNeeded();
+      await inside("hq-room-open-homebase");
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(overflow <= 0, `no sideways scrolling at ${width}×${height} (${overflow}px)`);
+      await shot(`12-layout-${width}x${height}`);
+    }
+    await resize(1480, 920);
+
+    // Keys typed in this run (Databento test keys) never reach browser storage.
+    const stored = await page.evaluate(() =>
+      [localStorage, sessionStorage].flatMap((store) => Object.keys(store).map((k) => `${k}=${store.getItem(k)}`)),
+    );
+    assert.ok(stored.length > 0, "the route memory is stored");
+    assert.deepEqual(stored.filter((entry) => /db-[A-Z0-9]{10,}|sk-ant|api[_-]?key|secret/i.test(entry)), []);
     await page.getByTestId("tab-home").click();
   });
 

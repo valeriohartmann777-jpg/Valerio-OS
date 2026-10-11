@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge, Hash, compactInputClass, inputClass } from "../components/quantlab/ui";
 import { Button, cx } from "../components/ui/primitives";
 import { Inspector } from "../components/ultron/hq/Inspector";
+import { TeamQuantLab } from "../components/ultron/hq/TeamQuantLab";
 import { Crew, ROOM_LOOK, World } from "../components/ultron/hq/World";
 import { MissionCard, MissionView, Timeline } from "../components/ultron/MissionView";
 import { Panel } from "../components/ui/shell";
@@ -35,12 +36,12 @@ function useUltronTick(): string | null {
 const WORKSHOP_VIEWS = ["Overview", "Mission Control", "Projects", "Activity", "Permissions"] as const;
 const ROOMS: HqRoomId[] = ["homebase", "workshop", "quantlab", "research", "academy"];
 
-/** Refresh on any event that can change a robot: ULTRON, QuantLab missions, desktop agents. */
+/** Refresh on any event that can change a robot: ULTRON, QuantLab missions, desktop agents, team tasks. */
 function useHqTick(): string | null {
   return useJarvis((s) => {
     for (let i = s.activity.length - 1; i >= 0; i--) {
       const event = s.activity[i];
-      if (event && (event.type.startsWith("ultron.") || event.type.startsWith("quantlab.mission") || event.type.startsWith("agent."))) return event.id;
+      if (event && (event.type.startsWith("ultron.") || event.type.startsWith("quantlab.mission") || event.type.startsWith("agent.") || event.type.startsWith("team."))) return event.id;
     }
     return null;
   });
@@ -191,7 +192,7 @@ export function Ultron() {
           {room === "homebase" && overview && <Homebase overview={overview} hq={hq} onOpen={open} onRoom={goRoom} />}
           {room === "research" && <ResearchRoomContent tick={tick} />}
           {room === "academy" && overview && <Academy overview={overview} onOpen={open} />}
-          {room === "quantlab" && <TeamQuantLabRoom hq={hq} />}
+          {room === "quantlab" && <TeamQuantLab hq={hq} />}
         </section>
       </div>
     </div>
@@ -316,16 +317,6 @@ function Academy({ overview, onOpen }: { overview: UlOverview; onOpen: (id: stri
       </Panel>
       <AgentMatrix agents={overview.agents} onOpen={onOpen} />
     </div>
-  );
-}
-
-/** J2-5 replaces this with the collaborative workspace; until then it says what exists. */
-function TeamQuantLabRoom({ hq }: { hq: HqSnapshot | null }) {
-  const members = hq?.robots.filter((r) => ["cipher", "atlas", "sentinel", "archive", "vector"].includes(r.id)) ?? [];
-  return (
-    <Panel title="ULTRON QuantLab" testId="team-quantlab">
-      <p className="text-[13px] text-fg-muted">Members: {members.map((m) => `${m.name} (${m.state_label})`).join(" · ")}</p>
-    </Panel>
   );
 }
 

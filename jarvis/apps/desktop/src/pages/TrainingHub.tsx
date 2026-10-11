@@ -1,4 +1,6 @@
 import { TrainedModel } from "../components/learning/TrainedModel";
+import { Evaluations } from "../components/training/Evaluations";
+import { FeedbackSection } from "../components/training/Feedback";
 import { MemoryPanel } from "../components/panels/MemoryPanel";
 import { Icon, type IconName } from "../components/ui/icons";
 import { EmptyState, PageHeader, Panel, StatusPill, SubNav, type PillTone } from "../components/ui/shell";
@@ -14,7 +16,7 @@ import { Learning } from "./Learning";
  * claims to retrain Claude's weights.
  */
 
-type Section = "overview" | "research" | "model" | "knowledge";
+type Section = "overview" | "research" | "model" | "knowledge" | "feedback" | "evaluations";
 
 const VERDICT_PILL: Record<string, PillTone> = { success: "success", warning: "warning", danger: "danger", muted: "muted", faint: "muted", accent: "info" };
 
@@ -23,6 +25,8 @@ const SECTIONS: readonly { id: Section; label: string; icon: IconName }[] = [
   { id: "research", label: "Research loop", icon: "flask" },
   { id: "model", label: "Trained model", icon: "target" },
   { id: "knowledge", label: "Knowledge", icon: "book" },
+  { id: "feedback", label: "Feedback", icon: "thumbUp" },
+  { id: "evaluations", label: "Evaluations", icon: "check" },
 ];
 
 export function TrainingHub() {
@@ -47,6 +51,8 @@ export function TrainingHub() {
         )}
         {section === "model" && <ModelSection />}
         {section === "knowledge" && <Knowledge />}
+        {section === "feedback" && <FeedbackSection />}
+        {section === "evaluations" && <Evaluations />}
       </div>
     </div>
   );
@@ -75,6 +81,10 @@ function Overview() {
           <Truth icon="book" title="Knowledge">
             What JARVIS keeps in mind about you (memory) and the lessons the research loop wrote down. You can add and
             remove entries.
+          </Truth>
+          <Truth icon="thumbUp" title="Feedback">
+            Your 👍 / 👎 on replies, with what you asked and which route answered. It is evidence: a correction becomes
+            part of JARVIS only when you keep it as a memory.
           </Truth>
           <Truth icon="alert" title="What it doesn't do">
             JARVIS doesn&apos;t change Claude&apos;s model weights and doesn&apos;t switch on improvements by itself.

@@ -1569,7 +1569,7 @@ def evidence_block(summary: dict[str, Any], audit: dict[str, Any], label: str) -
         f"profit factor {oos.get('profit_factor')}",
         f"Max drawdown: {summary['metrics'].get('max_drawdown')}",
         "Tests: " + ", ".join(f"{t['id']} {t['status']}" for t in summary.get("tests") or []),
-        f"SENTINEL audit: {'passed' if audit['passed'] else 'failed'}; second engine "
-        f"{audit['second_engine']['agree']} of {audit['second_engine']['compared']} trades agree",
+        f"SENTINEL audit: {'passed' if audit['passed'] else 'failed'}; "
+        f"{sentinel.second_engine_text(audit)}",
     ]
     return "\n".join(lines)

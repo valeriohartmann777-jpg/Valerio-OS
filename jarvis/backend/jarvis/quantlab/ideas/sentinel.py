@@ -853,6 +853,14 @@ def _name(key: str) -> str:
     return UNSUPPORTED_NAMES[key]
 
 
+def second_engine_text(audit: dict[str, Any]) -> str:
+    """Readable second-engine result; says "not run" when nothing was compared."""
+    cmp = audit.get("second_engine") or {}
+    if cmp.get("skipped"):
+        return "second engine not run (it covers 1-minute bars only)"
+    return f"second engine: {cmp.get('agree')} of {cmp.get('compared')} trades agree"
+
+
 def run_audit(materials: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
     """The second engine against the stored ledger, plus the evidence checks around it."""
     from jarvis.quantlab.futures import validation
@@ -863,7 +871,10 @@ def run_audit(materials: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str
     eligible = split.insample + split.oos
     stored = [r for r in rows if r["segment"] != "HOLDOUT"]
     minutes = int(materials.get("bar_minutes", 1))
+    cmp: dict[str, Any]
     if minutes > 1:
+        # Nothing was compared: say so in the result instead of leaving it undefined.
+        cmp = {"compared": 0, "agree": 0, "mismatch_count": None, "skipped": True}
         # The second engine is written for 1-minute bars only: a WARN, never a fake PASS.
         _check(
             checks,

@@ -25,6 +25,36 @@ Each entry: audit id · change · evidence. Audit: `docs/UX_BUG_AUDIT.md`.
 | A-12 | Body 14–16 px, labels ≥ 12 px, 2 px focus ring in the area colour, controls 36–48 px; Settings → Interface: reduced motion, high contrast, simple HQ list. | crawl `audit2`: 0 errors |
 | A-13 | JARVIS 2.0 tokens (navy surfaces, area accents, yellow CTA), central icon map (`ui/icons.tsx`), shell primitives (`ui/shell.tsx`: PageHeader, Panel, StatusPill, WorkspaceModeBadge, Empty/Error/Loading states, Tile, SubNav, SafeErrorBoundary). | all text tokens ≥ 5:1 contrast (computed) |
 
+## J2-3 — Training Hub and QuantLab Solo (2026-10-11)
+
+- **Training Hub** (former Learning tab, `#/training/<section>`): Overview (what "learning"
+  means here — research loop, the one small local model JARVIS trains, knowledge, feedback;
+  explicitly *not* retraining Claude), Research loop, Trained model, Knowledge (memory),
+  **Feedback**, **Evaluations**.
+- **Feedback intake** (`backend/jarvis/feedback/service.py`, migration 18 `fb_feedback`,
+  `GET/POST /feedback`, event `feedback.recorded`): 👍 / 👎 under every reply on Home, 👎 with an
+  optional "what was wrong". Stored with the question, the intent and the route that answered
+  (instant / reasoning / think); one rating per reply. Training Hub → Feedback lists them with
+  totals per route. Nothing changes automatically: *Keep as correction* turns a 👎 note into a
+  normal memory (visible and removable under Knowledge).
+- **Behaviour evaluation** (`backend/jarvis/feedback/evals.py`, `config/evals.yaml`,
+  migration 19 `ev_cases`/`ev_runs`, `/training/evals…`, event `evaluation.completed`): curated
+  sentences with what JARVIS must understand (kind, tool, topic, apps) run against the local
+  command router — offline, free, nothing is opened. *Pin as test case* on a 👍 reply keeps how
+  it was understood as a regression case. Every run is stored; failures name the differing field.
+- **Evaluations** also lists stored evidence from where it happened: trained-model walk-forward
+  runs, research-loop counts (rejected / validated out-of-sample / confirmed), QuantLab run
+  verdicts (synthetic data labelled), ULTRON SENTINEL reviews — each with a link to its source.
+  No self-assigned scores.
+- **QuantLab Solo**: Solo banner + workspace badge, MT5 Bots as a QuantLab section (old
+  `#/bots` redirects), Backtest Lab with the three choices; the Run CTA is now the large
+  "Run backtest" with a one-line summary of the material assumptions next to it (period,
+  session, backtest/validation, costs, size, direction) — brief §6.1.
+- Not built (documented in `JARVIS_2_STATUS.md`): versioned prompt/skill candidates with an
+  approval gate before activation.
+- Evidence: `tests/test_feedback.py` (5); E2E step "feedback" (👍 pinned and checked, 👎 note
+  kept as correction and removed again).
+
 ## J2-4 — ULTRON HQ (2026-10-11)
 
 - `GET /team/hq` (`backend/jarvis/team/hq.py`): nine robots and five rooms projected from
@@ -43,3 +73,31 @@ Each entry: audit id · change · evidence. Audit: `docs/UX_BUG_AUDIT.md`.
 - Evidence: `tests/test_team_hq.py` (10, incl. DB integration); E2E: robots docked before a
   mission, FORGE `working` in the Workshop during it, back at the dock with its verified
   output afterwards (31/31).
+
+## J2-5 — ULTRON QuantLab: team workspaces on the Solo engine (2026-10-11)
+
+- **One engine, one Data Vault, one registry, two workspaces.** `backend/jarvis/team/`
+  (`store.py`, `workspace.py`), migration 17 (`tm_projects`, append-only `tm_audit` with
+  no-update/no-delete triggers, `tm_tasks`). A team project holds a *copy* of one Solo version
+  as its own strategy family; Solo never lists team families and refuses to run them
+  (`TEAM_WORKSPACE`, 409); the team lists only its copy.
+- **Share with ULTRON** is a deliberate owner action: pick a version, tick grants
+  (`read_spec` · `run_backtests` · `propose_versions`), confirm. Grants are checked server-side
+  per agent and task (`NEEDS`); changing them needs a confirmation and is audited.
+- **Agent tasks:** SENTINEL *challenge* = the independent run audit (determinism, look-ahead,
+  costs, second engine — reported as *not run* on bars > 1m, never as a pass). CIPHER *improve*
+  = one bounded evolution round from the team's own completed validation run (≤ 3 variants,
+  1 iteration), each variant a new team version with a trial; the holdout stays sealed.
+  CIPHER needs an AI route and says so. Tasks show in the HQ (the robot works in the
+  ULTRON QuantLab room, from `tm_tasks`).
+- **Back to Solo** only by the owner, as a *new* Solo version (origin `team`); nothing in
+  Solo is overwritten.
+- **Bug fixed on the way:** SENTINEL's audit crashed (`UnboundLocalError`) on any run with
+  bars > 1 minute (LD work) — the second-engine comparison is now reported as skipped.
+- UI: Team ULTRON → ULTRON QuantLab room: members, share form, project view (access,
+  the same Backtest Lab form scoped to `team:<id>`, ask SENTINEL/CIPHER with reasons when
+  disabled, tasks, trials, versions with "Copy to Solo", results, audit trail).
+- Evidence: `tests/test_team_quantlab.py` (5 — confirmation/copy, grants, identical ledger
+  Solo vs team on the same dataset, CIPHER versions with Solo untouched, no AI route);
+  E2E step "ULTRON QuantLab" (share → team backtest → SENTINEL → CIPHER → Solo unchanged,
+  audit `share, backtest, ask, ask`): **32/32**.

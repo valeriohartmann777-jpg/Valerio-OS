@@ -302,8 +302,15 @@ async def strategies(rt: RuntimeDep) -> list[dict[str, Any]]:
 
 
 @router.get("/quantlab/backtest/options")
-async def backtest_options(rt: RuntimeDep) -> dict[str, Any]:
-    return await rt.backtests.options()
+async def backtest_options(
+    rt: RuntimeDep,
+    workspace: str | None = Query(None, max_length=80, pattern=r"^(solo|team:tp-[a-z0-9]+)$"),
+) -> dict[str, Any]:
+    """Strategies of one workspace: Solo (default) or a team project (``team:<id>``)."""
+    try:
+        return await rt.backtests.options(None if workspace == "solo" else workspace)
+    except LabError as exc:
+        raise _error(exc) from None
 
 
 @router.get("/quantlab/backtest/readiness")

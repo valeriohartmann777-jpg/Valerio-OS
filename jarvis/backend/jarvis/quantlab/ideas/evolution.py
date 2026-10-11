@@ -26,7 +26,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from jarvis.quantlab.futures.spec import FuturesSpecError, describe, parse
-from jarvis.quantlab.ideas import agents
+from jarvis.quantlab.ideas import agents, sentinel
 from jarvis.quantlab.ideas.catalog import apply_patch, get_path
 from jarvis.util import new_id
 
@@ -85,7 +85,7 @@ def complexity(base: dict[str, Any], spec: dict[str, Any]) -> int:
 async def create(
     svc: MissionService, parent_id: str, budget: dict[str, Any] | None
 ) -> dict[str, Any]:
-    from jarvis.quantlab.ideas.missions import MissionError, _hash, check_budget
+    from jarvis.quantlab.ideas.missions import MissionError
 
     parent = await svc.store.get(parent_id)
     if parent is None or parent["kind"] != "idea":
@@ -101,7 +101,91 @@ async def create(
             f"(this one: {parent['state'].lower()}, {parent.get('verdict') or 'no verdict'}).",
             409,
         )
-    family = parent["refs"]["strategy_id"]
+    return await _start(
+        svc,
+        family=parent["refs"]["strategy_id"],
+        base_version=parent["refs"]["version_id"],
+        dataset_id=parent["refs"]["dataset_id"],
+        run_id=parent["refs"]["run_id"],
+        spec_sha256=parent["refs"].get("spec_sha256"),
+        audit=parent["refs"].get("audit") or {},
+        title=f"Evolution · {parent['title']}",
+        source_id=parent.get("source_id"),
+        parent_id=parent_id,
+        budget=budget,
+        extra_refs={},
+    )
+
+
+async def create_from_baseline(
+    svc: MissionService,
+    *,
+    strategy_id: str,
+    version_id: str,
+    dataset_id: str,
+    run_id: str,
+    title: str,
+    budget: dict[str, Any] | None = None,
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    """Evolution from a completed validation run instead of an idea mission (ULTRON QuantLab).
+
+    Same loop, same trial ledger, same sealed holdout. ``strategy_id`` is the family every new
+    version is written to — for a team project that is the team's copy, never a Solo strategy.
+    """
+    from jarvis.quantlab.ideas.missions import MissionError
+
+    run = await svc.research.run(run_id)
+    if run["status"] != "COMPLETED" or run["strategy_id"] != strategy_id:
+        raise MissionError(
+            "NOT_EVOLVABLE", "Evolution needs a completed run of this strategy family.", 409
+        )
+    if run.get("kind") != "validation":
+        raise MissionError(
+            "NOT_EVOLVABLE",
+            "Evolution compares out-of-sample results — start it from a validation run.",
+            409,
+        )
+    audit = await svc.audit_run(run_id)
+    if not audit.get("passed"):
+        raise MissionError(
+            "NOT_EVOLVABLE",
+            "SENTINEL's audit of the baseline run failed — fix that before evolving.",
+            409,
+        )
+    return await _start(
+        svc,
+        family=strategy_id,
+        base_version=version_id,
+        dataset_id=dataset_id,
+        run_id=run_id,
+        spec_sha256=run.get("manifest", {}).get("spec_sha256"),
+        audit=audit,
+        title=f"Evolution · {title}",
+        source_id=None,
+        parent_id=None,
+        budget=budget,
+        extra_refs={"team_project_id": project_id} if project_id else {},
+    )
+
+
+async def _start(
+    svc: MissionService,
+    *,
+    family: str,
+    base_version: str,
+    dataset_id: str,
+    run_id: str,
+    spec_sha256: str | None,
+    audit: dict[str, Any],
+    title: str,
+    source_id: str | None,
+    parent_id: str | None,
+    budget: dict[str, Any] | None,
+    extra_refs: dict[str, Any],
+) -> dict[str, Any]:
+    from jarvis.quantlab.ideas.missions import _hash, check_budget
+
     for other in await svc.store.recent(500):
         if (
             other["kind"] == "evolution"
@@ -114,27 +198,27 @@ async def create(
     strategy = await svc.research.strategy(family)
     exposed = [h for h in strategy.get("holdouts", [])]
     mission_id = "qm-" + new_id()[:12]
-    base_version = parent["refs"]["version_id"]
     refs = {
         "family_id": family,
         "base_version_id": base_version,
         "parent_version_id": base_version,
-        "dataset_id": parent["refs"]["dataset_id"],
-        "base_run_id": parent["refs"]["run_id"],
-        "parent_run_id": parent["refs"]["run_id"],
+        "dataset_id": dataset_id,
+        "base_run_id": run_id,
+        "parent_run_id": run_id,
         "iteration": 0,
         "proposals": [],
         "holdout_exposed_before": bool(exposed),
         "strategy_id": family,
-        "spec_sha256": parent["refs"].get("spec_sha256"),
+        "spec_sha256": spec_sha256,
+        **extra_refs,
     }
     await svc.store.add(
         {
             "id": mission_id,
             "kind": "evolution",
-            "source_id": parent.get("source_id"),
+            "source_id": source_id,
             "parent_id": parent_id,
-            "title": f"Evolution · {parent['title']}"[:120],
+            "title": title[:120],
             "state": "RUNNING",
             "stage": "diagnose",
             "budget": checked,
@@ -144,8 +228,7 @@ async def create(
     )
     m = await svc.store.get(mission_id)
     assert m is not None
-    run = await svc.research.run(parent["refs"]["run_id"])
-    audit = parent["refs"].get("audit") or {}
+    run = await svc.research.run(run_id)
     await svc.store.add_trial(
         _trial(
             m,
@@ -153,7 +236,7 @@ async def create(
             base_version,
             None,
             run,
-            "Baseline (from the source)",
+            "Baseline (from the source)" if parent_id else "Baseline (team run)",
             [],
             "",
             "",
@@ -498,7 +581,7 @@ async def test(svc: MissionService, m: dict[str, Any]) -> str:
             audit = await svc.audit_run(run["id"])
             await task.act(
                 f"SENTINEL: {'audit passed' if audit['passed'] else 'AUDIT FAILED'} "
-                f"({audit['second_engine']['agree']}/{audit['second_engine']['compared']} trades agree)"
+                f"({sentinel.second_engine_text(audit)})"
             )
             trial = _trial(
                 m,

@@ -17,6 +17,7 @@ purchase — missing data is reported with the exact symbols, ranges and schema 
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from jarvis.events.bus import EventBus
@@ -76,6 +77,20 @@ class BacktestLab:
         self._research = research
         self._store = store
         self._bus = bus
+        # JARVIS 2.0 workspaces: strategy ids that belong to team projects, and a project's own
+        # team strategy. Wired by the runtime; without it every strategy is Solo.
+        self.team_strategies: Callable[[], Awaitable[set[str]]] | None = None
+        self.project_strategy: Callable[[str], Awaitable[str | None]] | None = None
+
+    async def _scope(self, workspace: str | None) -> tuple[set[str], str | None]:
+        """(team strategy ids to hide, the one strategy to show) for a workspace."""
+        team = await self.team_strategies() if self.team_strategies else set()
+        if workspace and workspace.startswith("team:"):
+            own = await self.project_strategy(workspace[5:]) if self.project_strategy else None
+            if own is None:
+                raise LabError("NOT_FOUND", "No such team project.", status=404)
+            return set(), own
+        return team, None
 
     async def _emit(self, message: str, payload: dict[str, Any]) -> None:
         await self._bus.emit(
@@ -88,9 +103,13 @@ class BacktestLab:
 
     # Options ------------------------------------------------------------------------------
 
-    async def options(self) -> dict[str, Any]:
+    async def options(self, workspace: str | None = None) -> dict[str, Any]:
+        """Strategies of one workspace (Solo by default; ``team:<project>``) + markets."""
+        hidden, only = await self._scope(workspace)
         strategies = []
         for row in await self._research.strategies():
+            if row["id"] in hidden or (only is not None and row["id"] != only):
+                continue
             version_id = row.get("latest_version_id")
             version = await self._store.version(version_id) if version_id else None
             if version is None:
@@ -181,7 +200,9 @@ class BacktestLab:
 
     # Launch -------------------------------------------------------------------------------
 
-    async def launch(self, body: dict[str, Any]) -> dict[str, Any]:
+    async def launch(self, body: dict[str, Any], *, team_workspace: bool = False) -> dict[str, Any]:
+        """Start a local-only run. ``team_workspace`` is set only by the team workspace service
+        (never from a request body): a team version can't be started as Solo work."""
         version_id = body.get("version_id")
         if not version_id and body.get("strategy_id"):
             strategy = await self._research.strategy(str(body["strategy_id"]))
@@ -192,6 +213,14 @@ class BacktestLab:
         version = await self._store.version(str(version_id))
         if version is None:
             raise LabError("NOT_FOUND", "No such strategy version.", status=404)
+        if not team_workspace and self.team_strategies is not None:
+            if version["strategy_id"] in await self.team_strategies():
+                raise LabError(
+                    "TEAM_WORKSPACE",
+                    "This version belongs to a team project.",
+                    "Run it in Team ULTRON → ULTRON QuantLab.",
+                    status=409,
+                )
         spec = parse(version["spec"])
         product = str(body.get("symbol") or "")
         if not is_market(product):

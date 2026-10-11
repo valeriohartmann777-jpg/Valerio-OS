@@ -2,8 +2,10 @@ import type { JarvisEvent, JarvisMessagePayload, Mission } from "@jarvis/protoco
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { api } from "../../lib/api";
+import { rate, useFeedback } from "../../lib/feedback";
 import { clock, missionNumber, stateLabel } from "../../lib/format";
 import { dispatch, useJarvis } from "../../store/store";
+import { Icon } from "../ui/icons";
 
 const PAGE = 50;
 const IDLE = new Set(["DORMANT", "COMPLETE", "FAILED"]);
@@ -178,6 +180,7 @@ function Answer({ event, at, mission }: { event: JarvisEvent; at: Date; mission:
       )}
       <span className="flex items-center gap-2 font-mono text-2xs text-fg-faint">
         {clock(at)}
+        <Rate eventId={event.id} />
         {mission && (
           <button
             type="button"
@@ -189,6 +192,79 @@ function Answer({ event, at, mission }: { event: JarvisEvent; at: Date; mission:
         )}
       </span>
     </div>
+  );
+}
+
+/** 👍 / 👎 on a reply — evidence for the Training Hub, never an automatic change. */
+function Rate({ eventId }: { eventId: string }) {
+  const feedback = useFeedback();
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState("");
+  const [failed, setFailed] = useState(false);
+  const rated = feedback?.ratings[eventId];
+  const send = async (value: 1 | -1, text?: string) => {
+    setFailed(false);
+    try {
+      await rate(eventId, value, text);
+      setAsking(false);
+      setNote("");
+    } catch {
+      setFailed(true);
+    }
+  };
+  return (
+    <span className="flex items-center gap-1 font-sans" data-testid="reply-rating" data-rated={rated ?? 0}>
+      <button
+        type="button"
+        onClick={() => void send(1)}
+        aria-pressed={rated === 1}
+        title="Good answer"
+        aria-label="Good answer"
+        className={rated === 1 ? "text-success" : "hover:text-fg-muted"}
+        data-testid="rate-up"
+      >
+        <Icon name="thumbUp" size={13} />
+      </button>
+      <button
+        type="button"
+        onClick={() => setAsking((a) => !a)}
+        aria-pressed={rated === -1}
+        aria-expanded={asking}
+        title="Wrong or unhelpful — tell JARVIS why"
+        aria-label="Wrong or unhelpful"
+        className={rated === -1 ? "text-danger" : "hover:text-fg-muted"}
+        data-testid="rate-down"
+      >
+        <Icon name="thumbDown" size={13} />
+      </button>
+      {failed && (
+        <span className="text-danger" role="alert">
+          not saved — backend unreachable
+        </span>
+      )}
+      {asking && (
+        <form
+          className="flex items-center gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send(-1, note);
+          }}
+        >
+          <input
+            autoFocus
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="What was wrong? (optional)"
+            className="h-7 w-56 rounded-md border border-control/70 bg-surface-2 px-2 text-[12px] text-fg placeholder:text-fg-faint"
+            aria-label="What was wrong"
+            data-testid="rate-note"
+          />
+          <button type="submit" className="rounded-md bg-surface-2 px-2 py-1 text-[12px] font-semibold text-fg" data-testid="rate-send">
+            Save
+          </button>
+        </form>
+      )}
+    </span>
   );
 }
 
