@@ -6,6 +6,8 @@ the UI can show "Reason" / "Suggested action" separately from the reply.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 from jarvis.core.router import Intent, IntentKind
@@ -17,6 +19,7 @@ from jarvis.util import join_names
 
 _DEFAULTS = {
     "greeting": "Online. Everything is nominal.",
+    "clock": "It's {time} on {date}.",
     "capabilities": "I can open applications, report the active window, list running "
     "applications and report system status.",
     "unsupported": "That needs reasoning I don't have yet.",
@@ -51,6 +54,14 @@ class ResponseComposer:
     def conversation(self, intent: Intent) -> Reply:
         if intent.kind is IntentKind.UNSUPPORTED:
             return Reply(text=self.say("unsupported"), success=True)
+        if intent.topic == "clock":
+            now = datetime.now().astimezone()
+            return Reply(
+                text=self.say(
+                    "clock", time=now.strftime("%H:%M"), date=now.strftime("%A, %d %B %Y")
+                ),
+                success=True,
+            )
         return Reply(text=self.say(intent.topic or "greeting"), success=True)
 
     def query(self, intent: Intent, result: ToolResult) -> Reply:

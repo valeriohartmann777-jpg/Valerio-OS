@@ -236,7 +236,7 @@ function StatusStrip({ learning }: { learning: LearningStatus }) {
         <div className="mt-3">
           <Meter value={(spent / learning.budget_usd) * 100} tone={spent >= learning.budget_usd * 0.9 ? "warning" : "muted"} />
         </div>
-        <p className="mt-2 text-xs text-fg-muted">Hard limit per day, from the API's own usage.</p>
+        <p className="mt-2 text-xs text-fg-muted">Hard limit per day for paid API calls; calls on your Claude plan don't use it.</p>
       </Cell>
       <Cell label="Without new finding">
         <div className="font-mono text-[15px] text-fg tabular" data-testid="learning-stall">
@@ -298,7 +298,7 @@ function FocusEditor({ focus }: { focus: string }) {
         <Button onClick={() => void save("")} disabled={saving} title="Back to the default from config/learning.yaml">
           Default
         </Button>
-        <Button variant="primary" onClick={() => void save(text)} disabled={saving || !dirty} data-testid="learning-focus-save">
+        <Button variant="primary" onClick={() => void save(text)} disabled={saving || !dirty} reason={!dirty ? "Nothing changed yet — edit the focus above first." : null} data-testid="learning-focus-save">
           Save focus
         </Button>
       </div>

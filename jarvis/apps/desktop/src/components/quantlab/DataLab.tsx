@@ -242,7 +242,7 @@ function ImportCard({ onImported }: { onImported: (d: QlDataset) => void }) {
           </div>
         </details>
         {error && <p className="text-[13px] text-ql-danger">{error}</p>}
-        <Button variant="primary" disabled={!file || !symbol.trim() || !exchange.trim() || busy} onClick={submit}>
+        <Button variant="primary" disabled={!file || !symbol.trim() || !exchange.trim() || busy} reason={!file ? "Choose a CSV file first." : !symbol.trim() || !exchange.trim() ? "Enter the symbol and the exchange." : null} onClick={submit}>
           {busy ? "Checking…" : "Import & check"}
         </Button>
         <p className="text-2xs text-fg-faint">

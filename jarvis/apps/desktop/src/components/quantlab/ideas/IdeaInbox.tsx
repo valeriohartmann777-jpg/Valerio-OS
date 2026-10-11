@@ -186,7 +186,7 @@ export function IdeaInbox({
                 ))}
               </select>
             </label>
-            <Button variant="primary" disabled={busy || !text.trim()} onClick={() => void submitText()} data-testid="idea-submit">
+            <Button variant="primary" disabled={busy || !text.trim()} reason={!text.trim() ? "Paste the strategy text or a link first — or drop a file." : null} onClick={() => void submitText()} data-testid="idea-submit">
               {isLink(text) ? "Check link" : "Add text"}
             </Button>
           </div>

@@ -2,7 +2,7 @@ import { HAS_TITLEBAR_OVERLAY, HAS_TRAFFIC_LIGHTS } from "../lib/config";
 import { clock } from "../lib/format";
 import type { View } from "../store/reducer";
 import { dispatch, useJarvis, useNow } from "../store/store";
-import { ROUTE_VIEW, useAiStatus } from "./settings/AiBilling";
+import { routeChip, useAiStatus } from "./settings/AiBilling";
 import { UpdateButton } from "./UpdateControls";
 import { StatusDot, cx, textTone } from "./ui/primitives";
 
@@ -106,7 +106,7 @@ function NavItem({ active, view, children }: { active: boolean; view: View; chil
 function AiRouteChip() {
   const [status] = useAiStatus();
   if (!status) return null;
-  const view = ROUTE_VIEW[status.current.route];
+  const view = routeChip(status);
   return (
     <button
       type="button"

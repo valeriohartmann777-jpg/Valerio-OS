@@ -57,6 +57,18 @@ export const ROUTE_VIEW: Record<AiRoute, { text: string; tone: Tone; icon: strin
   paused: { text: "Paused", tone: "danger", icon: "‖" },
 };
 
+/**
+ * What the top-bar chip says. A fresh install has no route because nothing was set up yet —
+ * that's "not set up", not a red "paused" (audit A-09). A real pause keeps "Paused".
+ */
+export function routeChip(status: AiStatus): { text: string; tone: Tone; icon: string } {
+  const { plan, api } = status.providers;
+  if (status.current.route === "paused" && !plan.enabled && !api.paid.enabled) {
+    return { text: "not set up", tone: "warning", icon: "○" };
+  }
+  return ROUTE_VIEW[status.current.route];
+}
+
 const STATE_VIEW: Record<string, { text: string; tone: Tone }> = {
   CONNECTED: { text: "Connected", tone: "success" },
   READY: { text: "Ready", tone: "success" },
@@ -131,12 +143,14 @@ function Wide({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-function Link({ onClick, disabled, testid, children }: { onClick: () => void; disabled?: boolean; testid?: string; children: React.ReactNode }) {
+function Link({ onClick, disabled, testid, reason, children }: { onClick: () => void; disabled?: boolean; testid?: string; reason?: string; children: React.ReactNode }) {
   return (
     <button
       type="button"
-      className="no-drag text-xs text-fg-muted hover:text-fg disabled:opacity-50"
+      className="no-drag text-xs text-fg-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
       disabled={disabled}
+      title={disabled ? reason : undefined}
+      aria-description={disabled ? reason : undefined}
       onClick={onClick}
       data-testid={testid}
     >
@@ -282,7 +296,7 @@ function PlanSection({ status, busy, run, setNote }: SectionProps & { setNote: (
             </Link>
           )}
           {(signedOut || missing) && (
-            <Link onClick={() => void terminal("login")} disabled={busy !== null || missing} testid="ai-plan-login">
+            <Link onClick={() => void terminal("login")} disabled={busy !== null || missing} testid="ai-plan-login" reason={missing ? "Install Claude Code first (the link on the left), then sign in." : undefined}>
               Sign in with Claude…
             </Link>
           )}
@@ -332,6 +346,7 @@ function PlanSection({ status, busy, run, setNote }: SectionProps & { setNote: (
             <Button
               variant="primary"
               disabled={!personal || busy !== null}
+              reason={!personal ? "Tick the box above first: only you use this JARVIS with your own Claude account." : null}
               onClick={() => void run("plan-on", () => api.aiPlan(true, true))}
               data-testid="ai-plan-enable"
             >
@@ -583,6 +598,7 @@ function PaidForm({
         <Button
           variant="warning"
           disabled={!confirm || invalid !== null || busy !== null}
+          reason={invalid ?? (!confirm ? "Tick the approval box above first." : null)}
           onClick={() =>
             onApprove({
               monthly_budget_usd: budgetValue,

@@ -1,7 +1,7 @@
 import type { AiStatus } from "@jarvis/protocol";
 import { describe, expect, it } from "vitest";
 
-import { ROUTE_VIEW, money } from "./AiBilling";
+import { ROUTE_VIEW, money, routeChip } from "./AiBilling";
 
 const withCurrency = (display: "USD" | "CHF", rate: number | null) =>
   ({ currency: { display, usd_to_chf: rate } }) as AiStatus;
@@ -26,5 +26,17 @@ describe("AI & Billing helpers", () => {
     }
     expect(ROUTE_VIEW.paused.text).toBe("Paused");
     expect(ROUTE_VIEW.api.tone).not.toBe(ROUTE_VIEW.plan.tone); // paid is visibly different
+  });
+
+  it("calls a fresh install 'not set up', and a real pause 'Paused'", () => {
+    const status = (route: string, planOn: boolean, paidOn: boolean) =>
+      ({
+        current: { route, label: "", reason: "" },
+        providers: { plan: { enabled: planOn }, api: { paid: { enabled: paidOn } } },
+      }) as unknown as AiStatus;
+    expect(routeChip(status("paused", false, false)).text).toBe("not set up");
+    expect(routeChip(status("paused", true, false)).text).toBe("Paused"); // plan limit reached
+    expect(routeChip(status("paused", false, true)).text).toBe("Paused"); // budget used up
+    expect(routeChip(status("plan", true, false)).text).toBe("Plan");
   });
 });

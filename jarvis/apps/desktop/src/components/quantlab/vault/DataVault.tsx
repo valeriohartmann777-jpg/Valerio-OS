@@ -276,7 +276,7 @@ function ImportFiles({ onDone }: { onDone: () => void }) {
         </label>
         <span className="text-2xs text-fg-faint">or a path on this Mac:</span>
         <input className={cx(inputClass, "w-64")} placeholder="/Users/you/Downloads/nq-1m.dbn.zst" value={path} onChange={(e) => setPath(e.target.value)} />
-        <Button disabled={!path.trim() || busy} onClick={() => void stage(() => api.qvImportPath(path.trim()))}>
+        <Button disabled={!path.trim() || busy} reason={!path.trim() ? "Enter the file's path first, or use Choose file…" : null} onClick={() => void stage(() => api.qvImportPath(path.trim()))}>
           Read
         </Button>
       </div>
@@ -515,6 +515,7 @@ function Acquire({ overview, onDone }: { overview: QvOverview; onDone: () => voi
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           disabled={busy || !start || !end || overview.offline}
+          reason={overview.offline ? "Offline mode is on — turn it off above to ask Databento for a quote." : !start || !end ? "Pick the period first." : null}
           onClick={() => void act(() => api.qvPrepare({ symbols: [`${symbol}.v.0`], start, end, schema: "ohlcv-1m", stype_in: "continuous", include_definitions: definitions }))}
           data-testid="qv-acq-quote"
         >
@@ -601,6 +602,7 @@ function Backup({ overview, run }: { overview: QvOverview; run: (a: () => Promis
       <div className="mt-2 flex gap-2">
         <Button
           disabled={!location.trim() || !confirm}
+          reason={!location.trim() ? "Enter a folder, e.g. on an external drive." : !confirm ? "Tick the box to confirm copying your market data there." : null}
           onClick={() => void run(() => api.qvBackup(location.trim()), (r) => {
             const b = r as { files: number; bytes: number; location: string };
             return `Backup verified: ${b.files} files, ${bytes(b.bytes)} → ${b.location}`;

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -1156,6 +1157,9 @@ MIGRATIONS: list[list[str]] = [
 ]
 
 
+BACKUPS_KEPT = 5
+
+
 class Database:
     def __init__(self, path: Path | str) -> None:
         self._path = str(path)
@@ -1187,6 +1191,8 @@ class Database:
         )
         row = await self.fetch_one("SELECT MAX(version) AS v FROM schema_version")
         current = int(row["v"]) if row and row["v"] is not None else 0
+        if 0 < current < len(MIGRATIONS):
+            await self._backup_before_migration(current)
         for version, statements in enumerate(MIGRATIONS, start=1):
             if version <= current:
                 continue
@@ -1195,6 +1201,35 @@ class Database:
             await self.conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
             await self.conn.commit()
             log.info("database migrated", extra={"schema_version": version})
+
+    async def _backup_before_migration(self, current: int) -> Path | None:
+        """A consistent copy of the database before a schema change touches it.
+
+        ``VACUUM INTO`` reads one snapshot (WAL included) and writes a standalone file. The
+        newest ``BACKUPS_KEPT`` copies stay in ``backups/`` next to the database. Migrations
+        are additive, so a failed copy is logged and the start continues.
+        """
+        if self._path == ":memory:":
+            return None
+        folder = Path(self._path).parent / "backups"
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        target = folder / f"{Path(self._path).stem}-v{current}-{stamp}.db"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            await self.conn.execute("VACUUM INTO ?", (str(target),))
+        except Exception:
+            log.exception("backup before migration failed", extra={"target": str(target)})
+            return None
+        copies = sorted(  # oldest first, by the fixed-width timestamp
+            folder.glob(f"{Path(self._path).stem}-v*-*.db"), key=lambda p: p.stem.rsplit("-", 1)[-1]
+        )
+        for old in copies[:-BACKUPS_KEPT]:
+            old.unlink(missing_ok=True)
+        log.info(
+            "database backed up before migration",
+            extra={"schema_version": current, "backup": str(target)},
+        )
+        return target
 
     async def execute(self, sql: str, params: Sequence[Any] = ()) -> None:
         await self.conn.execute(sql, params)

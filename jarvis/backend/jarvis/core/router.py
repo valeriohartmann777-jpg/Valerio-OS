@@ -91,6 +91,12 @@ _GREETING = re.compile(
     r"^(hi|hello|hey|good (morning|afternoon|evening)|hallo|servus|moin)\b", re.I
 )
 _HELP = re.compile(r"^(help|what can you do|capabilities|was kannst du)", re.I)
+# Answered locally from the computer's clock — no model needed (audit A-11).
+_CLOCK = re.compile(
+    r"^(what(?:'s| is) the (?:time|date)|what time is it|what day is (?:it|today)"
+    r"|wie spät ist es|wie viel uhr|welcher tag ist (?:heute|es)|welches datum)",
+    re.I,
+)
 
 
 def split_think(text: str) -> tuple[bool, str]:
@@ -154,6 +160,10 @@ class RuleBasedRouter:
         if _GREETING.match(command):
             return Intent(
                 kind=IntentKind.CONVERSATION, text=text, summary="Greeting", topic="greeting"
+            )
+        if _CLOCK.match(command):
+            return Intent(
+                kind=IntentKind.CONVERSATION, text=text, summary="Time and date", topic="clock"
             )
         if _HELP.match(command):
             return Intent(

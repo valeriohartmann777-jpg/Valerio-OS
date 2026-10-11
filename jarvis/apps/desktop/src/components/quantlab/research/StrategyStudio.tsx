@@ -374,7 +374,7 @@ export function StrategyStudio({
                       I reviewed these rules and assumptions
                     </label>
                     <input className={cx(compactInputClass, "w-64")} placeholder="Change note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-                    <Button variant="primary" disabled={!reviewed || !check?.valid} onClick={() => void save()} data-testid="qr-save">
+                    <Button variant="primary" disabled={!reviewed || !check?.valid} reason={!check?.valid ? "The rules aren't complete yet — answer the open questions first." : !reviewed ? "Tick “I reviewed these rules and assumptions” first." : null} onClick={() => void save()} data-testid="qr-save">
                       {strategy ? `Save as version ${(strategy.versions.at(-1)?.number ?? 0) + 1}` : "Save strategy"}
                     </Button>
                   </>
@@ -414,6 +414,7 @@ function Composer({ current, onDraft }: { current: QrSpec | null; onDraft: (d: Q
         <Button
           variant="primary"
           disabled={busy || text.trim().length < 8}
+          reason={text.trim().length < 8 ? "Describe the idea in a few words first (at least 8 characters)." : null}
           onClick={async () => {
             setBusy(true);
             setError(null);

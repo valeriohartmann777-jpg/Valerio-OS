@@ -238,7 +238,7 @@ function Connection({ status, onChanged }: { status: QhStatus | null; onChanged:
             <Button onClick={() => setShow((s) => !s)} aria-pressed={show} title={show ? "Hide key" : "Show key"}>
               {show ? "Hide" : "Show"}
             </Button>
-            <Button variant="primary" type="submit" disabled={!key.trim() || !!busy || keystore?.available === false} data-testid="qh-connect">
+            <Button variant="primary" type="submit" disabled={!key.trim() || !!busy || keystore?.available === false} reason={keystore?.available === false ? "No secure keystore on this computer — the key can't be stored safely." : !key.trim() ? "Paste your Databento API key first." : null} data-testid="qh-connect">
               {busy === "connect" ? "Verifying…" : "Connect & Verify"}
             </Button>
           </div>

@@ -26,3 +26,4 @@ data/*
 
 # test output
 tests/e2e/output/
+tests/e2e/audit-output/

@@ -52,6 +52,9 @@ def test_read_only_queries_skip_missions(text: str, tool: str) -> None:
         ("hello", IntentKind.CONVERSATION, "greeting"),
         ("Jarvis", IntentKind.CONVERSATION, "greeting"),
         ("what can you do", IntentKind.CONVERSATION, "capabilities"),
+        ("What time is it?", IntentKind.CONVERSATION, "clock"),
+        ("Wie spät ist es?", IntentKind.CONVERSATION, "clock"),
+        ("what's the date", IntentKind.CONVERSATION, "clock"),
         ("research competitors and summarize what matters", IntentKind.UNSUPPORTED, None),
     ],
 )
@@ -63,3 +66,14 @@ def test_conversation_and_unsupported(text: str, kind: IntentKind, topic: str | 
 
 def test_clean_strips_wake_word_and_politeness() -> None:
     assert clean("  Hey Jarvis,  please open   notepad!! ") == "open notepad"
+
+
+def test_clock_is_answered_locally_from_the_computer_clock() -> None:
+    from datetime import datetime
+
+    from jarvis.core.responses import ResponseComposer
+    from jarvis.settings import PersonalitySettings
+
+    reply = ResponseComposer(PersonalitySettings()).conversation(router.route("What time is it?"))
+    now = datetime.now().astimezone()
+    assert reply.success and now.strftime("%Y") in reply.text and ":" in reply.text

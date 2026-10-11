@@ -88,9 +88,9 @@ export function Ultron() {
         )}
         {overview && !overview.model_ready && !overview.scripted && (
           <div className="mb-4 flex items-center gap-3 rounded-xl border border-ql-border bg-ql-surface px-4 py-3 text-[13px] text-fg-muted">
-            ULTRON's agents run on Claude. Add your Anthropic API key to start missions.
+            ULTRON's agents run on Claude. Connect your Claude plan (or approve the paid API) in Settings → AI &amp; Billing to start missions.
             <Button className="ml-auto" onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}>
-              Open Settings
+              Open AI &amp; Billing
             </Button>
           </div>
         )}
@@ -280,7 +280,7 @@ function NewMission({ overview, onCreated }: { overview: UlOverview; onCreated: 
             <input className={cx(compactInputClass, "w-20")} value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="decimal" />
           </label>
           <span className="text-2xs text-fg-faint">Hard cap — every model call is checked against it first.</span>
-          <Button type="submit" variant="primary" className="ml-auto" disabled={!ready || busy || goal.trim().length < 8} data-testid="ul-start">
+          <Button type="submit" variant="primary" className="ml-auto" disabled={!ready || busy || goal.trim().length < 8} reason={!ready ? "No AI route: connect your Claude plan or approve the paid API in Settings → AI & Billing." : goal.trim().length < 8 ? "Describe the goal first (at least 8 characters)." : null} data-testid="ul-start">
             {busy ? "Starting…" : "Start mission"}
           </Button>
         </div>

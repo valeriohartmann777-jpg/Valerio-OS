@@ -335,6 +335,15 @@ export function BacktestLauncher({
         <Button
           variant="primary"
           disabled={busy || !strategy || strategy.state !== "READY" || !current?.runnable}
+          reason={
+            !strategy
+              ? "Pick a saved strategy first."
+              : strategy.state !== "READY"
+                ? "This strategy still has open questions — finish it in the Strategy Studio."
+                : current && !current.runnable
+                  ? current.message
+                  : null
+          }
           onClick={() => void launch()}
           data-testid="bl-run"
         >

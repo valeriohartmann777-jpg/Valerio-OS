@@ -425,7 +425,7 @@ export function AskJarvis() {
           placeholder="Ask about the research — JARVIS answers from the QuantLab record, critically."
           aria-label="Ask JARVIS about QuantLab"
         />
-        <Button type="submit" variant="primary" disabled={!text.trim()}>
+        <Button type="submit" variant="primary" disabled={!text.trim()} reason="Type a question first.">
           Ask
         </Button>
       </form>

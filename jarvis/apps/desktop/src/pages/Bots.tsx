@@ -107,7 +107,9 @@ function Setup({
   busy: boolean;
   act: (call: () => Promise<unknown>) => Promise<void>;
 }) {
-  const state = STATE[lab.state];
+  // "Ready" only when the setup checks pass (audit A-01): an idle lab without MetaTrader isn't ready.
+  const state = lab.state === "idle" && !lab.ready ? { label: "Setup needed", tone: "warning" as const } : STATE[lab.state];
+  const missing = lab.checks.find((c) => c.key === "data")?.ok ? null : "Install MetaTrader 5 for Mac first, then press Search again.";
   return (
     <section className="mt-10 rounded-xl border border-hairline bg-canvas-2 px-5 py-4" data-testid="bot-setup">
       <div className="flex items-start justify-between gap-6">
@@ -138,7 +140,8 @@ function Setup({
           {!lab.ready && (
             <Button
               variant="primary"
-              disabled={busy || !lab.checks.find((c) => c.key === "data")?.ok}
+              disabled={busy || Boolean(missing)}
+              title={missing ?? undefined}
               onClick={() => void act(() => api.setUpBots())}
               data-testid="bot-setup-button"
             >

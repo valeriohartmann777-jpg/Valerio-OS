@@ -98,20 +98,30 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   warning: "bg-warning text-canvas hover:brightness-110 border-transparent",
 };
 
+/**
+ * A disabled button always says why (audit A-05): pass `reason` and it becomes the tooltip and
+ * the accessible description while the button is disabled. Disabled buttons keep pointer
+ * events so the tooltip can show; the browser still blocks the click.
+ */
 export function Button({
   variant = "ghost",
   className,
+  reason,
+  title,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; reason?: string | null }) {
+  const why = props.disabled && reason ? reason : undefined;
   return (
     <button
       type="button"
       className={cx(
         "no-drag inline-flex h-8 items-center justify-center gap-2 rounded-lg border px-3 text-[13px] font-medium",
-        "transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40",
+        "transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40",
         BUTTON_VARIANTS[variant],
         className,
       )}
+      title={why ?? title}
+      aria-description={why}
       {...props}
     />
   );

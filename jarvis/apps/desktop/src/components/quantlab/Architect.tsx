@@ -398,7 +398,7 @@ export function Architect({
           </label>
           {error && <p className="mb-3 text-[13px] text-ql-danger">{error}</p>}
           <div className="flex gap-2">
-            <Button variant="primary" disabled={!canSave} onClick={save} data-testid="ql-save-strategy">
+            <Button variant="primary" disabled={!canSave} reason="Answer the open questions and tick the review box first." onClick={save} data-testid="ql-save-strategy">
               {saving ? "Saving…" : editing ? "Save version" : "Save strategy"}
             </Button>
             <Button onClick={onCancel}>Cancel</Button>

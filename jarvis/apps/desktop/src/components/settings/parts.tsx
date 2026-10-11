@@ -60,7 +60,7 @@ export function KeyForm({ connect, label, placeholder, provider, storage, testid
             error ? "border-danger/40" : "border-hairline-strong",
           )}
         />
-        <Button type="submit" variant="primary" disabled={busy || !key.trim()} data-testid={`${testid}-connect`}>
+        <Button type="submit" variant="primary" disabled={busy || !key.trim()} reason={!key.trim() ? "Paste the key into the field first." : null} data-testid={`${testid}-connect`}>
           {busy ? "Checking…" : "Connect"}
         </Button>
         {onCancel && (
