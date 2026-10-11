@@ -161,7 +161,8 @@ try {
 
   await step("“Open Notepad.” → mission → Operator → Sentinel → verified reply", async () => {
     await command("Open Notepad.");
-    await page.getByTestId("agent-operator").and(page.locator('[data-status="active"]')).waitFor();
+    // The real step state while the Operator works (Home's focus panel shows the live mission).
+    await page.locator('[data-testid="mission-step"][data-status="active"]').first().waitFor();
     await page.waitForTimeout(250);
     await shot("02-executing");
     await reply("Notepad is open.").waitFor({ timeout: 10_000 });
@@ -232,13 +233,13 @@ try {
     await page.getByText("Notepad window detected").first().waitFor();
     await page.waitForTimeout(300);
     await shot("07-mission-detail");
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("tab-settings").click();
     await page.getByText("Strong confirmation").waitFor();
     await page.getByText("~/Documents").first().waitFor(); // folders the file tools may see
     await page.getByText("Updates are turned off").waitFor();
     await page.waitForTimeout(300);
     await shot("08-settings");
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("brain can be connected from the dashboard; a bad key is refused, nothing saved", async () => {
@@ -250,7 +251,7 @@ try {
     await page.getByTestId("brain-status").filter({ hasText: "Offline" }).waitFor();
     await page.waitForTimeout(300);
     await shot("10-connect-brain");
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("voice is set up from the dashboard; a bad ElevenLabs key is refused", async () => {
@@ -264,13 +265,17 @@ try {
     await page.getByTestId("voice-key-form").scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await shot("10b-voice-setup");
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
     await page.getByTestId("voice-off").waitFor();
   });
 
   await step("learning starts and stops from its page; without Claude it says what it needs", async () => {
     await page.getByTestId("learning-row").filter({ hasText: "Off" }).waitFor();
-    await page.getByRole("button", { name: "Learning", exact: true }).click();
+    await page.getByTestId("tab-training").click(); // JARVIS 2.0: Learning lives in the Training Hub
+    await page.getByTestId("training-hub").waitFor();
+    await page.getByTestId("subnav-overview").click(); // the tab reopens the last section; be explicit
+    await page.getByTestId("training-truth").waitFor(); // says what "learning" really is
+    await page.getByTestId("subnav-research").click();
     await page.getByTestId("learning-page").waitFor();
     await page.getByTestId("learning-state").filter({ hasText: "Off" }).waitFor();
     await page.getByTestId("learning-budget").filter({ hasText: "$0.00 / $3.00" }).waitFor();
@@ -288,6 +293,7 @@ try {
     await page.getByTestId("learning-toggle").filter({ hasText: "Stop learning" }).click();
     await page.getByTestId("learning-state").filter({ hasText: "Off" }).waitFor();
     // The trained model: judged on months it never saw — random prices teach it nothing.
+    await page.getByTestId("subnav-model").click();
     await page.getByTestId("trained-model").scrollIntoViewIfNeeded();
     await page.getByTestId("training-state").filter({ hasText: "Off" }).waitFor();
     await page.getByTestId("training-verdict").filter({ hasText: /No edge over the baseline|Not confirmed/ }).waitFor();
@@ -296,12 +302,13 @@ try {
     await page.getByTestId("training-toggle").filter({ hasText: "Daily: off" }).waitFor();
     await page.waitForTimeout(300);
     await shot("10e-trained-model");
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
     await page.getByTestId("learning-row").filter({ hasText: "Off" }).waitFor();
   });
 
   await step("Bot Lab: MetaTrader found, test terminal set up, an EA imported, backtested, copied", async () => {
-    await page.getByRole("button", { name: "Bots", exact: true }).click();
+    await page.getByTestId("tab-quantlab").click(); // JARVIS 2.0: Bots is a QuantLab section
+    await page.getByTestId("ql-nav-mt5-bots").click();
     await page.getByTestId("bots-page").waitFor();
     await page.getByTestId("bot-check-app").filter({ hasText: "✓" }).waitFor();
     await page.getByTestId("bot-check-data").filter({ hasText: "1 EA(s)" }).waitFor();
@@ -321,13 +328,16 @@ try {
     await shot("11b-bot-results");
     await page.getByTestId("bot-install-0").click();
     await page.getByText("Copied to MetaTrader").waitFor();
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("QuantLab: broken data refused, synthetic data passported, a spec frozen, a run judged critically", async () => {
     const top = () => page.getByTestId("quantlab-page").evaluate((el) => el.scrollTo(0, 0));
-    await page.getByRole("button", { name: "QuantLab", exact: true }).click();
-    await page.getByTestId("bl-launcher").waitFor(); // QuantLab opens on the Backtest Lab
+    await page.getByTestId("tab-quantlab").click();
+    await page.getByTestId("ql-nav-mt5-bots").and(page.locator('[aria-current="page"]')).waitFor(); // remembered section
+    await page.getByTestId("ql-solo-banner").waitFor(); // the private Solo workspace says so
+    await page.getByTestId("ql-nav-backtest-lab").click();
+    await page.getByTestId("bl-launcher").waitFor();
     await page.getByTestId("ql-nav-overview").click();
     await page.getByTestId("qr-getting-started").waitFor(); // no number before a real run
     await page.getByTestId("ql-mode-research").click();
@@ -371,13 +381,13 @@ try {
     await page.getByTestId("ql-cockpit-verdict").waitFor();
     await page.waitForTimeout(300);
     await shot("11g-quantlab-cockpit");
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("QuantLab futures: Databento connect, quote, approval, download, dataset, JARVIS draft, validation, report", async () => {
     const lab = () => page.getByTestId("quantlab-page");
     const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
-    await page.getByRole("button", { name: "QuantLab", exact: true }).click();
+    await page.getByTestId("tab-quantlab").click();
     await page.getByTestId("ql-nav-data-hub").click();
     await page.getByTestId("qh-fixture-banner").waitFor(); // the fixture is never mistaken for Databento
     await page.getByTestId("qh-key").fill("db-REVOKED00000000000000000000");
@@ -463,14 +473,14 @@ try {
     await page.waitForTimeout(300);
     await shot("11r-quantlab-overview");
     await page.getByTestId("ql-mode-simple").click();
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("QuantLab local data first: Data Vault buys MNQ once, then Strategy → NQ → 5m → Backtest runs offline", async () => {
     const lab = () => page.getByTestId("quantlab-page");
     const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
     const vault = () => fetch(`${backendUrl}/quantlab/data/vault`).then((r) => r.json());
-    await page.getByRole("button", { name: "QuantLab", exact: true }).click();
+    await page.getByTestId("tab-quantlab").click();
     await page.getByTestId("ql-nav-data-vault").click();
     await page.getByTestId("qv-vault").waitFor();
     await page.getByTestId("qv-series-row").filter({ hasText: "NQ.v.0" }).waitFor(); // the earlier download
@@ -528,13 +538,13 @@ try {
     await page.getByTestId("ql-nav-data-vault").click();
     await page.getByTestId("qv-offline-toggle").click(); // back online for the later steps
     await page.getByTestId("qv-offline-state").filter({ hasText: "Online" }).waitFor();
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("QuantLab Idea-to-Edge: video → speech, on-screen text, keyframes, claims, blueprint, questions", async () => {
     const lab = () => page.getByTestId("quantlab-page");
     const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
-    await page.getByRole("button", { name: "QuantLab", exact: true }).click();
+    await page.getByTestId("tab-quantlab").click();
     await page.getByTestId("ql-nav-idea-inbox").click();
     await page.getByTestId("idea-inbox").waitFor();
     await page.getByTestId("idea-empty").waitFor();
@@ -647,11 +657,11 @@ try {
     await page.waitForTimeout(300);
     await shot("12i-evolution-holdout");
     await page.getByTestId("ql-nav-idea-inbox").click();
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("ULTRON: a goal becomes a plan; AXIOM specs, FORGE codes and retries, SENTINEL verifies, export approved", async () => {
-    await page.getByRole("button", { name: "ULTRON", exact: true }).click();
+    await page.getByTestId("tab-ultron").click();
     await page.getByTestId("ul-overview").waitFor();
     await page.getByTestId("ul-scripted").waitFor(); // the test model is labelled, always
     await page.getByTestId("ul-goal").fill("Build a tested slugify(text) utility in a new Python package.");
@@ -685,10 +695,12 @@ try {
     await page.getByTestId("ul-mission-card").first().waitFor();
     await page.waitForTimeout(300);
     await shot("11k-ultron-overview");
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
-  await step("memory: added on Home, kept, forgotten; the morning briefing is set in Settings", async () => {
+  await step("memory: added in the Training Hub, kept, forgotten; the morning briefing is set in Settings", async () => {
+    await page.getByTestId("tab-training").click();
+    await page.getByTestId("subnav-knowledge").click();
     await page.getByTestId("memory-input").fill("Prefers short answers.");
     await page.getByTestId("memory-input").press("Enter");
     await page.getByTestId("memory-item").filter({ hasText: "Prefers short answers." }).waitFor();
@@ -698,7 +710,7 @@ try {
     await page.getByRole("button", { name: "Forget M1" }).click();
     await page.getByTestId("memory-item").waitFor({ state: "detached" });
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("tab-settings").click();
     await page.getByTestId("briefing-toggle").waitFor();
     assert.equal(await page.getByTestId("briefing-toggle").getAttribute("aria-checked"), "false"); // off in tests
     await page.getByTestId("briefing-toggle").click();
@@ -706,11 +718,11 @@ try {
     await page.getByTestId("briefing-next").filter({ hasText: ":00" }).waitFor();
     await page.getByTestId("briefing-toggle").click(); // back off: no real market data here
     await page.getByTestId("briefing-toggle").and(page.locator('[aria-checked="false"]')).waitFor();
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("AI & Billing: plan first (test stand-in), its limit pauses the brain, paid fallback only with explicit caps", async () => {
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("tab-settings").click();
     await page.getByTestId("ai-billing").waitFor();
     // Defaults: nothing connected, paid fallback OFF, test keystore and stand-in binary labelled.
     await page.getByTestId("ai-route-chip").and(page.locator('[data-route="paused"]')).waitFor();
@@ -732,7 +744,7 @@ try {
     await page.waitForTimeout(300);
     await shot("10g-ai-billing-plan");
 
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
     fakeClaudeConfig({ mode: "ok", structured: { text: "Answered on your Claude plan (test stand-in).", tool_calls: [] } });
     await command("plan my evening");
     await reply("Answered on your Claude plan (test stand-in).").waitFor();
@@ -751,7 +763,7 @@ try {
     const asks = log.filter((call) => call.args[0] === "-p");
     assert.ok(asks.length >= 2 && asks.every((call) => call.args.includes("--safe-mode") && call.args.includes("--no-session-persistence")));
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("tab-settings").click();
     await page.getByTestId("ai-plan-status").and(page.locator('[data-state="LIMIT_REACHED"]')).waitFor();
     await page.getByTestId("ai-current-reason").filter({ hasText: "usage limit" }).waitFor();
     await page.getByTestId("ai-events").filter({ hasText: "limit" }).waitFor();
@@ -779,15 +791,15 @@ try {
     await page.getByTestId("ai-plan-disable").click();
     await page.getByTestId("ai-plan-enable").waitFor();
     fakeClaudeConfig({ mode: "ok" });
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
   });
 
   await step("closing the window keeps JARVIS running; it comes back from the menu bar", async () => {
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByTestId("tab-settings").click();
     await page.getByTestId("background-mode").filter({ hasText: "keeps running" }).waitFor();
     await page.getByTestId("background-mode").scrollIntoViewIfNeeded();
     await shot("10f-always-on");
-    await page.getByRole("button", { name: "Home" }).click();
+    await page.getByTestId("tab-home").click();
     const visible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible());
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
     await new Promise((resolve) => setTimeout(resolve, 500));

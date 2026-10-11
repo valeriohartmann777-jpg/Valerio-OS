@@ -92,10 +92,10 @@ export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
 type ButtonVariant = "primary" | "ghost" | "danger" | "warning";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-fg text-canvas hover:bg-white border-transparent",
-  ghost: "border-hairline-strong text-fg-muted hover:text-fg hover:border-white/20 hover:bg-white/[0.03]",
-  danger: "border-danger/40 text-danger hover:bg-danger/10",
-  warning: "bg-warning text-canvas hover:brightness-110 border-transparent",
+  primary: "bg-cta text-cta-ink font-bold hover:brightness-105 border-transparent shadow-[0_3px_0_#b89a2c]",
+  ghost: "border-control/70 bg-surface-2/40 text-fg-muted hover:text-fg hover:border-control hover:bg-surface-2",
+  danger: "border-danger/50 text-danger hover:bg-danger/10",
+  warning: "bg-warning text-cta-ink font-bold hover:brightness-110 border-transparent",
 };
 
 /**
@@ -108,14 +108,16 @@ export function Button({
   className,
   reason,
   title,
+  size = "md",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; reason?: string | null }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; reason?: string | null; size?: "md" | "lg" }) {
   const why = props.disabled && reason ? reason : undefined;
   return (
     <button
       type="button"
       className={cx(
-        "no-drag inline-flex h-8 items-center justify-center gap-2 rounded-lg border px-3 text-[13px] font-medium",
+        "no-drag inline-flex items-center justify-center gap-2 rounded-lg border font-medium",
+        size === "lg" ? "h-11 px-5 text-[14px] tracking-[0.04em] uppercase" : "h-9 px-3.5 text-[13px]",
         "transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40",
         BUTTON_VARIANTS[variant],
         className,

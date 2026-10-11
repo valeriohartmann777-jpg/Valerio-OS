@@ -32,8 +32,11 @@ const TEST_STATUS: Record<LearningTest["status"], { label: string; tone: Tone }>
   invalid: { label: "Invalid", tone: "danger" },
 };
 
-/** JARVIS's own trading research: status, budget, findings, notes and the log. */
-export function Learning() {
+/**
+ * JARVIS's own trading research: status, budget, findings, notes and the log. Shown inside the
+ * Training Hub (`embedded`); the trained model has its own Training Hub section there.
+ */
+export function Learning({ embedded = false }: { embedded?: boolean }) {
   const learning = useJarvis((s) => s.learning);
   const training = useJarvis((s) => s.training);
   const [findings, setFindings] = useState<LearningTest[]>([]);
@@ -83,12 +86,12 @@ export function Learning() {
     }
   };
 
-  return (
-    <div className="h-full overflow-y-auto" data-testid="learning-page">
-      <div className="mx-auto max-w-[1040px] px-10 py-10">
+  const body = (
+      <>
         <header className="flex items-start justify-between gap-8">
           <div>
-            <h1 className="text-2xl font-light tracking-[-0.01em] text-fg">Learning</h1>
+            {!embedded && <h1 className="text-2xl font-light tracking-[-0.01em] text-fg">Learning</h1>}
+            {embedded && <h2 className="text-[15px] font-black tracking-[0.04em] text-fg uppercase">Research loop</h2>}
             <p className="mt-2 max-w-[620px] text-[13px] leading-relaxed text-fg-muted">
               JARVIS researches scalping and day trading on NQ and XAUUSD on its own: it forms hypotheses, backtests
               them on minute data and keeps what holds up on data it never tuned on. It only learns — no broker, no
@@ -130,7 +133,7 @@ export function Learning() {
           )}
         </section>
 
-        {training && <TrainedModel training={training} />}
+        {training && !embedded && <TrainedModel training={training} />}
 
         <div className="mt-12 grid grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] gap-10">
           <section>
@@ -189,7 +192,12 @@ export function Learning() {
         </section>
 
         {learning && <DataNote learning={learning} />}
-      </div>
+      </>
+  );
+  if (embedded) return <div data-testid="learning-page">{body}</div>;
+  return (
+    <div className="h-full overflow-y-auto" data-testid="learning-page">
+      <div className="mx-auto max-w-[1040px] px-10 py-10">{body}</div>
     </div>
   );
 }
@@ -222,7 +230,7 @@ function StatusStrip({ learning }: { learning: LearningStatus }) {
             <button
               type="button"
               className="ml-1 text-accent hover:underline"
-              onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
+              onClick={() => dispatch({ type: "navigate", view: { name: "settings", section: "ai" } })}
             >
               Open Settings
             </button>

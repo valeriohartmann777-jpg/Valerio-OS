@@ -128,19 +128,23 @@ export function Toggle({
   );
 }
 
-export function Group({ title, children }: { title: string; children: React.ReactNode }) {
+export const settingsAnchor = (title: string) =>
+  `settings-${title.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+
+/** One settings group: a card with a heavy title; its anchor is #/settings/<slug>. */
+export function Group({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h2 className="label mb-3">{title}</h2>
-      <dl className="divide-y divide-hairline border-y border-hairline">{children}</dl>
+    <section id={id ?? settingsAnchor(title)} className="scroll-mt-4 rounded-2xl border border-hairline-strong bg-surface/90 px-5 pt-4 pb-1">
+      <h2 className="mb-2 text-[15px] font-black tracking-[0.04em] text-fg uppercase">{title}</h2>
+      <dl className="divide-y divide-hairline">{children}</dl>
     </section>
   );
 }
 
 export function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-4 py-2.5 text-[13px]">
-      <dt className="text-fg-faint capitalize">{label}</dt>
+    <div className="grid grid-cols-[150px_minmax(0,1fr)] gap-4 py-3 text-[14px]">
+      <dt className="text-fg-muted capitalize">{label}</dt>
       <dd className="selectable truncate text-fg">{children}</dd>
     </div>
   );

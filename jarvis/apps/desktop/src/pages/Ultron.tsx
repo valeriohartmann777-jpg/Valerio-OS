@@ -58,13 +58,13 @@ export function Ultron() {
   };
 
   return (
-    <div className="h-full overflow-y-auto" data-testid="ultron-page">
-      <div className="mx-auto max-w-[1360px] px-8 py-8">
-        <header className="mb-5 flex flex-wrap items-end gap-4">
+    <div className="h-full overflow-y-auto px-7" data-testid="ultron-page" style={{ "--area": "var(--color-ultron)" } as React.CSSProperties}>
+      <div className="mx-auto max-w-[1400px] pb-8">
+        <header className="mb-5 flex flex-wrap items-end gap-4 pt-7">
           <div className="mr-auto">
-            <p className="font-mono text-2xs tracking-[0.2em] text-fg-faint">JARVIS / ULTRON / {view.toUpperCase()}</p>
-            <h1 className="mt-1 text-2xl font-light tracking-[-0.01em] text-fg">ULTRON</h1>
-            <p className="mt-1 text-[13px] text-fg-muted" data-testid="ul-status-line">
+            <p className="text-[12px] font-extrabold tracking-[0.22em] text-[var(--area)] uppercase">JARVIS / Autonomous team / {view}</p>
+            <h1 className="mt-1.5 text-[clamp(28px,3.2vw,44px)] leading-none font-black tracking-[-0.02em] text-fg uppercase">ULTRON HQ.</h1>
+            <p className="mt-2 text-[14px] text-fg-muted" data-testid="ul-status-line">
               {overview ? (
                 <>
                   <span className={overview.workers.busy ? "text-ql" : undefined}>
@@ -89,7 +89,7 @@ export function Ultron() {
         {overview && !overview.model_ready && !overview.scripted && (
           <div className="mb-4 flex items-center gap-3 rounded-xl border border-ql-border bg-ql-surface px-4 py-3 text-[13px] text-fg-muted">
             ULTRON's agents run on Claude. Connect your Claude plan (or approve the paid API) in Settings → AI &amp; Billing to start missions.
-            <Button className="ml-auto" onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}>
+            <Button className="ml-auto" onClick={() => dispatch({ type: "navigate", view: { name: "settings", section: "ai" } })}>
               Open AI &amp; Billing
             </Button>
           </div>

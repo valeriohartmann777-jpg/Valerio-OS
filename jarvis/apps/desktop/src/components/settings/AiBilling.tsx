@@ -136,8 +136,8 @@ function Sub({ children }: { children: React.ReactNode }) {
 
 function Wide({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-4 py-2.5 text-[13px]">
-      <span className="text-fg-faint">{label}</span>
+    <div className="grid grid-cols-[150px_minmax(0,1fr)] gap-4 py-3 text-[14px]">
+      <span className="text-fg-muted">{label}</span>
       <div className="min-w-0 space-y-2 whitespace-normal text-fg">{children}</div>
     </div>
   );
@@ -194,9 +194,9 @@ export function AiBillingSettings() {
 
   const route = ROUTE_VIEW[status.current.route];
   return (
-    <section data-testid="ai-billing">
-      <h2 className="label mb-3">AI & Billing</h2>
-      <div className="divide-y divide-hairline border-y border-hairline">
+    <section data-testid="ai-billing" id="settings-ai" className="scroll-mt-4 rounded-2xl border border-hairline-strong bg-surface/90 px-5 pt-4 pb-1">
+      <h2 className="mb-2 text-[15px] font-black tracking-[0.04em] text-fg uppercase">AI &amp; Billing</h2>
+      <div className="divide-y divide-hairline">
         <Wide label="Route now">
           <span className={cx("inline-flex items-center gap-2 font-medium", textTone(route.tone))} data-testid="ai-current" data-route={status.current.route}>
             <span aria-hidden>{route.icon}</span>

@@ -20,16 +20,10 @@ import type {
   VoiceStatus,
 } from "@jarvis/protocol";
 
+import { type View, normalize } from "../lib/routes";
 import type { UpdateStatus } from "../lib/updates";
 
-export type View =
-  | { name: "home" }
-  | { name: "mission"; id: string }
-  | { name: "learning" }
-  | { name: "bots" }
-  | { name: "quantlab" }
-  | { name: "ultron" }
-  | { name: "settings" };
+export type { View } from "../lib/routes";
 export type Connection = "connecting" | "online" | "offline";
 
 export interface LastMessage extends JarvisMessagePayload {
@@ -119,7 +113,7 @@ export function reduce(state: UIState, action: Action): UIState {
     case "connection":
       return { ...state, connection: action.status };
     case "navigate":
-      return { ...state, view: action.view };
+      return { ...state, view: normalize(action.view) };
     case "toggleDebug":
       return { ...state, showDebug: !state.showDebug };
     case "updates":

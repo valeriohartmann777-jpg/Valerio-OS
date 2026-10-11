@@ -2,6 +2,7 @@ import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 
 
 import { api } from "../../lib/api";
 import { dispatch, useJarvis } from "../../store/store";
+import { Icon } from "../ui/icons";
 import { cx } from "../ui/primitives";
 
 const MAX_HISTORY = 50;
@@ -66,12 +67,12 @@ export function CommandBar() {
   };
 
   return (
-    <div className="border-t border-hairline bg-canvas-2/80 px-6 py-3.5">
-      <form onSubmit={submit} className="mx-auto flex max-w-[820px] items-center gap-3">
+    <div className="border-t border-hairline-strong bg-[#0a1530]/95 px-6 py-3">
+      <form onSubmit={submit} className="mx-auto flex max-w-[900px] items-center gap-3">
         <div
           className={cx(
-            "group flex h-11 flex-1 items-center gap-3 rounded-xl border bg-surface px-4 transition-colors duration-200",
-            "border-hairline-strong focus-within:border-accent/40",
+            "group flex h-12 flex-1 items-center gap-3 rounded-xl border bg-surface px-4 transition-colors duration-200",
+            "border-control/70 focus-within:border-home",
           )}
         >
           <span
@@ -90,18 +91,23 @@ export function CommandBar() {
             onKeyDown={onKeyDown}
             placeholder={online ? "Ask JARVIS anything…" : "Waiting for the core…"}
             disabled={!online}
-            className="h-full flex-1 bg-transparent text-[14px] text-fg placeholder:text-fg-faint focus:outline-none disabled:cursor-not-allowed"
+            className="h-full flex-1 bg-transparent text-[15px] text-fg placeholder:text-fg-faint focus:outline-none disabled:cursor-not-allowed"
             aria-label="Command"
             data-testid="command-input"
             autoFocus
             spellCheck={false}
           />
-          {error ? (
-            <span className="text-xs text-danger">{error}</span>
-          ) : (
-            <kbd className="hidden font-mono text-2xs text-fg-faint sm:block">↵</kbd>
-          )}
+          {error && <span className="text-xs text-danger">{error}</span>}
         </div>
+        <button
+          type="submit"
+          disabled={!online || !text.trim()}
+          title={!online ? "Waiting for the core" : !text.trim() ? "Type a message first" : "Send (Enter)"}
+          className="inline-flex h-12 items-center gap-2 rounded-xl bg-cta px-4 text-[13px] font-extrabold tracking-[0.06em] text-cta-ink uppercase shadow-[0_3px_0_#b89a2c] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+          data-testid="command-send"
+        >
+          Send <Icon name="send" size={16} />
+        </button>
         <MicButton />
       </form>
     </div>
@@ -120,7 +126,7 @@ function MicButton() {
   const click = async () => {
     setProblem(null);
     if (!voice || phase === "off" || phase === "unavailable") {
-      dispatch({ type: "navigate", view: { name: "settings" } });
+      dispatch({ type: "navigate", view: { name: "settings", section: "voice" } });
       return;
     }
     try {
@@ -154,7 +160,7 @@ function MicButton() {
       data-testid="mic-button"
       data-state={phase ?? "none"}
       className={cx(
-        "relative grid size-11 place-items-center rounded-xl border transition-colors duration-200",
+        "relative grid size-12 place-items-center rounded-xl border transition-colors duration-200",
         "disabled:cursor-not-allowed disabled:opacity-60",
         busy
           ? "border-accent/60 bg-accent/10 text-accent"

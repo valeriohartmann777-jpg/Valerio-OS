@@ -3,58 +3,78 @@
 @import "@fontsource-variable/jetbrains-mono";
 
 /*
- * Design tokens.
+ * JARVIS 2.0 design tokens (docs/JARVIS_2_DESIGN_SYSTEM.md).
  *
- *  spec name             token                 utility examples
- *  background.primary    --color-canvas        bg-canvas
- *  background.secondary  --color-canvas-2      bg-canvas-2
- *  surface               --color-surface       bg-surface
- *  surface (raised)      --color-surface-2     bg-surface-2
- *  border.subtle         --color-hairline      border-hairline
- *  border                --color-hairline-strong
- *  text.primary          --color-fg            text-fg
- *  text.secondary        --color-fg-muted      text-fg-muted
- *  text.tertiary         --color-fg-faint      text-fg-faint
- *  accent                --color-accent        text-accent / bg-accent
- *  success/warning/error --color-success/warning/danger
+ *  spec name            token                    utility examples
+ *  bg.app               --color-canvas           bg-canvas
+ *  bg.app (deeper)      --color-canvas-2         bg-canvas-2
+ *  bg.card              --color-surface          bg-surface
+ *  bg.cardElevated      --color-surface-2        bg-surface-2
+ *  border (regions)     --color-hairline         border-hairline
+ *  border.default       --color-hairline-strong  border-hairline-strong
+ *  text.primary         --color-fg               text-fg
+ *  text.secondary       --color-fg-muted         text-fg-muted
+ *  text.tertiary        --color-fg-faint         text-fg-faint   (≥ 6.4:1 on cards)
+ *  accent.<area>        --color-home|training|quant|ultron|settings
+ *  cta.primary          --color-cta              bg-cta
+ *  status.*             --color-success|warning|danger
  *
- * One accent. Status colors are used only to communicate status.
+ * Colours carry meaning: an area accent marks where you are, status colours only status.
+ * Every pair used for text passes WCAG 2.2 AA (computed, see the design-system doc).
  */
 @theme {
-  --color-canvas: #07080a;
-  --color-canvas-2: #0a0c0f;
-  --color-surface: #0e1115;
-  --color-surface-2: #13171c;
-  --color-hairline: rgb(255 255 255 / 0.06);
-  --color-hairline-strong: rgb(255 255 255 / 0.1);
+  --color-canvas: #071020;
+  --color-canvas-2: #0a1529;
+  --color-surface: #15243d;
+  --color-surface-2: #1c3050;
+  --color-hairline: rgb(141 170 214 / 0.16);
+  --color-hairline-strong: #354c69;
+  --color-control: #5b7598; /* input/control borders: ≥ 3:1 against cards */
 
-  --color-fg: #e8ebee;
-  --color-fg-muted: #98a2ac;
-  --color-fg-faint: #5d6772;
+  --color-fg: #f8fbff;
+  --color-fg-muted: #becfe7;
+  --color-fg-faint: #93a8c6;
 
-  --color-accent: #8fd0ff;
-  --color-accent-strong: #b9e2ff;
-  --color-success: #62d6a2;
-  --color-warning: #f1b65c;
-  --color-danger: #f26d62;
+  --color-home: #54cfff;
+  --color-training: #b29aff;
+  --color-quant: #42d7b6;
+  --color-ultron: #ffb45d;
+  --color-settings: #bac9dd;
+  --color-cta: #ffe16b;
+  --color-cta-ink: #0b1730;
 
-  /* QuantLab (handoff 02_UX): one teal accent, graphite surfaces, scoped to QuantLab. */
-  --color-ql: #4ec7bb;
-  --color-ql-positive: #76bfa9;
-  --color-ql-warning: #d8aa60;
-  --color-ql-danger: #e37d84;
-  --color-ql-surface: #111820;
-  --color-ql-raised: #17212a;
-  --color-ql-border: #27323a;
-  --color-ql-muted: #91a3ae;
+  --color-accent: #54cfff;
+  --color-accent-strong: #9be3ff;
+  --color-success: #4cdfac;
+  --color-warning: #ffc46b;
+  --color-danger: #ff747d;
+
+  /* QuantLab keeps its own names, now on the shared navy surfaces with the mint area accent. */
+  --color-ql: #42d7b6;
+  --color-ql-positive: #4cdfac;
+  --color-ql-warning: #ffc46b;
+  --color-ql-danger: #ff747d;
+  --color-ql-surface: #15243d;
+  --color-ql-raised: #1c3050;
+  --color-ql-border: #354c69;
+  --color-ql-muted: #becfe7;
 
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
-  --text-2xs: 0.6875rem;
-  --text-2xs--line-height: 1rem;
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1.05rem;
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Settings → Interface: higher contrast raises secondary text and borders. */
+:root[data-contrast="high"] {
+  --color-fg-muted: #dbe6f5;
+  --color-fg-faint: #c0d0e6;
+  --color-hairline: rgb(141 170 214 / 0.32);
+  --color-hairline-strong: #5b7598;
+  --color-ql-border: #5b7598;
 }
 
 @layer base {
@@ -65,7 +85,10 @@
   }
 
   body {
-    background: var(--color-canvas);
+    background:
+      radial-gradient(ellipse at 74% 0%, #183160 0%, transparent 42%),
+      radial-gradient(ellipse at 8% 110%, #10244a 0%, transparent 46%),
+      var(--color-canvas);
     color: var(--color-fg);
     font-family: var(--font-sans);
     font-feature-settings: "cv11", "ss01", "ss03";
@@ -85,7 +108,7 @@
   }
 
   :focus-visible {
-    outline: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+    outline: 2px solid var(--area, var(--color-accent));
     outline-offset: 2px;
   }
 
@@ -147,6 +170,15 @@
   50% {
     opacity: 0.35;
   }
+}
+
+/* Reduced motion: the OS preference, or Settings → Interface → Motion "Reduced". */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

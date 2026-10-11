@@ -217,7 +217,7 @@ function Blocker({ mission }: { mission: UlMission }) {
             Checkpoint kept — continues by itself when a route is back; no tool runs twice.
           </span>
           <Button onClick={() => run(() => api.ulControl(mission.id, "resume"))}>Try now</Button>
-          <Button onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}>AI & Billing</Button>
+          <Button onClick={() => dispatch({ type: "navigate", view: { name: "settings", section: "ai" } })}>AI & Billing</Button>
         </div>
       )}
       {error && <p className="mt-2 text-[13px] text-ql-danger">{error}</p>}

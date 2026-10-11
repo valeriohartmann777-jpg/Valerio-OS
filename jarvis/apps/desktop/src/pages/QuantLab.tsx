@@ -14,9 +14,13 @@ import { StrategyStudio } from "../components/quantlab/research/StrategyStudio";
 import { BacktestLauncher } from "../components/quantlab/vault/BacktestLauncher";
 import { DataVault } from "../components/quantlab/vault/DataVault";
 import { Badge, ResearchOnly } from "../components/quantlab/ui";
+import { Icon } from "../components/ui/icons";
 import { Button, cx } from "../components/ui/primitives";
+import { PageHeader, WorkspaceModeBadge } from "../components/ui/shell";
 import { ApiError, api } from "../lib/api";
+import { go } from "../lib/history";
 import { useJarvis } from "../store/store";
+import { Bots } from "./Bots";
 
 /**
  * QuantLab — the research terminal: idea (video, text, link) → claims → blueprint → verified
@@ -38,6 +42,7 @@ const SECTIONS: { id: Section; modes: Mode[] }[] = [
   { id: "Risk & Execution", modes: ["Institutional"] },
   { id: "Reports", modes: ["Simple", "Research", "Institutional"] },
   { id: "Equity lab (R1)", modes: ["Research", "Institutional"] },
+  { id: "MT5 Bots", modes: ["Simple", "Research", "Institutional"] },
 ];
 const MODES: Mode[] = ["Simple", "Research", "Institutional"];
 
@@ -51,10 +56,20 @@ function savedMode(): Mode {
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+// Old links: #/bots and #/quantlab/bots open the MT5 Bots section.
+const ALIASES: Record<string, Section> = { bots: "MT5 Bots" };
+
+/** The section in the address (#/quantlab/<slug>); Backtest Lab when none or unknown. */
+function sectionOf(value: string | undefined): Section {
+  if (!value) return "Backtest Lab";
+  return ALIASES[value] ?? SECTIONS.find((s) => slug(s.id) === value)?.id ?? "Backtest Lab";
+}
 
 export function QuantLab() {
   const [mode, setModeState] = useState<Mode>(savedMode);
-  const [section, setSection] = useState<Section>("Backtest Lab");
+  const view = useJarvis((s) => s.view);
+  const section = sectionOf(view.name === "quantlab" ? view.section : undefined);
+  const setSection = useCallback((next: Section) => go({ name: "quantlab", section: slug(next) }), []);
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [missionId, setMissionId] = useState<string | null>(null);
   const [overview, setOverview] = useState<QrOverview | null>(null);
@@ -111,25 +126,40 @@ export function QuantLab() {
   const hub = overview?.hub;
 
   return (
-    <div className="h-full overflow-y-auto" data-testid="quantlab-page">
-      <div className="mx-auto max-w-[1400px] px-8 py-8">
-        <header className="mb-6 flex flex-wrap items-end gap-3">
-          <div className="mr-auto">
-            <p className="font-mono text-2xs tracking-[0.2em] text-fg-faint">JARVIS / QUANTLAB / {section.toUpperCase()}</p>
-            <h1 className="mt-1 text-2xl font-light tracking-[-0.01em] text-fg">QuantLab</h1>
-            <p className="mt-1 text-[13px] text-fg-muted">
-              Futures research terminal · local data first · NQ · MNQ · ES · MES ·{" "}
+    <div className="h-full overflow-y-auto px-7" data-testid="quantlab-page" style={{ "--area": "var(--color-quant)" } as React.CSSProperties}>
+      <div className="mx-auto max-w-[1400px] pb-8">
+        <PageHeader
+          eyebrow={`JARVIS / Personal QuantLab / ${section}`}
+          title="QuantLab."
+          subtitle={
+            <>
+              Your private trading research: strategies, local market data, backtests. Futures NQ · MNQ · ES · MES ·{" "}
               {busy ? <span className="text-ql">work in progress</span> : "idle"}
-            </p>
-          </div>
-          {hub?.fixture ? (
-            <FixtureBadge label="Fixture provider" />
-          ) : (
-            <Badge tone={hub?.status === "CONNECTED" ? "positive" : "muted"} icon={hub?.status === "CONNECTED" ? "●" : "○"} testId="ql-provider">
-              {hub?.status === "CONNECTED" ? "Databento" : "Databento not connected"}
-            </Badge>
-          )}
-          <ResearchOnly />
+            </>
+          }
+          aside={
+            <>
+              <WorkspaceModeBadge mode="solo" />
+              {hub?.fixture ? (
+                <FixtureBadge label="Fixture provider" />
+              ) : (
+                <Badge tone={hub?.status === "CONNECTED" ? "positive" : "muted"} icon={hub?.status === "CONNECTED" ? "●" : "○"} testId="ql-provider">
+                  {hub?.status === "CONNECTED" ? "Databento" : "Databento not connected"}
+                </Badge>
+              )}
+              <ResearchOnly />
+            </>
+          }
+        />
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-quant/30 bg-quant/5 px-4 py-2.5 text-[13px] text-fg-muted" data-testid="ql-solo-banner">
+          <Icon name="lock" size={16} className="shrink-0 text-quant" />
+          <span className="min-w-0 flex-1">
+            <b className="text-fg">Solo mode.</b> ULTRON&apos;s agents can&apos;t read or change anything here unless you share a strategy with
+            the team.
+          </span>
+          <button type="button" onClick={() => go({ name: "ultron", room: "quantlab" })} className="inline-flex items-center gap-1.5 font-semibold text-quant hover:underline" data-testid="ql-to-team">
+            Work on it with ULTRON <Icon name="arrow" size={14} />
+          </button>
           <div className="flex rounded-lg border border-ql-border p-0.5" role="radiogroup" aria-label="Detail level">
             {MODES.map((m) => (
               <button
@@ -138,7 +168,7 @@ export function QuantLab() {
                 role="radio"
                 aria-checked={mode === m}
                 onClick={() => setMode(m)}
-                className={cx("rounded-md px-2.5 py-1 text-[12px]", mode === m ? "bg-ql-raised text-fg" : "text-fg-faint hover:text-fg-muted")}
+                className={cx("rounded-md px-2.5 py-1 text-[12px]", mode === m ? "bg-ql-raised text-fg" : "text-fg-muted hover:text-fg")}
                 data-testid={`ql-mode-${m.toLowerCase()}`}
               >
                 {m}
@@ -148,6 +178,7 @@ export function QuantLab() {
           <Button
             variant="danger"
             disabled={!busy}
+            reason="Nothing is running."
             onClick={async () => {
               const r = await api.qlStopAll();
               setStopped(`Stopped ${r.runs.length} run(s) and ${r.downloads.length} download(s). Charges for data already delivered stay.`);
@@ -158,10 +189,10 @@ export function QuantLab() {
           >
             Stop all
           </Button>
-        </header>
+        </div>
 
-        <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-ql-border bg-ql-surface p-1" aria-label="QuantLab">
-          {SECTIONS.filter((s) => s.modes.includes(mode)).map((s) => (
+        <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-hairline-strong bg-surface/80 p-1" aria-label="QuantLab">
+          {SECTIONS.filter((s) => s.modes.includes(mode) || s.id === section).map((s) => (
             <button
               key={s.id}
               type="button"
@@ -170,8 +201,8 @@ export function QuantLab() {
                 if (s.id === "Idea Inbox") setSourceId(null);
               }}
               className={cx(
-                "flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] transition-colors",
-                section === s.id ? "bg-ql-raised text-fg" : "text-fg-faint hover:text-fg-muted",
+                "min-h-10 flex-1 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold transition-colors",
+                section === s.id ? "bg-surface-2 text-fg shadow-[inset_0_-3px_0_var(--area)]" : "text-fg-muted hover:bg-white/5 hover:text-fg",
               )}
               aria-current={section === s.id ? "page" : undefined}
               data-testid={`ql-nav-${slug(s.id)}`}
@@ -233,6 +264,7 @@ export function QuantLab() {
         {section === "Risk & Execution" && <RiskExecution runId={runId} runs={runs} tick={tick} onPick={setRunId} />}
         {section === "Reports" && <Reports runId={runId} runs={runs} onPick={setRunId} />}
         {section === "Equity lab (R1)" && <EquityLab />}
+        {section === "MT5 Bots" && <Bots embedded />}
       </div>
     </div>
   );

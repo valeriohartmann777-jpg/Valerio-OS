@@ -18,7 +18,8 @@ export type Section =
   | "Experiments"
   | "Risk & Execution"
   | "Reports"
-  | "Equity lab (R1)";
+  | "Equity lab (R1)"
+  | "MT5 Bots";
 
 /** QuantLab overview: research state, data provider, saved strategies, recent and active runs. */
 export function Overview({

@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 import { AiBillingSettings, useAiStatus } from "../components/settings/AiBilling";
 import { Group, Item, KeyForm, Toggle } from "../components/settings/parts";
+import { PageHeader } from "../components/ui/shell";
+import { type InterfacePrefs, setInterfacePrefs, useInterfacePrefs } from "../lib/interface";
 import { UpdateSummary } from "../components/UpdateControls";
 import { Empty, StatusDot, cx } from "../components/ui/primitives";
 import { api } from "../lib/api";
@@ -20,6 +22,8 @@ const POLICY_TEXT: Record<string, string> = {
 export function Settings() {
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const view = useJarvis((s) => s.view);
+  const anchor = view.name === "settings" ? view.section : undefined;
 
   useEffect(() => {
     api.settings().then(setSettings, (err: unknown) =>
@@ -27,20 +31,32 @@ export function Settings() {
     );
   }, []);
 
-  return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-[820px] px-10 py-10">
-        <h1 className="text-2xl font-light tracking-[-0.01em] text-fg">Settings</h1>
-        <p className="mt-2 text-[13px] text-fg-muted">
-          Choose how JARVIS reaches Claude — your plan first, paid API only within your approved budget — and set up the voice. Everything else is read-only in this phase: edit{" "}
-          <code className="font-mono text-xs">config/*.yaml</code> and restart JARVIS to change it.
-        </p>
+  // #/settings/<group> scrolls to that group once it is rendered.
+  useEffect(() => {
+    if (!anchor || !settings) return;
+    document.getElementById(`settings-${anchor}`)?.scrollIntoView({ block: "start" });
+  }, [anchor, settings]);
 
-        {error && <p className="mt-8 text-[13px] text-danger">{error}</p>}
+  return (
+    <div className="h-full overflow-y-auto px-7" style={{ "--area": "var(--color-settings)" } as React.CSSProperties} data-testid="settings-page">
+      <div className="mx-auto max-w-[900px] pb-10">
+        <PageHeader
+          eyebrow="JARVIS / System preferences"
+          title="Settings."
+          subtitle={
+            <>
+              Choose how JARVIS reaches Claude — your plan first, paid API only within your approved budget — set up the voice and
+              the interface. Other values are read-only here: edit <code className="font-mono text-xs">config/*.yaml</code> and
+              restart JARVIS to change them.
+            </>
+          }
+        />
+
+        {error && <p className="mt-2 text-[13px] text-danger">{error}</p>}
         {!settings && !error && <Empty>Loading…</Empty>}
 
         {settings && (
-          <div className="mt-10 space-y-10">
+          <div className="mt-4 space-y-6">
             <AiBillingSettings />
 
             <BrainSettings models={settings.models} />
@@ -50,6 +66,8 @@ export function Settings() {
             <BriefingSettings />
 
             <BackgroundSettings />
+
+            <InterfaceSettings />
 
             <Group title="System">
               <Item label="Version">{settings.version}</Item>
@@ -408,6 +426,70 @@ function BackgroundSettings() {
           <span className="text-danger">{problem}</span>
         </Item>
       )}
+    </Group>
+  );
+}
+
+const INTERFACE_OPTIONS: { key: keyof InterfacePrefs; label: string; hint: string; options: { value: string; label: string }[] }[] = [
+  {
+    key: "motion",
+    label: "Motion",
+    hint: "Reduced turns off animations everywhere (the computer's own setting is always respected).",
+    options: [
+      { value: "system", label: "As the computer" },
+      { value: "reduced", label: "Reduced" },
+    ],
+  },
+  {
+    key: "contrast",
+    label: "Contrast",
+    hint: "High makes secondary text and borders brighter.",
+    options: [
+      { value: "standard", label: "Standard" },
+      { value: "high", label: "High" },
+    ],
+  },
+  {
+    key: "world",
+    label: "ULTRON HQ",
+    hint: "Simple shows the rooms as a list instead of the drawn base.",
+    options: [
+      { value: "full", label: "Drawn base" },
+      { value: "simple", label: "Simple list" },
+    ],
+  },
+];
+
+/** Settings → Interface: kept on this computer only (no account, nothing sent). */
+function InterfaceSettings() {
+  const prefs = useInterfacePrefs();
+  return (
+    <Group title="Interface">
+      {INTERFACE_OPTIONS.map((row) => (
+        <Item key={row.key} label={row.label}>
+          <div className="flex flex-wrap items-center gap-3 whitespace-normal">
+            <div className="flex rounded-lg border border-hairline-strong p-0.5" role="radiogroup" aria-label={row.label}>
+              {row.options.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={prefs[row.key] === option.value}
+                  onClick={() => setInterfacePrefs({ [row.key]: option.value } as Partial<InterfacePrefs>)}
+                  data-testid={`interface-${row.key}-${option.value}`}
+                  className={cx(
+                    "min-h-9 rounded-md px-3 text-[13px] font-semibold",
+                    prefs[row.key] === option.value ? "bg-surface-2 text-fg" : "text-fg-muted hover:text-fg",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-[13px] text-fg-muted">{row.hint}</span>
+          </div>
+        </Item>
+      ))}
     </Group>
   );
 }

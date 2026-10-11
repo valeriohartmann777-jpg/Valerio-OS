@@ -18,6 +18,30 @@ interface Copy {
  * The core steps back (shrinks) while a mission or approval needs the stage,
  * so the whole picture fits without scrolling.
  */
+/**
+ * Home's compact JARVIS presence: a small core and what JARVIS is doing right now, from the
+ * real state machine (idle, listening, thinking, acting, waiting for approval, done, failed).
+ */
+export function CoreStrip() {
+  const connection = useJarvis((s) => s.connection);
+  const jarvis = useJarvis((s) => s.jarvis);
+  const copy = describe(connection, jarvis.state, jarvis.detail);
+  return (
+    <div className="flex items-center gap-4" data-testid="core-strip">
+      <JarvisCore state={jarvis.state} size={72} offline={connection !== "online"} />
+      <div className="min-w-0">
+        <div className={cx("text-[12px] font-extrabold tracking-[0.2em] uppercase", copy.labelTone)} data-testid="jarvis-state">
+          {copy.label}
+        </div>
+        <p className="selectable mt-1 truncate text-[18px] font-semibold text-fg" data-testid="jarvis-headline">
+          {copy.headline}
+        </p>
+        {copy.sub && <p className="mt-0.5 truncate text-[13px] text-fg-muted">{copy.sub}</p>}
+      </div>
+    </div>
+  );
+}
+
 export function CoreStage({ compact }: { compact: boolean }) {
   const connection = useJarvis((s) => s.connection);
   const jarvis = useJarvis((s) => s.jarvis);
@@ -66,7 +90,7 @@ export function CoreStage({ compact }: { compact: boolean }) {
   );
 }
 
-function describe(
+export function describe(
   connection: string,
   state: ReturnType<typeof useJarvis.getState>["jarvis"]["state"],
   detail: string,

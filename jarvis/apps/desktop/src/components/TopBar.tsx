@@ -1,10 +1,14 @@
+import { useRef } from "react";
+
 import { HAS_TITLEBAR_OVERLAY, HAS_TRAFFIC_LIGHTS } from "../lib/config";
 import { clock } from "../lib/format";
-import type { View } from "../store/reducer";
-import { dispatch, useJarvis, useNow } from "../store/store";
+import { go } from "../lib/history";
+import { TABS, type Tab, tabOf } from "../lib/routes";
+import { useJarvis, useNow } from "../store/store";
 import { routeChip, useAiStatus } from "./settings/AiBilling";
-import { UpdateButton } from "./UpdateControls";
+import { Icon } from "./ui/icons";
 import { StatusDot, cx, textTone } from "./ui/primitives";
+import { UpdateButton } from "./UpdateControls";
 
 const CONNECTION = {
   online: { text: "System online", tone: "success" as const },
@@ -12,93 +16,140 @@ const CONNECTION = {
   offline: { text: "Offline", tone: "danger" as const },
 };
 
+/**
+ * The app header: brand, exactly five tabs (icon + label + active bar in the area colour) and
+ * the real system state — backend connection, AI route, simulated desktop, updates.
+ */
 export function TopBar() {
   const connection = useJarvis((s) => s.connection);
   const simulated = useJarvis((s) => s.simulated);
   const version = useJarvis((s) => s.version);
   const build = useJarvis((s) => s.build);
-  const view = useJarvis((s) => s.view);
+  const active = useJarvis((s) => tabOf(s.view));
   const now = useNow(1000);
   const status = CONNECTION[connection];
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Arrow keys move between tabs (Home/End jump), Enter/Space activates — no hidden gestures.
+  const onKey = (event: React.KeyboardEvent, index: number) => {
+    const last = TABS.length - 1;
+    const target =
+      event.key === "ArrowRight" ? (index === last ? 0 : index + 1)
+      : event.key === "ArrowLeft" ? (index === 0 ? last : index - 1)
+      : event.key === "Home" ? 0
+      : event.key === "End" ? last
+      : null;
+    if (target === null) return;
+    event.preventDefault();
+    tabs.current[target]?.focus();
+  };
 
   return (
     <header
       className={cx(
-        "drag flex h-11 shrink-0 items-center gap-8 border-b border-hairline px-5",
+        "drag relative z-20 flex h-16 shrink-0 items-stretch gap-6 border-b border-hairline-strong bg-[#0a1530]/95 px-5 backdrop-blur",
         HAS_TITLEBAR_OVERLAY && "pr-[150px]",
         HAS_TRAFFIC_LIGHTS && "pl-[88px]",
       )}
     >
-      <div className="flex items-baseline gap-2.5">
-        <span className="text-[13px] font-semibold tracking-[0.34em] text-fg">JARVIS</span>
-        {version && (
-          <span className="font-mono text-2xs text-fg-faint" data-testid="build" title={build ?? undefined}>
-            v{version}
-            {build && build !== "unknown" && ` · ${build.slice(0, 7)}`}
-          </span>
-        )}
+      <div className="flex items-center gap-2.5">
+        <BrandMark />
+        <div className="flex flex-col leading-none">
+          <span className="text-[15px] font-black tracking-[0.18em] text-fg">JARVIS</span>
+          {version && (
+            <span className="mt-1 font-mono text-[11px] text-fg-faint" data-testid="build" title={build ?? undefined}>
+              v{version}
+              {build && build !== "unknown" && ` · ${build.slice(0, 7)}`}
+            </span>
+          )}
+        </div>
       </div>
 
-      <nav className="no-drag flex items-center gap-1" aria-label="Main">
-        <NavItem active={view.name === "home"} view={{ name: "home" }}>
-          Home
-        </NavItem>
-        {view.name === "mission" && (
-          <NavItem active view={view}>
-            Mission
-          </NavItem>
-        )}
-        <NavItem active={view.name === "learning"} view={{ name: "learning" }}>
-          Learning
-        </NavItem>
-        <NavItem active={view.name === "bots"} view={{ name: "bots" }}>
-          Bots
-        </NavItem>
-        <NavItem active={view.name === "quantlab"} view={{ name: "quantlab" }}>
-          QuantLab
-        </NavItem>
-        <NavItem active={view.name === "ultron"} view={{ name: "ultron" }}>
-          ULTRON
-        </NavItem>
-        <NavItem active={view.name === "settings"} view={{ name: "settings" }}>
-          Settings
-        </NavItem>
+      <nav className="no-drag flex min-w-0 items-stretch gap-1 overflow-x-auto" aria-label="Main">
+        {TABS.map((tab, i) => (
+          <TabButton
+            key={tab.id}
+            tab={tab.id}
+            active={active === tab.id}
+            onKey={(e) => onKey(e, i)}
+            ref={(el) => {
+              tabs.current[i] = el;
+            }}
+          />
+        ))}
       </nav>
 
-      <div className="ml-auto flex items-center gap-5">
+      <div className="no-drag ml-auto flex items-center gap-4">
         <UpdateButton />
         <AiRouteChip />
         {simulated && (
           <span
-            className="rounded-md border border-warning/30 px-2 py-0.5 font-mono text-2xs tracking-wider text-warning uppercase"
+            className="rounded-md border border-warning/40 px-2 py-0.5 font-mono text-2xs tracking-wider text-warning uppercase"
             title="No real system control on this machine — nothing is actually launched. On macOS or Windows: re-run the setup script and restart JARVIS."
             data-testid="simulated-badge"
           >
             Simulated
           </span>
         )}
-        <span className="flex items-center gap-2 text-2xs font-medium tracking-[0.16em] text-fg-muted uppercase">
+        <span className="flex items-center gap-2 text-2xs font-semibold tracking-[0.12em] text-fg-muted uppercase" role="status">
           <StatusDot tone={status.tone} live={connection !== "online"} />
           <span data-testid="connection-status">{status.text}</span>
         </span>
-        <span className="font-mono text-xs text-fg-faint tabular">{clock(now)}</span>
+        <span className="hidden font-mono text-xs text-fg-faint tabular xl:inline">{clock(now)}</span>
       </div>
     </header>
   );
 }
 
-function NavItem({ active, view, children }: { active: boolean; view: View; children: React.ReactNode }) {
+function TabButton({
+  tab,
+  active,
+  onKey,
+  ref,
+}: {
+  tab: Tab;
+  active: boolean;
+  onKey: (event: React.KeyboardEvent) => void;
+  ref: (el: HTMLButtonElement | null) => void;
+}) {
+  const def = TABS.find((t) => t.id === tab)!;
   return (
     <button
+      ref={ref}
       type="button"
-      onClick={() => dispatch({ type: "navigate", view })}
+      onClick={() => go({ name: tab } as Parameters<typeof go>[0])}
+      onKeyDown={onKey}
+      aria-current={active ? "page" : undefined}
+      title={def.hint}
+      data-testid={`tab-${tab}`}
+      style={{ "--tab": def.color } as React.CSSProperties}
       className={cx(
-        "rounded-md px-2.5 py-1 text-[13px] transition-colors",
-        active ? "text-fg" : "text-fg-faint hover:text-fg-muted",
+        "relative flex min-w-[96px] flex-col items-center justify-center gap-1 rounded-t-lg px-3 text-[12px] font-extrabold tracking-[0.06em] uppercase transition-colors",
+        active ? "bg-gradient-to-b from-surface-2 to-surface text-fg" : "text-fg-muted hover:bg-white/5 hover:text-fg",
       )}
     >
-      {children}
+      <Icon name={def.icon} size={20} className="text-[var(--tab)]" />
+      <span className="whitespace-nowrap">{def.label}</span>
+      {active && (
+        <span aria-hidden className="absolute inset-x-3 bottom-0 h-1 rounded-t-md bg-[var(--tab)] shadow-[0_0_14px_var(--tab)]" />
+      )}
     </button>
+  );
+}
+
+/** The JARVIS mark: an original hexagon with a "J" — no third-party logo. */
+export function BrandMark({ size = 34 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 34 34" aria-hidden>
+      <defs>
+        <linearGradient id="jv-mark" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#81e7ff" />
+          <stop offset="1" stopColor="#5575fd" />
+        </linearGradient>
+      </defs>
+      <path d="M8.5 1h17L34 17l-8.5 16h-17L0 17z" fill="url(#jv-mark)" />
+      <path d="M19.5 9v11.5a4.5 4.5 0 0 1-9 0" fill="none" stroke="#0b1b30" strokeWidth={3.2} strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -110,12 +161,12 @@ function AiRouteChip() {
   return (
     <button
       type="button"
-      onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
+      onClick={() => go({ name: "settings", section: "ai" })}
       title={`${status.current.label}: ${status.current.reason}`}
       data-testid="ai-route-chip"
       data-route={status.current.route}
       className={cx(
-        "no-drag inline-flex items-center gap-1.5 rounded-md border border-current/25 px-2 py-0.5 font-mono text-2xs tracking-wider uppercase",
+        "inline-flex items-center gap-1.5 rounded-md border border-current/30 px-2 py-0.5 font-mono text-2xs tracking-wider uppercase",
         textTone(view.tone),
       )}
     >

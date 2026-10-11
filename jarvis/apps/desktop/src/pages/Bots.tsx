@@ -31,7 +31,8 @@ function message(err: unknown): string {
 }
 
 /** The user's MetaTrader 5 EAs: backtests, improvement by Claude, honest results. */
-export function Bots() {
+/** Your MetaTrader 5 EAs — a QuantLab section since JARVIS 2.0 (`embedded`). */
+export function Bots({ embedded = false }: { embedded?: boolean }) {
   const lab = useJarvis((s) => s.bots);
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,11 +53,14 @@ export function Bots() {
     }
   };
 
-  return (
-    <div className="h-full overflow-y-auto" data-testid="bots-page">
-      <div className="mx-auto max-w-[1040px] px-10 py-10">
+  const body = (
+      <>
         <header>
-          <h1 className="text-2xl font-light tracking-[-0.01em] text-fg">Bots</h1>
+          {embedded ? (
+            <h2 className="text-[15px] font-black tracking-[0.04em] text-fg uppercase">MT5 Bots · your Expert Advisors</h2>
+          ) : (
+            <h1 className="text-2xl font-light tracking-[-0.01em] text-fg">Bots</h1>
+          )}
           <p className="mt-2 max-w-[680px] text-[13px] leading-relaxed text-fg-muted">
             JARVIS backtests your MetaTrader 5 Expert Advisors in its own copy of MetaTrader and improves them with
             Claude. A version counts only if it also holds on months it wasn&apos;t tuned on. Your EA files and your
@@ -93,7 +97,12 @@ export function Bots() {
         )}
 
         {lab && current && <BotPanel key={current} name={current} lab={lab} />}
-      </div>
+      </>
+  );
+  if (embedded) return <div data-testid="bots-page">{body}</div>;
+  return (
+    <div className="h-full overflow-y-auto" data-testid="bots-page">
+      <div className="mx-auto max-w-[1040px] px-10 py-10">{body}</div>
     </div>
   );
 }

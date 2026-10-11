@@ -30,7 +30,7 @@ export function ContextPanel() {
               className="no-drag text-warning hover:underline"
               title={brain?.reason ?? undefined}
               data-testid="brain-offline"
-              onClick={() => dispatch({ type: "navigate", view: { name: "settings" } })}
+              onClick={() => dispatch({ type: "navigate", view: { name: "settings", section: "ai" } })}
             >
               Offline — connect
             </button>
@@ -88,7 +88,7 @@ function Faint({ children }: { children: React.ReactNode }) {
 function VoiceRow() {
   const voice = useJarvis((s) => s.voice);
   if (!voice) return <Faint>—</Faint>;
-  const open = () => dispatch({ type: "navigate", view: { name: "settings" } });
+  const open = () => dispatch({ type: "navigate", view: { name: "settings", section: "voice" } });
   switch (voice.state) {
     case "off":
       return (
@@ -129,7 +129,7 @@ function LearningRow() {
       className={problem ? "no-drag text-warning hover:underline" : "no-drag text-fg hover:text-fg-muted"}
       title={learning.detail ?? undefined}
       data-testid="learning-row"
-      onClick={() => dispatch({ type: "navigate", view: { name: "learning" } })}
+      onClick={() => dispatch({ type: "navigate", view: { name: "training", section: "research" } })}
     >
       {learningLabel(learning.state)}
       {(validated > 0 || (learning.enabled && learning.state !== "off")) && (
