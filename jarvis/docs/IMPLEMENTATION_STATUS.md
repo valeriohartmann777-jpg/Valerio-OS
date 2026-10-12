@@ -1,6 +1,6 @@
 # Implementation status
 
-_Last updated: 2026-10-10_
+_Last updated: 2026-10-11_
 
 ## DONE
 
@@ -465,6 +465,30 @@ _Last updated: 2026-10-10_
   real batch job and charge, real Databento DBN files, multi-year import speed, macOS.
 - Screenshots: `docs/screenshots/quantlab-{backtest-lab,data-vault,vault-quote}.png`
 
+### JARVIS 2.0 (D-032) — details in `docs/JARVIS_2_*.md`, `docs/UX_*.md`
+- Audit first (`docs/UX_BUG_AUDIT.md`): crawler over every page, button and GET route;
+  13 defects, all fixed (`docs/UX_FIX_LOG.md`). Rollback point `192bd1a`; database backed up
+  before every migration (rollback rehearsed in `test_database.py`).
+- Shell: five tabs with area colours, hash routes + legacy aliases, history, keyboard tabs,
+  design tokens, icon map, shell primitives; Home chat-first; Settings as cards + Interface
+  (reduced motion, high contrast, simple HQ list).
+- Training Hub (former Learning): research loop, trained model, knowledge, **feedback**
+  (👍/👎 + note, per route, keep as correction) and **evaluations** (behaviour check of the
+  local router against curated + pinned cases, stored runs; stored evidence of the other
+  loops). No claim of retraining Claude.
+- QuantLab Solo: Solo boundary banner, MT5 Bots inside QuantLab, Run backtest with the
+  assumptions summary.
+- Team ULTRON: HQ with five rooms and nine original robots, states projected from persisted
+  tasks, Inspector, crew list; Mission Control inside the Workshop.
+- ULTRON QuantLab: team workspaces on the Solo Data Vault / engine / registry, explicit
+  grants, append-only audit, SENTINEL challenge, CIPHER improve (new team versions only),
+  copy back to Solo as a new version.
+- Tests: full backend suite 625 passed; vitest 47; **34/34 E2E steps** incl. team QuantLab,
+  feedback/evaluations and navigation/layout (1366×768, 1120×720).
+- Mocked here: AI models (scripted), market data (fixture, labelled), desktop (simulated).
+  Not verified: real Claude, real Databento, macOS, DPI scaling, screen readers.
+- Screenshots: `docs/screenshots/jarvis2-*.png`
+
 ## IN PROGRESS
 - —
 
@@ -473,7 +497,8 @@ _Last updated: 2026-10-10_
 
 0. Voice on the MacBook: connect ElevenLabs, "Hey JARVIS", push-to-talk
 0. Learning on the MacBook: first Dukascopy download, first rounds
-0. Trained model on the MacBook: first real verdict (Learning page)
+0. Trained model on the MacBook: first real verdict (Training Hub → Trained model)
+0. JARVIS 2.0 on the MacBook: owner acceptance run in `docs/JARVIS_2_RELEASE_PLAN.md`
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
 0. QuantLab on the MacBook: connect Databento (Keychain), quote one month of NQ.v.0 1-minute bars,
    approve, build the dataset, run the opening-range template once — first real data

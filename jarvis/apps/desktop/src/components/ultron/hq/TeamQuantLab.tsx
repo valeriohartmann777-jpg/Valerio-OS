@@ -358,7 +358,7 @@ function Access({ project, disabled, onSave }: { project: TmProject; disabled: b
 }
 
 function TaskRow({ task }: { task: TmTask }) {
-  const r = (task.result ?? {}) as { passed?: boolean; failed?: unknown[]; warnings?: { name?: string; detail?: string }[]; checked?: number; trials?: number; mission_state?: string; second_engine?: { agree?: number; compared?: number } };
+  const r = (task.result ?? {}) as { passed?: boolean; failed?: unknown[]; warnings?: { name?: string; detail?: string }[]; checked?: number; trials?: number; mission_state?: string; second_engine?: { agree?: number; compared?: number; skipped?: boolean } };
   return (
     <li className="py-2 text-[13px]" data-testid="tm-task" data-agent={task.agent} data-state={task.state}>
       <div className="flex items-center justify-between gap-3">
@@ -369,9 +369,9 @@ function TaskRow({ task }: { task: TmTask }) {
         {task.state === "FAILED"
           ? task.error
           : task.agent === "sentinel" && task.result
-            ? `${r.passed ? "All blocking checks passed" : `${r.failed?.length ?? 0} check(s) failed`} · ${r.warnings?.length ?? 0} warning(s) · ${r.checked ?? 0} checks · second engine ${r.second_engine?.agree ?? "–"}/${r.second_engine?.compared ?? "–"} trades agree`
+            ? `${r.passed ? "All blocking checks passed" : `${r.failed?.length ?? 0} check(s) failed`} · ${r.warnings?.length ?? 0} warning(s) · ${r.checked ?? 0} checks · ${secondEngine(r.second_engine)}`
             : task.agent === "cipher" && task.result
-              ? `Mission ${r.mission_state?.toLowerCase()} · ${r.trials ?? 0} trial(s) registered`
+              ? `${missionState(r.mission_state)} · ${r.trials ?? 0} trial(s) registered`
               : `Run ${task.request.run_id}`}
       </p>
     </li>
@@ -417,4 +417,16 @@ function Trials({ mission }: { mission: TmProject["missions"][number] }) {
       <p className="mt-1 text-[12px] text-fg-muted">Each variant is a new team version tested with the holdout sealed. Many variants raise the risk of data-mining — compare them on the Pareto view, not on one number.</p>
     </div>
   );
+}
+
+/** Never a pass that didn't happen: the second engine only covers 1-minute bars. */
+function secondEngine(cmp: { agree?: number; compared?: number; skipped?: boolean } | undefined): string {
+  if (!cmp || cmp.skipped || !cmp.compared) return "second engine not run (1-minute bars only)";
+  return `second engine: ${cmp.agree ?? 0} of ${cmp.compared} trades agree`;
+}
+
+function missionState(state: string | undefined): string {
+  if (state === "WAITING_USER") return "Round finished — waiting for your decision (holdout sealed)";
+  if (state === "COMPLETE") return "Round finished";
+  return `Mission ${(state ?? "unknown").toLowerCase().replace(/_/g, " ")}`;
 }

@@ -57,9 +57,9 @@ export function TopBar() {
         <div className="flex flex-col leading-none">
           <span className="text-[15px] font-black tracking-[0.18em] text-fg">JARVIS</span>
           {version && (
-            <span className="mt-1 font-mono text-[11px] text-fg-faint" data-testid="build" title={build ?? undefined}>
+            <span className="mt-1 font-mono text-[11px] whitespace-nowrap text-fg-faint" data-testid="build" title={build ?? undefined}>
               v{version}
-              {build && build !== "unknown" && ` · ${build.slice(0, 7)}`}
+              {build && build !== "unknown" && <span className="sr-only xl:not-sr-only">{` · ${build.slice(0, 7)}`}</span>}
             </span>
           )}
         </div>
@@ -79,7 +79,7 @@ export function TopBar() {
         ))}
       </nav>
 
-      <div className="no-drag ml-auto flex items-center gap-4">
+      <div className="no-drag ml-auto flex items-center gap-3 whitespace-nowrap xl:gap-4">
         <UpdateButton />
         <AiRouteChip />
         {simulated && (
@@ -91,9 +91,12 @@ export function TopBar() {
             Simulated
           </span>
         )}
-        <span className="flex items-center gap-2 text-2xs font-semibold tracking-[0.12em] text-fg-muted uppercase" role="status">
+        <span className="flex items-center gap-2 text-2xs font-semibold tracking-[0.12em] text-fg-muted uppercase" role="status" title={status.text}>
           <StatusDot tone={status.tone} live={connection !== "online"} />
-          <span data-testid="connection-status">{status.text}</span>
+          {/* below 1280 px only the dot shows; the text stays for screen readers and the tooltip */}
+          <span data-testid="connection-status" className="sr-only xl:not-sr-only">
+            {status.text}
+          </span>
         </span>
         <span className="hidden font-mono text-xs text-fg-faint tabular xl:inline">{clock(now)}</span>
       </div>

@@ -70,6 +70,31 @@ hard · **S3** polish.
 Crawler notes: "Strategies"/"Datasets" crawl timeouts were labels from a nested nav inside a
 QuantLab section, not a product defect.
 
+## Status after JARVIS 2.0 (2026-10-11)
+
+All 13 defects are fixed; details and evidence in [`UX_FIX_LOG.md`](UX_FIX_LOG.md).
+
+| Defect | Fixed in | Commit | Verified by |
+|---|---|---|---|
+| A-01 Bots "Ready" without setup | J2-1 | `d88f9b1` | crawl `audit1` |
+| A-02 old agent roster on Home | J2-2, J2-4 | `0d7431d`, `700665b` | E2E (Home, HQ steps), `test_team_hq.py` |
+| A-03 migrations without backup | J2-1 | `d88f9b1` | `test_database.py` (incl. rollback rehearsal v16 → v19 → v16) |
+| A-04 outdated ULTRON banner | J2-1 | `d88f9b1` | code read |
+| A-05 disabled buttons without reason | J2-1 | `d88f9b1` | crawl `audit1`: 0 left |
+| A-06 Home chat squeezed | J2-2 | `0d7431d` | E2E, screenshots |
+| A-07 no URLs / history | J2-2 | `0d7431d` | `routes.test.ts`, E2E navigation step |
+| A-08 six tabs | J2-2 | `0d7431d` | `routes.test.ts`, E2E navigation step |
+| A-09 "AI · Paused" on a fresh install | J2-1 | `d88f9b1` | `ai.test.ts` |
+| A-10 learning budget wording | J2-1 | `d88f9b1` | code read |
+| A-11 time/date needs Claude | J2-1 | `d88f9b1` | `test_router.py`, E2E feedback step |
+| A-12 small text, faint focus | J2-2 | `0d7431d` | crawl `audit2`, computed contrast |
+| A-13 no visual system | J2-2 | `0d7431d` | `JARVIS_2_DESIGN_SYSTEM.md` |
+
+Found and fixed during the work (not in the original crawl): SENTINEL's run audit crashed on
+bars > 1 minute (J2-5); the team task summary showed "second engine 0/0 trades agree" for a run
+the second engine never checked (J2-6); the HQ did not refresh on team-workspace events (J2-6); top-bar texts
+wrapped at the window minimum (J2-6).
+
 ## Data and settings inventory (what must survive)
 
 - `data/jarvis.db` (SQLite, schema v16): conversation, missions, approvals, memory, learning,

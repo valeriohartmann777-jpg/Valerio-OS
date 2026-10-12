@@ -101,3 +101,27 @@ Each entry: audit id · change · evidence. Audit: `docs/UX_BUG_AUDIT.md`.
   Solo vs team on the same dataset, CIPHER versions with Solo untouched, no AI route);
   E2E step "ULTRON QuantLab" (share → team backtest → SENTINEL → CIPHER → Solo unchanged,
   audit `share, backtest, ask, ask`): **32/32**.
+
+## J2-6 — readiness checks and polish (2026-10-11)
+
+- **Navigation/layout E2E step**: exactly five tabs in order; ←/→/End/Enter; deep link
+  `#/training/evaluations` survives a reload; back/forward; `#/learning` and `#/bots` land
+  on their new homes; the real window resized to 1366×768 and to its minimum 1120×720 —
+  tabs, composer, *Run backtest* and the HQ stay inside the window, no sideways scroll;
+  browser storage holds no key-like values.
+- **Top bar at the minimum width**: build hash, AI chip, *Simulated* and connection text
+  wrapped onto two lines at 1120 px. Now single-line; below 1280 px the connection shows as
+  the dot (text kept for screen readers and as tooltip), the build hash is screen-reader only.
+- **HQ refresh**: the ULTRON page now also refreshes on `team.*` events, so SENTINEL's team
+  challenge appears without waiting for another event.
+- **SENTINEL team summary told a half-truth**: a 5-minute team run showed "second engine 0/0
+  trades agree" — reads like a passed check although the 1-minute second engine never ran.
+  Now "second engine not run (1-minute bars only)"; CIPHER's row says "Round finished —
+  waiting for your decision (holdout sealed)" instead of the raw `waiting_user`. E2E asserts it.
+- **Settings after restart** (acceptance 8): `test_settings_and_training_hub_data_survive_a_restart`
+  — briefing time, paid-fallback caps, memory and feedback survive a backend restart.
+- **Rollback rehearsal** (acceptance 25) with the real migrations: v16 → v19 → restore
+  backup → previous release opens it unchanged → upgrade again.
+- Docs: `JARVIS_2_IA_UX.md`, `JARVIS_2_DESIGN_SYSTEM.md`, `JARVIS_2_RELEASE_PLAN.md`,
+  `JARVIS_2_STATUS.md` (acceptance matrix 1–26 with evidence), D-032, ARCHITECTURE §13l,
+  README, IMPLEMENTATION_STATUS; screenshots `docs/screenshots/jarvis2-*.png`.

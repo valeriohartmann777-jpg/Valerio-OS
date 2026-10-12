@@ -102,3 +102,22 @@ def test_a_case_fails_on_the_field_that_differs() -> None:
     assert compare({"kind": "action", "targets": ["NotePad"]}, got) == []
     assert compare({"kind": "query", "tool": "open_application"}, got) == ["kind"]
     assert compare({"targets": ["notepad", "paint"]}, got) == ["targets"]
+
+
+def test_settings_and_training_hub_data_survive_a_restart(settings: Settings) -> None:
+    """Acceptance 8: what the owner set is still there after JARVIS restarts — and keys
+    never travel through these settings."""
+    with TestClient(create_app(settings)) as first:
+        first.post("/briefing/preferences", json={"enabled": True, "time": "07:15"})
+        paid = {"monthly_budget_usd": 20, "per_mission_cap_usd": 5, "confirm": True}
+        assert first.post("/ai/paid", json=paid).status_code == 200
+        first.post("/memory", json={"text": "Prefers short answers.", "kind": "preference"})
+        reply = ask(first, "What time is it?")
+        first.post("/feedback", json={"event_id": reply["id"], "rating": 1})
+    with TestClient(create_app(settings)) as again:
+        briefing = again.get("/briefing").json()
+        assert briefing["enabled"] is True and briefing["time"] == "07:15"
+        api = again.get("/ai/status").json()["providers"]["api"]
+        assert api["paid"]["enabled"] is True and api["paid"]["monthly_budget_usd"] == 20
+        assert [m["text"] for m in again.get("/memory").json()] == ["Prefers short answers."]
+        assert again.get("/feedback").json()["ratings"] == {reply["id"]: 1}

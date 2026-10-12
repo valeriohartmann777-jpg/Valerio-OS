@@ -745,6 +745,8 @@ try {
     // SENTINEL challenges the run independently; CIPHER proposes variants on the team copy.
     await page.getByTestId("tm-ask-sentinel").click();
     await page.locator('[data-testid="tm-task"][data-agent="sentinel"][data-state="COMPLETE"]').waitFor({ timeout: 60_000 });
+    // A 5-minute run: the 1-minute second engine is reported as not run, never as agreeing.
+    await page.locator('[data-testid="tm-task"][data-agent="sentinel"]').filter({ hasText: "second engine not run" }).waitFor();
     await page.getByTestId("tm-ask-cipher").click();
     await page.locator('[data-testid="tm-task"][data-agent="cipher"][data-state="COMPLETE"]').waitFor({ timeout: 300_000 });
     await page.getByTestId("tm-trial").nth(1).waitFor();

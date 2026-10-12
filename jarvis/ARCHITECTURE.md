@@ -786,6 +786,39 @@ api/quantlab_vault_routes.py   /quantlab/data/*, /quantlab/backtest*, /quantlab/
   results) and `DataVault.tsx`.
 - Detail: `docs/quantlab/LOCAL_DATA_FIRST.md`, evidence `LOCAL_DATA_FIRST_TEST_EVIDENCE.md`.
 
+## 13l. JARVIS 2.0 shell, Team ULTRON and Training Hub evidence (D-032)
+
+```
+apps/desktop/src/lib/routes.ts     five tabs, View ⇄ hash, legacy aliases, remembered sub-section
+apps/desktop/src/lib/history.ts    store ⇄ history (pushState / popstate / hashchange)
+apps/desktop/src/lib/interface.ts  per-device interface prefs → <html data-motion / data-contrast>
+apps/desktop/src/components/ui/    icons.tsx, primitives.tsx (Button reason), shell.tsx
+apps/desktop/src/components/ultron/hq/   Robot, World, Inspector, TeamQuantLab
+backend/jarvis/team/hq.py          TeamHQ: robots + rooms projected from ul_tasks, qm_tasks,
+                                   tm_tasks and the desktop AgentRegistry
+backend/jarvis/team/store.py       tm_projects, tm_audit (append-only), tm_tasks (migration 17)
+backend/jarvis/team/workspace.py   TeamWorkspace: share, grants, team backtest, SENTINEL challenge,
+                                   CIPHER improve, return to Solo
+backend/jarvis/feedback/service.py ratings of replies (fb_feedback, migration 18)
+backend/jarvis/feedback/evals.py   behaviour cases (config/evals.yaml + pinned) vs. the local
+                                   router; ev_cases / ev_runs (migration 19)
+api/team_routes.py                 /team/hq, /team/quantlab/*, /feedback, /training/evals*
+```
+
+- **Workspaces:** `BacktestLab.options(workspace)` / `_scope` hide team families from Solo
+  and show a team only its own; `launch(..., team_workspace=True)` is a keyword set by
+  `TeamWorkspace` only — Solo launches of a team version fail with `TEAM_WORKSPACE`.
+- **Grants:** `NEEDS[(agent, kind)]` is checked in `TeamWorkspace._require` on every task;
+  grant changes need `confirm` and are audited.
+- **CIPHER improve:** `evolution.create_from_baseline` starts a bounded evolution mission
+  (1 iteration, ≤ 3 variants) from the project's completed validation run; it writes new
+  versions of the team family only.
+- **HQ:** state priority working > waiting_approval > blocked > failed > reserved > complete >
+  idle > offline; finished work shows 15 minutes; room = task room while active, else Homebase.
+- **Events:** `team.workspace`, `feedback.recorded`, `evaluation.completed`; the HQ refreshes
+  on `ultron.*`, `quantlab.mission*`, `agent.*`, `team.*`.
+- Detail: `docs/JARVIS_2_IA_UX.md`, `docs/JARVIS_2_DESIGN_SYSTEM.md`, `docs/JARVIS_2_STATUS.md`.
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |

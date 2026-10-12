@@ -4,9 +4,10 @@ A personal intelligence operating system: one coherent intelligence between you
 and your computer that understands, plans, delegates, acts, **verifies** and
 reports — with every step visible in a calm command center.
 
-**Status:** Phase 1 (foundation) and Phase 3 (model intelligence) complete,
-real system control on Windows and macOS — see [ROADMAP.md](ROADMAP.md) and
-[docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
+**Status:** JARVIS 2.0 — five tabs (Home · Training Hub · QuantLab · Team ULTRON ·
+Settings), the ULTRON robot HQ and shared ULTRON QuantLab on top of Phase 1–3 — see
+[docs/JARVIS_2_STATUS.md](docs/JARVIS_2_STATUS.md) (what is verified, mocked, open),
+[ROADMAP.md](ROADMAP.md) and [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 ```
 "Open Notepad."
@@ -21,6 +22,27 @@ real system control on Windows and macOS — see [ROADMAP.md](ROADMAP.md) and
 | ![Approval card](docs/screenshots/approval.png) | ![Failure](docs/screenshots/failure.png) |
 
 _Screenshots from the Electron E2E run (simulated desktop on Linux)._
+
+### JARVIS 2.0 at a glance
+
+| Tab | What you do there |
+|---|---|
+| **Home** | Talk to JARVIS; approvals and the active mission; 👍 / 👎 on every reply |
+| **Training Hub** | Research loop, the trained model, memory, your feedback, evaluations — evidence, never self-modification |
+| **QuantLab** | Your private (Solo) research: Backtest Lab (strategy → market → timeframe → Run backtest), Data Vault, Idea-to-Edge, MT5 Bots |
+| **Team ULTRON** | The robot HQ: nine robots in five rooms, standing where their real work is; Mission Control in the Workshop; ULTRON QuantLab |
+| **Settings** | AI & Billing, voice, permissions, briefing, always on, interface (reduced motion, high contrast, simple HQ list) |
+
+| ULTRON HQ | ULTRON QuantLab (team copy, Solo unchanged) |
+|---|---|
+| ![ULTRON HQ](docs/screenshots/jarvis2-ultron-hq.png) | ![ULTRON QuantLab](docs/screenshots/jarvis2-ultron-quantlab.png) |
+| **Backtest Lab** | **Training Hub · Evaluations** |
+| ![Backtest Lab](docs/screenshots/jarvis2-backtest-lab.png) | ![Evaluations](docs/screenshots/jarvis2-evaluations.png) |
+
+Every page has an address (`#/quantlab/data-vault`, `#/ultron/workshop`, …); reload, back
+and forward work, and old links (`#/learning`, `#/bots`) still land on the right page.
+Design and journeys: [docs/JARVIS_2_IA_UX.md](docs/JARVIS_2_IA_UX.md),
+[docs/JARVIS_2_DESIGN_SYSTEM.md](docs/JARVIS_2_DESIGN_SYSTEM.md).
 
 ## What works today
 
@@ -131,7 +153,7 @@ replies to typed commands too, and plays a sample. Voice and model are in
 ## Let JARVIS learn
 
 1. Connect Claude (below) — learning uses the same route.
-2. Open **Learning** in the top bar and click **Start learning**.
+2. Open **Training Hub → Research loop** and click **Start learning**.
 3. The first start downloads about five years of free minute data for NQ and
    XAUUSD from Dukascopy (a few minutes). Then a research round runs every
    15 minutes until the day's $3 are used up.
@@ -139,7 +161,7 @@ replies to typed commands too, and plays a sample. Voice and model are in
 The research focus is support and resistance: which levels hold on NQ and
 gold (swing highs/lows, previous day and week, Asia range, opening range,
 round numbers, volume profile), measured against chance. Change the focus on
-the Learning page any time.
+the research loop any time.
 
 It only learns: no broker, no orders. Budget, models, costs per trade and the
 test periods are in `config/learning.yaml`. A finding counts as validated only
@@ -151,7 +173,7 @@ give it another 20.
 ### Your MetaTrader bots (Bot Lab)
 
 1. Install MetaTrader 5 for Mac and keep your EAs (with source, `.mq5`) in
-   its MQL5 folder. Open **Bots** in JARVIS: it finds MetaTrader, Wine and
+   its MQL5 folder. Open **QuantLab → MT5 Bots** in JARVIS: it finds MetaTrader, Wine and
    your EAs by itself.
 2. **Set up test terminal** — JARVIS copies MetaTrader into its own folder
    (`drive_c/JARVIS/MetaTrader 5`); your running MetaTrader and its trades
@@ -301,13 +323,13 @@ the latest QuantLab run?" — it answers from `quantlab_report`.
 
 ### ULTRON: let the team build something
 
-1. Make sure Claude is connected (Settings → Brain) — ULTRON's agents use the
-   same key. Each mission has a hard budget (default $3, editable).
+1. Make sure Claude is connected (Settings → AI & Billing) — ULTRON's agents use
+   the same route. Each mission has a hard budget (default $3, editable).
 2. Tell JARVIS what to build ("Bau mir ein kleines Tool, das CSV in JSON
-   umwandelt, mit Tests") or type it on **ULTRON → Overview**. Choose *New
+   umwandelt, mit Tests") or type it on **Team ULTRON → Workshop → Overview**. Choose *New
    isolated project* or *JARVIS itself* (changes land on a reviewed branch,
    never in your running copy).
-3. Watch **Mission Control**: the task graph, who works on what, every check
+3. Watch the robots move into the Workshop, and **Workshop → Mission Control**: the task graph, who works on what, every check
    the runtime ran, patches, reviews and costs. Pause, resume or stop at any
    time; **Stop all** is the emergency stop.
 4. When SENTINEL has verified the result, approve the export — the project
@@ -315,7 +337,29 @@ the latest QuantLab run?" — it answers from `quantlab_report`.
 
 Agents can't use the network, install packages, touch files outside their
 task, merge into your checkout, send messages or spend money; those are locked.
-Settings: `config/ultron.yaml` and **ULTRON → Permissions**.
+Settings: `config/ultron.yaml` and **Team ULTRON → Workshop → Permissions**.
+
+### ULTRON QuantLab: research with the team, without giving up Solo
+
+1. **Team ULTRON → ULTRON QuantLab → Share with ULTRON**: pick one saved strategy
+   version, tick what the team may do (*read the spec*, *run backtests*, *propose
+   versions*), confirm. The team gets a **copy**; your Solo strategy stays private.
+2. Run a backtest on the team copy — same Data Vault, same engine, same ledger as Solo.
+3. **Ask SENTINEL to challenge** the run (independent audit) or **ask CIPHER to improve**
+   it (needs an AI route): its variants become new *team* versions with trials; the
+   holdout stays sealed.
+4. Like a team version? **Copy to Solo** adds it as a new Solo version. Nothing in Solo is
+   ever overwritten; every share, grant change and task is in the append-only audit.
+
+### Training Hub: tell JARVIS what was wrong
+
+- 👍 / 👎 under any reply on Home; 👎 asks what was wrong. **Training Hub → Feedback** lists
+  them with the question and the route that answered.
+- **Keep as correction** turns a 👎 note into a memory JARVIS uses from then on;
+  **Pin as test case** keeps how JARVIS understood a 👍 request.
+- **Evaluations → Run check** tests the curated sentences in `config/evals.yaml` plus your
+  pinned ones against JARVIS's local command understanding — offline and free — and lists
+  the stored evidence of the research loop, the trained model, QuantLab and SENTINEL.
 
 ### The trained model
 
@@ -330,10 +374,10 @@ A gradient-boosting model learns from it in a minute or so.
 
 It is chosen on 2024 – Q1 2025 and then judged month by month on data it
 never trained on, against a baseline that knows only the kind of level and
-how the touching candle closed. The Learning page shows the verdict, how
+how the touching candle closed. Training Hub → Trained model shows the verdict, how
 often levels held when it said X %, and what mattered most. Only a confirmed
 model's odds are used; otherwise JARVIS says how often such levels held in
-the past. Turn daily training on or off, or train now, on the Learning page;
+the past. Turn daily training on or off, or train now, in Training Hub → Trained model;
 settings in `config/training.yaml`.
 
 ## Connect Claude

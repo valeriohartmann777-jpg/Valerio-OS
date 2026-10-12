@@ -160,6 +160,42 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-032 — JARVIS 2.0: five tabs, a robot HQ projected from real work, Solo/Team workspaces on one engine
+
+- **Decision:**
+  - Exactly five top-level tabs (Home, Training Hub, QuantLab, Team ULTRON, Settings), each
+    with a colour, hash routes for every page and section, legacy aliases for JARVIS 1 links
+    (`docs/JARVIS_2_IA_UX.md`).
+  - The ULTRON HQ shows nine original robots in five rooms. Their state is a **projection**
+    of persisted work (`ul_tasks`, `qm_tasks`, `tm_tasks`, the desktop agent registry) by
+    `team/hq.py` — the frontend never invents activity, and a room grants nothing.
+  - ULTRON QuantLab = **team workspaces over the same Data Vault, engine and strategy
+    registry** as Solo. Sharing copies one Solo version into a new team family with explicit
+    grants; agents write only new team versions; results return to Solo only as a new Solo
+    version created by the owner. Audit is append-only (triggers).
+  - Training Hub learning is **evidence, not self-modification**: feedback and behaviour
+    checks are stored; a correction becomes part of JARVIS only when the owner keeps it as a
+    memory.
+- **Reason:** The owner's JARVIS 2.0 brief: a usable JARVIS over a prettier dashboard, an
+  honest team view, collaboration without losing authority over private research.
+- **Alternatives considered:**
+  - Separate team engine or data copy. Rejected: results would not be comparable and data
+    would be paid for twice.
+  - Letting agents edit the Solo strategy behind a "shared" flag. Rejected: Solo must be an
+    authority boundary, not a badge.
+  - Animated robot positions driven by the frontend. Rejected: they would show work that
+    didn't happen.
+  - Automatic prompt/rule changes from 👎 feedback. Rejected for now: no change without
+    approval; a candidate workflow is planned (`JARVIS_2_RELEASE_PLAN.md` 2.1).
+- **Consequences:**
+  - Migrations 17 (team), 18 (feedback), 19 (evaluations) — additive, backed up first.
+  - Solo refuses to run team families (`TEAM_WORKSPACE`); `team_workspace` is never a request
+    field.
+  - CIPHER needs an AI route and says so; SENTINEL's challenge runs locally.
+  - Mission Control lives inside the Workshop room; Learning inside the Training Hub; MT5 Bots
+    inside QuantLab.
+- **Date:** 2026-10-11
+
 ## D-031 — QuantLab Local Data First: Data Vault, timeframes from 1-minute bars, one-time batch purchase
 
 - **Decision:** A normal backtest is three choices — strategy, market, timeframe — and runs
