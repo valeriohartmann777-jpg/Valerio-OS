@@ -21,9 +21,11 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
+from jarvis.apex.calibration import calibration
 from jarvis.apex.data import Series, trading_minutes
-from jarvis.apex.engine import ENGINE_VERSION, MarketContext, candidates_at
+from jarvis.apex.engine import ENGINE_VERSION, MarketContext, candidates_at, segments
 from jarvis.apex.resolve import resolve
+from jarvis.apex.scenarios import base_rates
 from jarvis.apex.stats import clustered_mean, wilson
 from jarvis.settings import ApexSettings
 
@@ -96,6 +98,19 @@ def track_record(
             )
     if progress:
         progress(1.0)
+    # Calibration of the stated scenario rates over the same period (touches decided by then).
+    first_ts = int(datetime(start.year, start.month, start.day, tzinfo=UTC).timestamp())
+    last_ts = int(datetime(end.year, end.month, end.day, tzinfo=UTC).timestamp())
+    base = base_rates(
+        segments(series), ctx.levels_market, ctx.level_rules, ctx.window, ctx.touch_rules, last_bar
+    )
+    calibrated = calibration(
+        base.decided_before(),
+        horizon_minutes=ctx.touch_rules.horizon_minutes,
+        start=first_ts,
+        end=last_ts,
+        min_samples=cfg.min_samples,
+    )
     split = times[int(len(times) * (1 - cfg.oos_share))] if times else 0
     all_stats = summarize(trades, cfg.min_samples)
     in_sample = summarize([t for t in trades if t["at"] < split], cfg.min_samples)
@@ -128,6 +143,7 @@ def track_record(
             for name, flag in (("with_trend", True), ("counter_trend", False))
         },
         "verdict": verdict(in_sample, out_sample, cfg.min_samples),
+        "calibration": calibrated,
         "trades": trades[-500:],
         "settings": {
             "step_minutes": cfg.eval_step_minutes,

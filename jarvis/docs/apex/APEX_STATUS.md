@@ -13,7 +13,8 @@ Branch `claude/jarvis-foundation-mxnsz4`. Rollback point before APEX: `f6419d0`.
 | APEX-0 | Repository audit, data inventory, constraints, plan (`APEX_AUDIT.md`) | done |
 | APEX-1 | Vertical prototype: data + quality gate → structure → zones → counted scenarios → candidates → immutable journal → forward resolution → walk-forward track record; API; QuantLab → APEX; tests | done |
 | APEX-2 | JARVIS chat tool `apex_analysis`; SENTINEL re-check of a stored analysis (same data, no look-ahead, outcomes); CIPHER / SENTINEL APEX work in the ULTRON HQ | done |
-| APEX-3 | Calibration of stated rates against resolved outcomes; the trained model's odds next to counted rates; session / weekday breakdowns | planned |
+| APEX-3 | Calibration of the stated scenario rates against later touches (reliability table, Brier skill, Bonferroni-corrected verdict), shown with every track record | done |
+| APEX-4 | The trained S/R model's odds next to counted rates (only where it was confirmed); session / weekday breakdowns; first owner run on real data | planned |
 
 ## Requirements → evidence
 
@@ -31,11 +32,12 @@ Branch `claude/jarvis-foundation-mxnsz4`. Rollback point before APEX: `f6419d0`.
 | No real-money trading | no order path; API has no order / broker / execute route | E2E APEX step (OpenAPI check) |
 | Keep data and functions | additive migration 20 with backup first; existing suites unchanged | `test_database.py` incl. rollback rehearsal; full suite |
 | Integration JARVIS / QuantLab / ULTRON | QuantLab → APEX; chat tool `apex_analysis`; SENTINEL re-check and CIPHER track record shown in the ULTRON HQ | E2E APEX step; `test_sentinel_recomputes_a_stored_analysis_with_later_data`, `test_cipher_runs_the_track_record_and_the_hq_shows_it`, `test_jarvis_answers_from_apex_and_names_the_data` |
+| Probabilities that can be checked | stated rates vs. what later touches did, per bin with intervals; Brier skill vs. a side-only reference | `test_calibration_finds_well_stated_rates_and_their_information`, `test_calibration_uses_only_touches_decided_before_each_one`, `test_the_track_record_reports_the_calibration_of_its_period`; E2E |
 | Verifiable after the fact | SENTINEL recomputes a stored analysis with later data available; a manipulated stored analysis is caught field by field | `test_sentinel_recomputes_a_stored_analysis_with_later_data`; E2E (3/3 checks passed) |
 
 ## Last verified run
 
-`./scripts/check.sh` green — pytest **652** (625 before APEX + 27 in `test_apex.py`), vitest 47,
+`./scripts/check.sh` green — pytest **655** (625 before APEX + 30 in `test_apex.py`), vitest 47,
 ruff, mypy ×3, typecheck. E2E **35/35** incl. the APEX step (XAUUSD + MNQ analysed, candidates
 journaled, SENTINEL re-check 3/3, SENTINEL in the HQ, track record verdict, no order route).
 Screenshots: `docs/screenshots/apex-*.png` (all on SYNTHETIC test data).

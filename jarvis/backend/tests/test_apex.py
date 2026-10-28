@@ -615,3 +615,61 @@ async def test_jarvis_answers_from_apex_and_names_the_data(rt: Runtime) -> None:
     assert result.success and "SYNTHETIC test data" in result.summary and "S1" in result.summary
     assert "chart" not in result.data and "nothing is ordered" in result.data["note"]
     assert rt.tools.get("apex_analysis") is not None
+
+
+# -- 9 · APEX-3: calibration of the stated rates -------------------------------------------------
+
+
+def _touches(support: list[bool], group: list[str], held: list[int], step: int = 7200) -> Any:
+    from jarvis.training.dataset import FEATURES, Dataset
+
+    n = len(held)
+    x = np.zeros((n, len(FEATURES)))
+    col = {name: k for k, name in enumerate(FEATURES)}
+    for i in range(n):
+        x[i, col["support"]] = 1.0 if support[i] else 0.0
+        x[i, col[group[i]]] = 1.0
+    t = T - 400 * 86400 + np.arange(n, dtype=np.int64) * step
+    return Dataset(x, np.array(held), t, t // 86400, np.zeros(n, dtype=np.int64), ["XAUUSD"])
+
+
+def test_calibration_finds_well_stated_rates_and_their_information() -> None:
+    from jarvis.apex.calibration import calibration
+
+    rng = np.random.default_rng(3)
+    n = 4000
+    kinds = rng.choice(["k_round", "k_week"], size=n).tolist()
+    support = [True] * n
+    truth = np.where(np.array(kinds) == "k_round", 0.75, 0.35)  # the kind of level matters
+    held = (rng.random(n) < truth).astype(int).tolist()
+    data = _touches(support, kinds, held)
+    out = calibration(data, horizon_minutes=60, start=int(data.t[0]), end=T, min_samples=30)
+    assert out["touches"] > 3800 and out["verdict"]["code"] == "CALIBRATED"
+    assert out["skill"] > 0.1  # the zone kind adds information beyond the side
+    big = [b for b in out["bins"] if b["n"] >= 30]
+    assert all(abs(b["stated"] - b["observed"]) < 0.05 for b in big)
+
+
+def test_calibration_uses_only_touches_decided_before_each_one() -> None:
+    from jarvis.apex.calibration import calibration
+
+    # Regime change: 60 broken touches, then 60 held ones. A rate stated before each touch
+    # comes from the past only, so it lags behind — with look-ahead it would not.
+    held = [0] * 60 + [1] * 60
+    data = _touches([True] * 120, ["k_round"] * 120, held)
+    out = calibration(data, horizon_minutes=60, start=int(data.t[0]), end=T, min_samples=30)
+    late = [b for b in out["bins"] if b["observed"] == 1.0]
+    assert late and all(b["stated"] < 0.5 for b in late)
+    assert out["verdict"]["code"] == "MISCALIBRATED"
+    assert out["skipped"] == 30  # the first 30 had too little history for a stated rate
+
+
+def test_the_track_record_reports_the_calibration_of_its_period() -> None:
+    ctx = CONTEXTS["NQ"]
+    series = fixture_series("NQ", T, days=90)
+    start = datetime.fromtimestamp(T - 25 * 86400, UTC).date()
+    end = datetime.fromtimestamp(T - 2 * 86400, UTC).date()
+    result = track_record(series, ctx, CFG, start, end)
+    calibrated = result["calibration"]
+    assert calibrated["touches"] > 0 and calibrated["brier"] is not None
+    assert calibrated["verdict"]["code"] in ("CALIBRATED", "MISCALIBRATED", "INSUFFICIENT")

@@ -968,6 +968,10 @@ try {
     await page.getByTestId("apex-evaluate").click();
     await page.getByTestId("apex-verdict").waitFor({ timeout: 180_000 });
     assert.ok((await page.getByTestId("apex-track-row").count()) === 3, "all, in-sample, out-of-sample");
+    // The stated hold rates are checked against what later touches did (calibration).
+    const calibration = page.getByTestId("apex-calibration");
+    await calibration.waitFor();
+    assert.ok(["CALIBRATED", "MISCALIBRATED", "INSUFFICIENT"].includes(await calibration.getAttribute("data-code")));
     await page.getByTestId("apex-track").scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await shot("14b-apex-track-record");

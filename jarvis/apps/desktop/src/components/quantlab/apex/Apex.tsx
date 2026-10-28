@@ -532,6 +532,50 @@ function SummaryLine({ title, s }: { title: string; s: ApexSummary }) {
   );
 }
 
+/** Are the stated hold rates right? Stated vs. observed on the touches of the same period. */
+function Calibration({ c }: { c: NonNullable<ApexEvaluation["result"]>["calibration"] & object }) {
+  return (
+    <div className="mt-4 border-t border-hairline-strong pt-3" data-testid="apex-calibration" data-code={c.verdict.code}>
+      <h4 className="text-[13px] font-black tracking-[0.04em] text-fg uppercase">Calibration of the stated rates</h4>
+      <p className="mt-1 text-[13px] text-fg">
+        <b>{c.verdict.code}</b> — {c.verdict.text}
+      </p>
+      <p className="mt-1 text-[12px] text-fg-muted">
+        {c.touches} touches judged ({c.skipped} without enough history) · Brier {c.brier ?? "—"} vs. {c.brier_reference ?? "—"} for a
+        side-only rate · skill {c.skill ?? "—"} (above 0 = the kinds of level add information)
+      </p>
+      {c.bins.length > 0 && (
+        <table className="mt-2 w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-[12px] text-fg-faint">
+              <th className="pb-1.5 font-semibold">Stated rate</th>
+              <th className="pb-1.5 text-right font-semibold">Touches</th>
+              <th className="pb-1.5 text-right font-semibold">Stated (mean)</th>
+              <th className="pb-1.5 text-right font-semibold">Observed (95%)</th>
+              <th className="pb-1.5 text-right font-semibold">Fits</th>
+            </tr>
+          </thead>
+          <tbody>
+            {c.bins.map((b) => (
+              <tr key={b.range.join("-")} className="border-t border-hairline-strong/60" data-testid="apex-calibration-bin">
+                <td className="py-1 font-mono">
+                  {pct(b.range[0])}–{pct(b.range[1])}
+                </td>
+                <td className="py-1 text-right font-mono">{b.n}</td>
+                <td className="py-1 text-right font-mono">{pct(b.stated)}</td>
+                <td className="py-1 text-right font-mono">
+                  {pct(b.observed)} {b.ci ? `(${pct(b.ci[0])}–${pct(b.ci[1])})` : ""}
+                </td>
+                <td className={cx("py-1 text-right font-bold", b.inside ? "text-success" : "text-danger")}>{b.inside ? "yes" : "no"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function TrackRecord({ evaluations, market, onStarted }: { evaluations: ApexEvaluation[]; market: string; onStarted: () => void }) {
   const [days, setDays] = useState(120);
   const [error, setError] = useState<string | null>(null);
@@ -621,6 +665,7 @@ function TrackRecord({ evaluations, market, onStarted }: { evaluations: ApexEval
           <p className="mt-2 text-[12px] text-fg-faint">
             {r.start} → {r.end} · {r.decisions} decision points · data: {r.data.label}
           </p>
+          {r.calibration && <Calibration c={r.calibration} />}
         </div>
       )}
       {!latest && <p className="mt-3 text-[13px] text-fg-muted">No track record yet for {market}.</p>}

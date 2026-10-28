@@ -10,14 +10,14 @@ import numpy as np
 Z95 = 1.959963984540054
 
 
-def wilson(successes: int, n: int) -> tuple[float, float] | None:
-    """95% Wilson score interval of a proportion."""
+def wilson(successes: int, n: int, z: float = Z95) -> tuple[float, float] | None:
+    """Wilson score interval of a proportion (95% by default)."""
     if n <= 0:
         return None
     p = successes / n
-    denom = 1 + Z95**2 / n
-    centre = (p + Z95**2 / (2 * n)) / denom
-    half = Z95 * math.sqrt(p * (1 - p) / n + Z95**2 / (4 * n * n)) / denom
+    denom = 1 + z**2 / n
+    centre = (p + z**2 / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n * n)) / denom
     return max(0.0, centre - half), min(1.0, centre + half)
 
 

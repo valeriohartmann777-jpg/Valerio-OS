@@ -209,6 +209,21 @@ export interface ApexTrackRecord {
   by_trend: Record<"with_trend" | "counter_trend", ApexSummary>;
   verdict: { code: "INSUFFICIENT" | "NO_EDGE" | "INCONCLUSIVE" | "POSITIVE_OOS"; text: string };
   settings: Record<string, number>;
+  calibration?: ApexCalibration;
+}
+
+/** Stated hold rates vs. what later touches did (APEX-3). */
+export interface ApexCalibration {
+  touches: number;
+  skipped: number;
+  brier: number | null;
+  brier_reference: number | null;
+  /** 1 - Brier / Brier of a side-only reference: > 0 means the zone kinds add information. */
+  skill: number | null;
+  ece: number | null;
+  bins: { range: [number, number]; n: number; stated: number; observed: number; ci: [number, number] | null; inside: boolean }[];
+  by_side: Record<string, { touches: number; stated: number | null; observed: number | null }>;
+  verdict: { code: "CALIBRATED" | "MISCALIBRATED" | "INSUFFICIENT"; text: string };
 }
 
 export interface ApexEvaluation {

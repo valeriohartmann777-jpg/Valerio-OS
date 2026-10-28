@@ -337,7 +337,11 @@ the latest QuantLab run?" — it answers from `quantlab_report`.
   set-ups show why.
 - Every candidate goes into a **journal that can't be edited**; later bars judge it (fill,
   stop, target, expiry — conservative when a minute is ambiguous). **Run track record** walks
-  the same rules through history and reports in-sample and out-of-sample results.
+  the same rules through history and reports in-sample and out-of-sample results — and checks
+  whether the stated hold rates matched what later touches did (calibration).
+- **Ask SENTINEL to re-check** recomputes a stored analysis from today's data; it must come out
+  identical (nothing looked ahead). JARVIS answers "what does gold look like?" from APEX in
+  the chat; CIPHER and SENTINEL show their APEX work in the ULTRON HQ.
 
 Data: gold from the free Dukascopy cache (bid prices; *Update free data first* fetches
 missing days), NQ/MNQ from the Data Vault (or the Dukascopy index CFD, labelled as a proxy).

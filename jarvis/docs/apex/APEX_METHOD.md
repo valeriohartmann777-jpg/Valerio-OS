@@ -117,6 +117,24 @@ Verdicts: `INSUFFICIENT` (< 30 filled trades in a period) · `NO_EDGE` (out-of-s
 · `INCONCLUSIVE` (interval includes 0) · `POSITIVE_OOS` (in-sample mean > 0 and the
 out-of-sample interval above 0 — "a measurement on this data, not a guarantee").
 
+## 10b. Calibration of the stated rates (APEX-3)
+
+Every track record also checks the scenario rates (`calibration.py`). For each decided touch in
+the period, in time order, the rate APEX *would have stated* then (same side, sharing a kind of
+level, only touches decided before it — the rule of §6) is compared with what happened:
+
+- **Reliability table**: stated rates in bins (< 35 %, 35-45 %, 45-55 %, 55-65 %, > 65 %); per bin
+  the mean stated rate, the observed held share and its 95 % Wilson interval. A bin fits when
+  the stated rate lies inside the observed share's interval, with the level corrected for the
+  number of well-filled bins (Bonferroni) so one bin out of several isn't flagged by chance.
+- **Brier score** of the stated rates vs. a side-only reference; `skill` = 1 - ratio: above 0
+  means the kinds of level carry information, around 0 means they don't.
+- Verdict `CALIBRATED` / `MISCALIBRATED` / `INSUFFICIENT`. Touches with fewer than 30
+  comparable earlier touches get no stated rate (as in the live analysis) and are counted.
+
+On generated random-walk data the check reports skill ≈ 0 and, typically, `MISCALIBRATED` for
+the higher bins (regression to the mean) — as it should; it shows nothing about real markets.
+
 ## 11. SENTINEL re-check and ULTRON (APEX-2)
 
 **Ask SENTINEL to re-check** (`POST /apex/analyses/{id}/audit`) recomputes a stored analysis
