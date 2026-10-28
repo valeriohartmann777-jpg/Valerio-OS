@@ -30,6 +30,8 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
+from jarvis.apex import eligibility
+from jarvis.apex.alerts import admit, alert_record
 from jarvis.apex.audit import compare, outcome_check
 from jarvis.apex.capability import mode_of
 from jarvis.apex.context import market_context
@@ -48,7 +50,9 @@ from jarvis.apex.execution import Execution, execution_for, fill_model
 from jarvis.apex.fitness import fitness
 from jarvis.apex.macro import parse_calendar
 from jarvis.apex.narrative import narrate
+from jarvis.apex.probability import model_id, predict
 from jarvis.apex.resolve import resolve
+from jarvis.apex.setups import unvalidated
 from jarvis.apex.signal import ValidationState, from_analysis
 from jarvis.apex.store import ApexStore
 from jarvis.apex.validation import (
@@ -62,6 +66,7 @@ from jarvis.apex.validation import (
 )
 from jarvis.apex.zonemap import snapshot_hash
 from jarvis.briefing.levels import LevelRules
+from jarvis.build import build_id
 from jarvis.events.bus import EventBus
 from jarvis.events.types import EventType
 from jarvis.learning.market import Bars, DataError, Instrument, MarketData, resample
@@ -458,8 +463,16 @@ class ApexService:
         for c in result["candidates"]:
             c["source_id"] = result["data"]["source_id"]
             c["replay"] = result["replay"]
+        admitted = await self._qualify(result, ctx, when)
         signals = from_analysis(result, states, created_at=datetime.fromtimestamp(now, UTC))
         result["signals"] = [sig.as_record() for sig in signals]
+        alerts = [
+            alert_record(plan, sig.signal_id, ctx.name, when, plan["eligibility"])
+            for plan in admitted
+            for sig in signals
+            if sig.candidate_id == plan["id"] and sig.eligible
+        ]
+        result["alerts"] = alerts
         self._remember(analysis_id, series.until(when))
         zones_now = result.get("zone_map")
         if zones_now and zones_now.get("price") is not None:
@@ -477,6 +490,15 @@ class ApexService:
             await self.store.add_zone_snapshot(
                 result["zone_snapshot_id"], analysis_id, zones, snapshot_hash(zones)
             )
+        for alert in alerts:
+            if await self.store.add_alert(alert):
+                await self._bus.emit(
+                    EventType.APEX_ALERT,
+                    message=f"APEX {ctx.name} paper alert: {alert['setup']} {alert['direction']}"
+                    f" at {alert['entry']['price']:g} — paper only, never an order",
+                    payload={"market": ctx.name, "alert_id": alert["id"],
+                             "signal_id": alert["signal_id"]},
+                )  # fmt: skip
         await self._bus.emit(
             EventType.APEX_ANALYSIS,
             message=f"APEX {ctx.name}: {len(result['zones'])} zones, "
@@ -486,6 +508,82 @@ class ApexService:
         )
         await self.resolve_open(ctx.name)
         return result
+
+    async def _qualify(
+        self, result: dict[str, Any], ctx: MarketContext, when: int
+    ) -> list[dict[str, Any]]:
+        """Run the eligibility gate on every order plan of the analysis; the plans that pass
+        all checks compete for the day's alert slots by stressed expected R. Returns the
+        admitted plans (each carries its ``eligibility``)."""
+        last = result["data"].get("last_bar")
+        age = None if last is None else round((when - (int(last) + 60)) / 60, 1)
+        passing: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        source_id = str(result["data"].get("source_id") or result["data"].get("source") or "")
+        synthetic = bool(result["data"].get("synthetic", True))
+        for c in result["candidates"]:
+            probability = await self._probability(
+                ctx.name, c, source_id=source_id, synthetic=synthetic
+            )
+            c["trade_success_probability"] = probability
+            c.setdefault("user_executable", False)
+            checked = eligibility.gate(
+                c,
+                build=build_id(),
+                quality=result["quality"],
+                mode=str(result["mode"]),
+                data_age_minutes=age,
+                max_age_minutes=self._cfg.signal_max_age_minutes,
+                execution=c.get("execution") or result["execution"],
+                capability=result.get("capability") or {},
+                probability=probability,
+                context=result.get("context"),
+                in_session=_in_session(when, ctx.window),
+                tick=ctx.spec.tick,
+                point_value=ctx.spec.point_value,
+                as_of=when,
+            )
+            if checked["pre_budget_passed"]:
+                passing.append((c, checked))
+            else:
+                c["eligibility"] = eligibility.finish(checked, None)
+        admitted: list[dict[str, Any]] = []
+        if passing:
+            issued = await self.store.alerts(ctx.name, since=when - 2 * 86400)
+            passing.sort(key=lambda pc: -float(pc[1]["net_expected_r"] or 0.0))
+            for c, checked in passing:
+                budget = admit(
+                    c, issued, as_of=when, cap=self._cfg.max_alerts_per_day,
+                    cooldown_minutes=self._cfg.alert_cooldown_minutes,
+                )  # fmt: skip
+                c["eligibility"] = eligibility.finish(checked, budget)
+                if budget["admitted"]:
+                    admitted.append(c)
+                    issued.append(alert_record(c, "pending", ctx.name, when, c["eligibility"]))
+        for decision in result["strategies"].values():
+            armed = [c for c in decision["candidates"] if c["eligibility"]["eligible"]]
+            if "setup_state" in decision and decision["candidates"]:
+                decision["setup_state"] = "ENTRY_ARMED" if armed else "RESEARCH_ONLY"
+        return admitted
+
+    async def _probability(
+        self, market: str, plan: dict[str, Any], *, source_id: str = "", synthetic: bool = True
+    ) -> dict[str, Any]:
+        """P(TP before SL) for this plan from the latest probability head of its setup, version,
+        market and data source — PROBABILITY NOT VALIDATED without a validated one."""
+        setup = plan.get("setup")
+        if not setup or setup not in STRATEGIES:
+            return unvalidated()
+        model = await self.store.probability_model(
+            market, setup, STRATEGIES[setup], source_id, synthetic
+        )
+        return predict(model, plan)
+
+    async def probability_models(self, market: str | None = None) -> list[dict[str, Any]]:
+        rows = await self.store.probability_models(self._ctx(market).name if market else None)
+        return [{k: v for k, v in r.items() if k != "params"} for r in rows]
+
+    async def alerts(self, market: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        return await self.store.alerts(self._ctx(market).name if market else None, limit=limit)
 
     async def _validation_states(
         self, market: str, synthetic: bool
@@ -1324,6 +1422,38 @@ class ApexService:
                         }
                     )
                     held = {**held, "opened_by": validation_id}
+            head = dev.get("probability_head")
+            if head is not None:
+                model = {
+                    **head,
+                    "market": ctx.name,
+                    "setup": strategy,
+                    "version": version,
+                    "protocol_version": protocol.protocol_version,
+                    "source_id": source_id,
+                    "synthetic": series.synthetic,
+                    "validation_id": validation_id,
+                    "data_sha256": series.digest(),
+                }
+                model["id"] = model_id(model)
+                head["id"] = model["id"]
+                await self.store.add_probability_model(model)
+                await self.store.add_trial(
+                    {
+                        "family": family,
+                        "strategy": strategy,
+                        "version": version,
+                        "kind": "probability_head",
+                        "params": {"head": head["head_version"], "features": head["features"]},
+                        "validation_id": validation_id,
+                        "data_sha256": series.digest(),
+                        "synthetic": series.synthetic,
+                        "summary": {
+                            "verdict": head["verdict"]["code"],
+                            "brier_skill": (head.get("metrics") or {}).get("brier_skill"),
+                        },
+                    }
+                )
             judged = verdict(dev, held, synthetic=series.synthetic)
             result = {
                 "protocol_version": protocol.protocol_version,

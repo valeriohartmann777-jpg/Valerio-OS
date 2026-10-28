@@ -39,6 +39,11 @@ several ways is not counted several times: structure (≤ 35), price reaction (�
 (≤ 15), width (≤ 10), minus counter-evidence. **Rank 1-4** per side among non-broken,
 non-expired zones with score ≥ ``MIN_SCORE``, by score x relevance (1 within 6 ATR, then 6 /
 distance, at least 0.3). Fewer than four qualify → fewer are shown, with a note.
+
+**1.1.0:** zones, ATR and lifecycle are built at the last 15-minute close before ``as_of``
+(from the ``days`` before it) — nothing about a zone changes between two closes — and only the
+placement (side, distance, rank) uses the price at ``as_of``. Same moment, same map; and a walk
+through history can reuse the zones of a 15-minute bar (``cache``).
 """
 
 from __future__ import annotations
@@ -55,7 +60,7 @@ from jarvis.learning.features import atr as atr_series
 from jarvis.learning.features import volume_profile
 from jarvis.learning.market import Bars, local_clock, resample
 
-ZONEMAP_VERSION = "zonemap-1.0.0"
+ZONEMAP_VERSION = "zonemap-1.1.0"
 NY = "America/New_York"
 MIN_SCORE = 30.0
 RANKED = 4
@@ -530,37 +535,82 @@ def _score(
     return round(total, 1), evidence, counter
 
 
-def zone_map(
+ZoneCache = dict[tuple[str, int, int, int, int], tuple[list[dict[str, Any]], float]]
+
+
+def zone_map(bars: Bars, market: str, as_of: int, **kwargs: Any) -> dict[str, Any]:
+    """The zone snapshot as of ``as_of`` — see ``zone_view``."""
+    return zone_view(bars, market, as_of, **kwargs)[0]
+
+
+def zone_view(
     bars: Bars,
     market: str,
     as_of: int,
     *,
-    a15: float,
     tick: float,
     round_step: float,
     reach_atr: float,
     source_ids: list[str],
     vwap_status: str = "UNAVAILABLE",
-) -> dict[str, Any]:
-    """The zone snapshot as of ``as_of`` (``bars``: closed one-minute bars of one contract)."""
-    if len(bars) == 0 or a15 <= 0:
-        return _empty(market, as_of, "No bars or no volatility measure yet.")
+    days: int = 14,
+    cache: ZoneCache | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """(the zone snapshot as of ``as_of``, every zone placed at the price — broken and expired
+    ones too). ``bars``: closed one-minute bars of one contract.
+
+    The zones are built from the ``days`` before the last 15-minute close (``zones_as_of``):
+    nothing about a zone changes between two 15-minute closes, only where the price stands
+    relative to it. That part is cached in ``cache`` (exact: the same 15-minute close and the
+    same bars give the same zones), the placement is recomputed with the price at ``as_of``."""
+    if len(bars) == 0:
+        return _empty(market, as_of, "No bars or no volatility measure yet."), []
+    base = as_of - as_of % 900
+    window = bars.between(base - days * 86400, base)
+    if len(window) == 0:
+        return _empty(market, as_of, "No bars or no volatility measure yet."), []
+    key = (market, base, int(window.t[0]), int(window.t[-1]), len(window))
+    hit = cache.get(key) if cache is not None else None
+    if hit is None:
+        hit = _zones(window, market, base, tick, round_step, source_ids, vwap_status)
+        if cache is not None:
+            while len(cache) >= 4:  # a walk forward in time only needs the latest
+                cache.pop(next(iter(cache)))
+            cache[key] = hit
+    records, a15 = hit
+    if a15 <= 0:
+        return _empty(market, as_of, "No bars or no volatility measure yet."), []
     price = float(bars.close[-1])
-    members = candidates(bars, as_of, a15, tick, round_step)
+    placed = [_place(z, price, a15, as_of) for z in records]
+    out = rank(placed, market, as_of, price, a15, reach_atr)
+    out["zones_as_of_utc"] = _utc(base)
+    return out, placed
+
+
+def _zones(
+    bars: Bars,
+    market: str,
+    base: int,
+    tick: float,
+    round_step: float,
+    source_ids: list[str],
+    vwap_status: str,
+) -> tuple[list[dict[str, Any]], float]:
+    """Every zone known at the 15-minute close ``base``, without the price-dependent fields."""
     fifteen = resample(bars, 15)
-    if len(fifteen) and int(fifteen.t[-1]) + 900 > as_of:
+    if len(fifteen) and int(fifteen.t[-1]) + 900 > base:
         fifteen = fifteen.between(int(fifteen.t[0]), int(fifteen.t[-1]))
+    if len(fifteen) < 15:
+        return [], 0.0
     a_15 = atr_series(fifteen.high, fifteen.low, fifteen.close, 14)
-    zones = _cluster(members, a15)
+    a15 = float(a_15[-1]) if np.isfinite(a_15[-1]) else 0.0
+    if a15 <= 0:
+        return [], 0.0
+    members = candidates(bars, base, a15, tick, round_step)
     out: list[dict[str, Any]] = []
-    for z in zones:
-        _walk(z, fifteen, a_15, as_of)
-        score, evidence, counter = _score(z, a15, as_of, vwap_status)
-        inside = z.low <= price <= z.high
-        side = "SUPPORT" if (z.high < price or (inside and z.role == "support")) else "RESISTANCE"
-        edge = z.high if side == "SUPPORT" else z.low
-        distance = 0.0 if inside else abs(price - edge) / a15
-        relevance = 1.0 if distance <= 6 else max(0.3, 6 / distance)
+    for z in _cluster(members, a15):
+        _walk(z, fifteen, a_15, base)
+        score, evidence, counter = _score(z, a15, base, vwap_status)
         primary = min(z.members, key=lambda m: (m.formed, m.kind))
         zid = (
             "z-"
@@ -572,18 +622,19 @@ def zone_map(
         out.append({
             "zone_id": zid,
             "market": market,
-            "side": side,
+            "side": None,
             "role_at_confirmation": z.role,
             "bounds": {"low": round(z.low, 10), "high": round(z.high, 10)},
             "formation_time_utc": _utc(z.formed),
             "confirmed_time_utc": _utc(z.confirmed),
-            "as_of_utc": _utc(as_of),
+            "confirmed_at": z.confirmed,
+            "as_of_utc": None,
             "state": z.state,
             "quality_score": score,
             "rank": None,
-            "rank_value": round(score * relevance, 2),
-            "distance_atr": round(distance, 2),
-            "inside": inside,
+            "rank_value": None,
+            "distance_atr": None,
+            "inside": None,
             "timeframe_of_origin": "1h" if "htf_swing" in {m.kind for m in z.members} else "15m",
             "kinds": sorted({m.kind for m in z.members}),
             "labels": [m.label for m in z.members],
@@ -595,13 +646,28 @@ def zone_map(
             "rejections": len([e for e in z.episodes if e["kind"] in REACTIONS]),
             "last_tested_at": _utc(z.last_tested),
             "broken_at": _utc(z.broken_at),
+            "broken_at_t": z.broken_at,
             "flipped_at": _utc(z.flipped_at),
             "transitions": z.transitions,
             "version": ZONEMAP_VERSION,
             "invalidation_reason": "broken: two closes beyond the far edge" if z.state == "BROKEN"
             else "expired" if z.state == "EXPIRED" else None,
         })  # fmt: skip
-    return rank(out, market, as_of, price, a15, reach_atr)
+    return out, a15
+
+
+def _place(z: dict[str, Any], price: float, a15: float, as_of: int) -> dict[str, Any]:
+    """Where the price stands relative to a zone: side, inside, distance, rank value."""
+    low, high = z["bounds"]["low"], z["bounds"]["high"]
+    inside = low <= price <= high
+    role = z["role_at_confirmation"]
+    side = "SUPPORT" if (high < price or (inside and role == "support")) else "RESISTANCE"
+    edge = high if side == "SUPPORT" else low
+    distance = 0.0 if inside else abs(price - edge) / a15
+    relevance = 1.0 if distance <= 6 else max(0.3, 6 / distance)
+    return {**z, "side": side, "inside": inside, "distance_atr": round(distance, 2),
+            "rank_value": round(z["quality_score"] * relevance, 2),
+            "as_of_utc": _utc(as_of)}  # fmt: skip
 
 
 def rank(

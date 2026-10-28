@@ -115,6 +115,26 @@ async def zones(market: str, rt: RuntimeDep, snapshot: str | None = None) -> dic
         raise _error(exc) from None
 
 
+@router.get("/apex/alerts")
+async def alerts(
+    rt: RuntimeDep, market: str | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
+    """Qualified paper alerts (immutable; at most four per market and trading day; paper only)."""
+    try:
+        return await rt.apex.alerts(market, limit=min(max(limit, 1), 500))
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.get("/apex/probability")
+async def probability_models(rt: RuntimeDep, market: str | None = None) -> list[dict[str, Any]]:
+    """Fitted P(TP before SL) heads with their grading (validated or not) — immutable."""
+    try:
+        return await rt.apex.probability_models(market)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
 @router.get("/apex/signals")
 async def signals(
     rt: RuntimeDep, market: str | None = None, strategy: str | None = None, limit: int = 100

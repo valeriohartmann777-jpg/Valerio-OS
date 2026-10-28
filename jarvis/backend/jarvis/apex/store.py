@@ -208,6 +208,100 @@ class ApexStore:
             for r in rows
         ]
 
+    # alerts -----------------------------------------------------------------------------------
+
+    async def add_alert(self, alert: dict[str, Any]) -> bool:
+        """Record a qualified paper alert once (immutable); False if it was already there."""
+        return (
+            await self._db.execute_count(
+                "INSERT OR IGNORE INTO apex_alerts (id, market, trading_day, signal_id, "
+                "candidate_id, setup, direction, zone_id, as_of, payload, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    alert["id"],
+                    alert["market"],
+                    alert["trading_day"],
+                    alert["signal_id"],
+                    alert["candidate_id"],
+                    alert["setup"],
+                    alert["direction"],
+                    alert["zone_id"],
+                    int(alert["as_of"]),
+                    json.dumps(alert),
+                    utcnow().isoformat(),
+                ),
+            )
+            == 1
+        )
+
+    async def alerts(
+        self, market: str | None = None, *, since: int | None = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        where: list[str] = []
+        args: list[Any] = []
+        if market:
+            where.append("market = ?")
+            args.append(market)
+        if since is not None:
+            where.append("as_of >= ?")
+            args.append(since)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        rows = await self._db.fetch_all(
+            f"SELECT payload FROM apex_alerts{clause} ORDER BY as_of DESC LIMIT ?",
+            (*args, limit),
+        )
+        return [_loads(r["payload"]) for r in rows]
+
+    # probability heads ------------------------------------------------------------------------
+
+    async def add_probability_model(self, model: dict[str, Any]) -> bool:
+        """Store a fitted probability head once (immutable) — validated or not."""
+        return (
+            await self._db.execute_count(
+                "INSERT OR IGNORE INTO apex_probability_models (id, market, setup, version, "
+                "protocol_version, source_id, synthetic, validated, validation_id, payload, "
+                "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    model["id"],
+                    model["market"],
+                    model["setup"],
+                    model["version"],
+                    model["protocol_version"],
+                    model["source_id"],
+                    int(bool(model["synthetic"])),
+                    int(bool(model["validated"])),
+                    model["validation_id"],
+                    json.dumps(model),
+                    utcnow().isoformat(),
+                ),
+            )
+            == 1
+        )
+
+    async def probability_model(
+        self, market: str, setup: str, version: str, source_id: str, synthetic: bool
+    ) -> dict[str, Any] | None:
+        """The latest head of this setup version on this source and kind of data."""
+        row = await self._db.fetch_one(
+            "SELECT payload FROM apex_probability_models WHERE market = ? AND setup = ? AND "
+            "version = ? AND source_id = ? AND synthetic = ? ORDER BY created_at DESC, rowid "
+            "DESC LIMIT 1",
+            (market, setup, version, source_id, int(synthetic)),
+        )
+        return None if row is None else dict(_loads(row["payload"]))
+
+    async def probability_models(
+        self, market: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        where = " WHERE market = ?" if market else ""
+        args: tuple[Any, ...] = (market, limit) if market else (limit,)
+        rows = await self._db.fetch_all(
+            f"SELECT payload FROM apex_probability_models{where} "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            args,
+        )
+        return [_loads(r["payload"]) for r in rows]
+
     # zone snapshots ---------------------------------------------------------------------------
 
     async def add_zone_snapshot(

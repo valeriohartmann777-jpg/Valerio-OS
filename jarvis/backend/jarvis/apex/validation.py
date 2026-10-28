@@ -19,7 +19,10 @@ strategy rules and parameters are the versioned ones of ``candidates.py`` / ``tr
    by the number of trials registered for this market and strategy (``apex_trials``).
 4. **Holdout.** Opened only when every development criterion passed with enough evidence,
    and **once** per strategy version and data source (``apex_holdout_opens``).
-5. **Verdict** → ``validation_state``: ``OOS_SUPPORTED`` only on real data with the holdout
+5. **Probability head** (protocol 1.2.0, zone setups only): P(TP before SL after the fill) fitted,
+   calibrated and graded on consecutive parts of the development window (``probability.py``);
+   only a VALIDATED head can give a plan a qualifying probability.
+6. **Verdict** → ``validation_state``: ``OOS_SUPPORTED`` only on real data with the holdout
    passed; ``REJECTED`` when a criterion failed with enough evidence; ``RESEARCH_ONLY`` when
    the evidence is too thin or the data is generated test data (mechanics only).
 
@@ -35,7 +38,7 @@ from typing import Any
 
 import numpy as np
 
-from jarvis.apex import trigger
+from jarvis.apex import setups, trigger
 from jarvis.apex.data import Series
 from jarvis.apex.engine import MarketContext
 from jarvis.apex.evaluate import (
@@ -48,6 +51,7 @@ from jarvis.apex.evaluate import (
     step_minutes,
 )
 from jarvis.apex.execution import Execution
+from jarvis.apex.probability import fit_head
 from jarvis.apex.resolve import resolve
 from jarvis.learning.market import local_clock
 from jarvis.settings import ApexSettings, ApexValidationSettings
@@ -69,7 +73,8 @@ def trading_days(series: Series) -> list[date]:
 
 
 def horizon_minutes(strategy: str, cfg: ApexSettings) -> int:
-    valid = cfg.trigger_valid_minutes if strategy == trigger.STRATEGY else cfg.valid_minutes
+    stop_entry = strategy == trigger.STRATEGY or strategy in setups.SETUPS
+    valid = cfg.trigger_valid_minutes if stop_entry else cfg.valid_minutes
     return valid + cfg.max_hold_minutes
 
 
@@ -308,6 +313,11 @@ def develop(
     trials = prior_trials + len(variants)
     alpha = ev.alpha / max(trials, 1)
     criteria = _criteria(protocol, main, folds, stressed, neighbour_rows, base, alpha, trials)
+    head = (
+        fit_head(trades, split["dev"], horizon_minutes(strategy, cfg), protocol.probability,
+                 seed=seed)
+        if strategy in setups.SETUPS else None
+    )  # fmt: skip
     keys = ("id", "at", "fold", "direction", "entry", "stop", "target", "state", "r",
             "filled_at", "exit_at")  # fmt: skip
     return {
@@ -331,6 +341,7 @@ def develop(
         "passed": all(x["passed"] for x in criteria),
         "variants": variants,
         "ledger": [{k: t[k] for k in keys} for t in trades][-2000:],
+        "probability_head": head,
     }
 
 

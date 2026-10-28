@@ -13,14 +13,15 @@ from typing import Any
 
 import numpy as np
 
-from jarvis.apex import candidates, trigger
+from jarvis.apex import candidates, setups, trigger
 from jarvis.apex.capability import capability_for, factor_matrix
 from jarvis.apex.context import bias, interaction_scenarios, path_cards, path_scenarios
 from jarvis.apex.data import Series, assess, current_contract
 from jarvis.apex.execution import Execution, execution_for
+from jarvis.apex.orderflow import orderflow_view
 from jarvis.apex.scenarios import BaseRates, base_rates, scenarios, zone_rate
 from jarvis.apex.structure import structure
-from jarvis.apex.zonemap import zone_map
+from jarvis.apex.zonemap import ZoneCache, zone_view
 from jarvis.apex.zones import build_zones
 from jarvis.briefing.levels import LevelRules
 from jarvis.learning.features import atr
@@ -35,9 +36,16 @@ from jarvis.training.dataset import TouchRules
 # 1.3.0: capability matrix and evidence statuses, the causal zone map (top four per side,
 # lifecycle, episodes), multi-timeframe bias, barrier path events and zone interactions —
 # docs/apex/APEX_ZONE_SPEC.md, APEX_PRODUCT_SPEC.md.
-ENGINE_VERSION = "apex-1.3.0"
+# 1.4.0: zone map built at the last 15-minute close (cacheable), the three zone setups
+# sweep_reclaim / rejection_rotation / breakout_retest with their stages, the eligibility gate
+# and the alert budget — docs/apex/APEX_SIGNAL_RULES.md.
+ENGINE_VERSION = "apex-1.4.0"
 ZONE_DAYS = 14  # minute data behind the zone map
-STRATEGIES = {candidates.TEMPLATE: candidates.VERSION, trigger.STRATEGY: trigger.VERSION}
+STRATEGIES = {
+    candidates.TEMPLATE: candidates.VERSION,
+    trigger.STRATEGY: trigger.VERSION,
+    **setups.SETUPS,
+}
 
 
 @dataclass(frozen=True)
@@ -115,14 +123,20 @@ def plans_at(
     as_of: int,
     execution: Execution,
     strategies: tuple[str, ...] = tuple(STRATEGIES),
+    *,
+    zone_cache: ZoneCache | None = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     """Each strategy's decision at ``as_of`` — the live analysis and the track record alike.
 
     Per strategy: {strategy, version, status, direction, setups, trigger, candidates, rejected,
-    reasons}; status NO_TRADE | WAITING_FOR_TRIGGER | CANDIDATE | BLOCKED."""
+    reasons}; status NO_TRADE | WAITING_FOR_TRIGGER | CANDIDATE | BLOCKED. The zone setups add
+    their ``stage`` and ``setup_state``; ``zone_cache`` reuses zone maps of a 15-minute bar."""
     view = zones_and_structure(series, ctx, cfg, as_of)
     if view["price"] is None:
         return {}, view
+    wanted = [name for name in setups.SETUPS if name in strategies]
+    if wanted:
+        view["zone_map"], view["placed"] = zone_view_at(series, ctx, cfg, as_of, view, zone_cache)
     trend_60 = view["structure"].get("60", {}).get("trend", "range")
     out: dict[str, dict[str, Any]] = {}
     if candidates.TEMPLATE in strategies:
@@ -165,6 +179,17 @@ def plans_at(
         )
         plan = found.pop("candidate")
         out[trigger.STRATEGY] = {**found, "candidates": [plan] if plan else []}
+    if wanted:
+        bars = view["bars"]
+        start5 = as_of - as_of % 300 - 4 * 3600
+        bars5 = closed(bars.between(start5, as_of), setups.BAR_MINUTES, as_of)
+        minute = bars.between(as_of - setups.BREAK_MAX_HOURS * 3600 - 900, as_of)
+        for name in wanted:
+            out[name] = setups.evaluate(
+                name, ctx.name, view["zone_map"], view["placed"], bars5, minute, as_of=as_of,
+                trend_60=trend_60, spec=ctx.spec, cfg=cfg, costs=execution.costs,
+                spread=execution.spread,
+            )  # fmt: skip
     for decision in out.values():
         if not execution.tradable:
             block(decision, "DATA_UNAVAILABLE: " + execution.reason)
@@ -172,6 +197,32 @@ def plans_at(
             c["execution"] = execution.as_dict()
             c["cost_usd"] = round(execution.total_cost * ctx.spec.point_value, 2)
     return out, view
+
+
+def zone_view_at(
+    series: Series,
+    ctx: MarketContext,
+    cfg: ApexSettings,
+    as_of: int,
+    view: dict[str, Any],
+    cache: ZoneCache | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The zone map at ``as_of`` from the current contract's bars of ``view``."""
+    capability = capability_for(series, ctx.spec)
+    vwap = next(f["status"] for f in factor_matrix(capability, stale=False)
+                if f["factor"] == "vwap")  # fmt: skip
+    return zone_view(
+        view["bars"],
+        ctx.name,
+        as_of,
+        tick=ctx.spec.tick,
+        round_step=ctx.level_rules.major_step,
+        reach_atr=cfg.reach_atr,
+        source_ids=[str(series.provenance.get("source_id") or series.source)],
+        vwap_status=vwap,
+        days=ZONE_DAYS,
+        cache=cache,
+    )
 
 
 def block(decision: dict[str, Any], reason: str) -> None:
@@ -183,6 +234,9 @@ def block(decision: dict[str, Any], reason: str) -> None:
         rejected=[{"template": decision["strategy"], "reason": reason}],
         reasons=[reason],
     )
+    if decision["strategy"] in setups.SETUPS:
+        decision.update(setup_state="BLOCKED")
+        decision.setdefault("stage", "SCANNING")
 
 
 def analyze(
@@ -275,19 +329,7 @@ def analyze(
         c["synthetic"] = known.synthetic
         c["engine"] = ENGINE_VERSION
     chart = _chart(view.get("bars"))
-    vwap = next(f["status"] for f in head["factors"] if f["factor"] == "vwap")
-    zones_now = view["bars"].between(as_of - ZONE_DAYS * 86400, as_of)
-    mapped = zone_map(
-        zones_now,
-        ctx.name,
-        as_of,
-        a15=view["atr15"],
-        tick=ctx.spec.tick,
-        round_step=ctx.level_rules.major_step,
-        reach_atr=cfg.reach_atr,
-        source_ids=[str(head["data"]["provenance"].get("source_id") or known.source)],
-        vwap_status=vwap,
-    )
+    mapped = view.get("zone_map") or zone_view_at(known, ctx, cfg, as_of, view)[0]
     history = current_contract(known).bars.between(as_of - cfg.history_days * 86400, as_of)
     paths = path_scenarios(
         history, as_of, mapped, horizon_minutes=cfg.path_horizon_minutes,
@@ -315,6 +357,7 @@ def analyze(
         "paths": paths,
         "interactions": interactions,
         "path_cards": path_cards(mapped, interactions),
+        "auction": orderflow_view(view["bars"], as_of, head["capability"]),
         "chart": chart,
     }
 

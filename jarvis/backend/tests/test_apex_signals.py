@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from jarvis.apex import trigger
 from jarvis.apex.data import SYNTHETIC_LABEL, Series, synthetic_bars
-from jarvis.apex.engine import analyze, plans_at
+from jarvis.apex.engine import STRATEGIES, analyze, plans_at
 from jarvis.apex.execution import Execution, execution_for, fill_model
 from jarvis.apex.resolve import resolve
 from jarvis.apex.service import market_contexts
@@ -252,12 +252,13 @@ def test_every_signal_of_an_analysis_satisfies_the_contract() -> None:
             out = analyze(series, ctx, CFG, when)
             signals = from_analysis({**out, "id": "apa-x"}, {}, created_at=datetime.now(UTC))
             names = {s.strategy_id for s in signals}
-            assert names == {"zone_reaction", "zone_rejection_5m"}
+            assert names == set(STRATEGIES)
             for s in signals:
                 seen.add(s.status)
                 assert s.validation_state == ValidationState.UNVALIDATED
                 assert s.execution_assumption == "synthetic_flat_costs"
-                if s.strategy_id == "zone_rejection_5m" and s.status == SignalStatus.CANDIDATE:
+                assert s.eligible is False and s.user_executable is False
+                if s.strategy_id != "zone_reaction" and s.status == SignalStatus.CANDIDATE:
                     assert s.entry_type == EntryType.STOP and s.trigger is not None
                     assert s.timeframe == "5m"
                 Signal.model_validate(s.as_record())  # survives a round trip through JSON
@@ -282,7 +283,7 @@ async def rt(tmp_path: Path) -> Any:
 
 async def test_each_analysis_records_its_signals_once_and_never_changes_them(rt: Runtime) -> None:
     out = await rt.apex.analyze("XAUUSD")
-    assert {s["strategy_id"] for s in out["signals"]} == {"zone_reaction", "zone_rejection_5m"}
+    assert {s["strategy_id"] for s in out["signals"]} == set(STRATEGIES)
     stored = await rt.apex.signals("XAUUSD")
     assert {s["signal_id"] for s in stored} == {s["signal_id"] for s in out["signals"]}
     assert all(s["synthetic"] for s in stored)

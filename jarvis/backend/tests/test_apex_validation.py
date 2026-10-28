@@ -53,7 +53,7 @@ def fixture(market: str = "XAUUSD", days: int = 70) -> Series:
 
 def test_the_registered_protocol_file_is_what_the_code_judges_with() -> None:
     assert SETTINGS.apex_validation == ApexValidationSettings()
-    assert SETTINGS.apex_validation.protocol_version == "1.1.0"
+    assert SETTINGS.apex_validation.protocol_version == "1.2.0"
 
 
 # -- split and embargo --------------------------------------------------------------------------
@@ -193,7 +193,7 @@ async def test_a_validation_run_registers_its_trials_and_freezes_the_holdout(rt:
     done = await rt.apex.validation(started["id"])
     assert done["state"] == "COMPLETED", done.get("error")
     result = done["result"]
-    assert result["protocol_version"] == "1.1.0" and result["data"]["synthetic"]
+    assert result["protocol_version"] == "1.2.0" and result["data"]["synthetic"]
     assert result["verdict"]["validation_state"] == "RESEARCH_ONLY"  # generated data, never more
     assert "Generated test data" in result["verdict"]["text"]
     trials = await rt.apex.trials("XAUUSD", "zone_reaction")

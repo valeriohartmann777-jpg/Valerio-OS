@@ -135,6 +135,84 @@ export interface ApexCandidate {
   replay?: boolean;
   source_id?: string;
   outcome?: ApexOutcome | null;
+  /** Zone setups (sweep_reclaim, rejection_rotation, breakout_retest) and the gate. */
+  setup?: ApexZoneSetupName;
+  zone_ids?: string[];
+  zone_rank?: number | null;
+  zone_state?: string;
+  zone_quality?: number;
+  risk_ticks?: number;
+  tick_value_usd?: number;
+  stressed_costs_points?: number;
+  break_even_probability?: number;
+  expiry_utc?: number;
+  trade_success_probability?: ApexTradeProbability;
+  eligibility?: ApexEligibility;
+  user_executable?: false;
+}
+
+/** P(TP before SL after the fill within the horizon) — only ever shown when validated. */
+export interface ApexTradeProbability {
+  event_definition: "TP_before_SL_after_fill_within_horizon";
+  value: number | null;
+  validated: boolean;
+  calibrated: boolean;
+  effective_sample_size: number;
+  uncertainty_lower: number | null;
+  uncertainty_upper: number | null;
+  label: string | null;
+  model_id: string | null;
+}
+
+export type ApexGateCheckName =
+  | "APP_READY" | "DATA_FIT" | "SOURCE_CAPABILITY" | "ZONE_CONFIRMED" | "TRIGGER_CONFIRMED"
+  | "EXECUTION_FEASIBLE" | "PROBABILITY" | "UNCERTAINTY_SAMPLE" | "NET_EV_STRESSED"
+  | "MACRO_LIQUIDITY" | "UNIQUE_BUDGET";
+
+export interface ApexGateCheck {
+  check: ApexGateCheckName;
+  passed: boolean;
+  reason: string;
+}
+
+/** The eligibility gate's verdict on one plan (backend apex/eligibility.py). */
+export interface ApexEligibility {
+  checks: ApexGateCheck[];
+  failed: ApexGateCheckName[];
+  eligible: boolean;
+  setup_state: ApexSetupState;
+  blocked: boolean;
+  net_expected_r: number | null;
+  conviction: string | null;
+  probability_label: string | null;
+}
+
+export type ApexSetupState =
+  | "WATCH" | "TRIGGER_PENDING" | "TRIGGER_CONFIRMED" | "ENTRY_ARMED" | "RESEARCH_ONLY"
+  | "NO_TRADE" | "BLOCKED";
+export type ApexSetupStage =
+  | "SCANNING" | "NEAR_ZONE" | "WATCHING_SETUP" | "TRIGGER_PENDING" | "TRIGGER_CONFIRMED"
+  | "ENTRY_ARMED";
+export type ApexZoneSetupName = "sweep_reclaim" | "rejection_rotation" | "breakout_retest";
+
+/** A qualified paper alert (at most four per market and trading day; never an order). */
+export interface ApexAlert {
+  id: string;
+  market: ApexMarketName;
+  trading_day: string;
+  signal_id: string;
+  candidate_id: string;
+  setup: string;
+  direction: "long" | "short";
+  zone_id: string;
+  as_of: number;
+  entry: { type: "limit" | "stop"; price: number };
+  stop: number;
+  targets: { price: number; rr: number; zone: string }[];
+  trade_success_probability: ApexTradeProbability | null;
+  net_expected_r: number | null;
+  conviction: string | null;
+  user_executable: false;
 }
 
 export interface ApexRejected {
@@ -255,7 +333,7 @@ export interface ApexAnalysis {
   chart: [number, number, number, number, number][];
 }
 
-export type ApexStrategyName = "zone_reaction" | "zone_rejection_5m";
+export type ApexStrategyName = "zone_reaction" | "zone_rejection_5m" | ApexZoneSetupName;
 export type ApexSignalStatus = "NO_TRADE" | "WAITING_FOR_TRIGGER" | "CANDIDATE" | "PAPER_VALIDATED" | "BLOCKED";
 export type ApexValidationState = "UNVALIDATED" | "RESEARCH_ONLY" | "OOS_SUPPORTED" | "FORWARD_SUPPORTED" | "REJECTED";
 
@@ -282,9 +360,18 @@ export interface ApexTrigger {
 }
 
 export interface ApexSetup {
-  zone: string;
+  zone: string | null;
   direction: "long" | "short";
-  distance_atr: number;
+  /** zone_rejection_5m */
+  distance_atr?: number;
+  /** zone setups: stage and state per direction, the zone looked at, why */
+  stage?: ApexSetupStage;
+  setup_state?: ApexSetupState;
+  zone_rank?: number | null;
+  zone_side?: "SUPPORT" | "RESISTANCE" | null;
+  zone_bounds?: { low: number; high: number } | null;
+  trigger?: ApexTrigger | null;
+  reasons?: string[];
 }
 
 export interface ApexDecision {
@@ -297,6 +384,9 @@ export interface ApexDecision {
   candidates: ApexCandidate[];
   rejected: ApexRejected[];
   reasons: string[];
+  /** Zone setups only: the furthest stage of either direction, and what a person sees. */
+  stage?: ApexSetupStage;
+  setup_state?: ApexSetupState;
 }
 
 /** The binding signal contract (backend apex/signal.py — invariants enforced there). */
@@ -332,6 +422,19 @@ export interface ApexSignal {
   evidence_ids: string[];
   candidate_id: string | null;
   created_at_utc: string;
+  setup_state: ApexSetupState | null;
+  stage: string | null;
+  eligible: boolean;
+  eligibility: ApexGateCheck[];
+  net_expected_r: number | null;
+  trade_success_probability: ApexTradeProbability | null;
+  conviction: string | null;
+  mode: string | null;
+  zone_ids: string[];
+  instrument_id: string | null;
+  risk_usd: number | null;
+  expiry_utc: string | null;
+  user_executable: false;
   synthetic?: boolean;
   replay?: boolean;
   analysis_id?: string;

@@ -1476,11 +1476,67 @@ MIGRATIONS: list[list[str]] = [
         """,
         "CREATE INDEX idx_apex_macro_events ON apex_macro_events(scheduled_utc)",
     ],
+    # 23 — APEX qualified paper alerts (immutable): the daily cap and duplicate suppression.
+    [
+        """
+        CREATE TABLE apex_alerts (
+            id           TEXT PRIMARY KEY,
+            market       TEXT NOT NULL,
+            trading_day  TEXT NOT NULL,
+            signal_id    TEXT NOT NULL,
+            candidate_id TEXT NOT NULL,
+            setup        TEXT NOT NULL,
+            direction    TEXT NOT NULL,
+            zone_id      TEXT NOT NULL,
+            as_of        INTEGER NOT NULL,
+            payload      TEXT NOT NULL,
+            created_at   TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER apex_alerts_no_update BEFORE UPDATE ON apex_alerts
+        BEGIN SELECT RAISE(ABORT, 'APEX alerts are immutable'); END
+        """,
+        """
+        CREATE TRIGGER apex_alerts_no_delete BEFORE DELETE ON apex_alerts
+        BEGIN SELECT RAISE(ABORT, 'APEX alerts are immutable'); END
+        """,
+        "CREATE INDEX idx_apex_alerts ON apex_alerts(market, trading_day)",
+    ],
+    # 24 — APEX probability heads (immutable): P(TP before SL) per setup, version and source.
+    [
+        """
+        CREATE TABLE apex_probability_models (
+            id               TEXT PRIMARY KEY,
+            market           TEXT NOT NULL,
+            setup            TEXT NOT NULL,
+            version          TEXT NOT NULL,
+            protocol_version TEXT NOT NULL,
+            source_id        TEXT NOT NULL,
+            synthetic        INTEGER NOT NULL,
+            validated        INTEGER NOT NULL,
+            validation_id    TEXT NOT NULL,
+            payload          TEXT NOT NULL,
+            created_at       TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER apex_probability_models_no_update BEFORE UPDATE ON apex_probability_models
+        BEGIN SELECT RAISE(ABORT, 'APEX probability models are immutable'); END
+        """,
+        """
+        CREATE TRIGGER apex_probability_models_no_delete BEFORE DELETE ON apex_probability_models
+        BEGIN SELECT RAISE(ABORT, 'APEX probability models are immutable'); END
+        """,
+        "CREATE INDEX idx_apex_probability_models ON apex_probability_models(market, setup)",
+    ],
 ]
 
 # Reverse of a migration (``Database.rollback_to``): new tables only, never existing data.
 # The database is copied to backups/ before every migration as well.
 DOWNGRADES: dict[int, list[str]] = {
+    24: ["DROP TABLE apex_probability_models"],
+    23: ["DROP TABLE apex_alerts"],
     22: ["DROP TABLE apex_macro_events", "DROP TABLE apex_zone_snapshots"],
     21: [
         "DROP TABLE apex_holdout_opens",

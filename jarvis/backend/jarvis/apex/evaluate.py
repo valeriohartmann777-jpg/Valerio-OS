@@ -1,8 +1,9 @@
 """Track record of the candidate rules: walk forward through history, as if live.
 
 At every decision point inside the market's session window — each ``eval_step_minutes`` for
-``zone_reaction``, each 5-minute close for ``zone_rejection_5m`` — the series is cut to what
-was known then (``Series.until``) and **the same function as the live analysis**
+``zone_reaction``, each 5-minute close for ``zone_rejection_5m`` and the zone setups — the
+series is cut to what was known then (``Series.until``) and **the same function as the live
+analysis**
 (``engine.plans_at``) makes the strategy's candidates. Each is resolved on the bars after it
 with the conservative rules of ``resolve.py`` and the execution model of ``execution.py``
 (bid/ask side, costs). A candidate repeating an earlier one of the same day (same direction
@@ -23,14 +24,16 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
-from jarvis.apex import trigger
+from jarvis.apex import setups, trigger
 from jarvis.apex.calibration import calibration
 from jarvis.apex.data import Series, trading_minutes
 from jarvis.apex.engine import ENGINE_VERSION, STRATEGIES, MarketContext, plans_at, segments
 from jarvis.apex.execution import Execution, execution_for
+from jarvis.apex.probability import features
 from jarvis.apex.resolve import resolve
 from jarvis.apex.scenarios import base_rates
 from jarvis.apex.stats import clustered_mean, wilson
+from jarvis.apex.zonemap import ZoneCache
 from jarvis.settings import ApexSettings
 
 NY = ZoneInfo("America/New_York")
@@ -55,7 +58,9 @@ def decision_times(start: date, end: date, window: tuple[int, int], step_minutes
 
 
 def step_minutes(strategy: str, cfg: ApexSettings) -> int:
-    return trigger.BAR_MINUTES if strategy == trigger.STRATEGY else cfg.eval_step_minutes
+    if strategy == trigger.STRATEGY or strategy in setups.SETUPS:
+        return trigger.BAR_MINUTES
+    return cfg.eval_step_minutes
 
 
 def collect(
@@ -73,6 +78,7 @@ def collect(
     made_all: list[dict[str, Any]] = []
     skipped = {"stale": 0, "no_data": 0}
     seen: set[tuple[int, str, float]] = set()
+    zone_cache: ZoneCache = {}
     for k, when in enumerate(times):
         if k % 25 == 0:
             if cancelled and cancelled():
@@ -87,7 +93,9 @@ def collect(
         if behind > cfg.stale_minutes:
             skipped["stale"] += 1
             continue
-        decisions, _ = plans_at(known, ctx, cfg, when, execution, (strategy,))
+        decisions, _ = plans_at(
+            known, ctx, cfg, when, execution, (strategy,), zone_cache=zone_cache
+        )
         day = datetime.fromtimestamp(when, NY).date().toordinal()
         for c in (decisions.get(strategy) or {}).get("candidates", []):
             key = (day, c["direction"], float(c["entry"]["price"]))
@@ -121,6 +129,7 @@ def judge(made: list[dict[str, Any]], series: Series, execution: Execution) -> l
                 "stop": c["stop"],
                 "target": c["targets"][0]["price"],
                 "rr": c["targets"][0]["rr"],
+                "features": features(c),  # known at the decision (the probability head's input)
                 **{k: outcome[k] for k in ("state", "r", "filled_at", "exit_at")},
             }
         )

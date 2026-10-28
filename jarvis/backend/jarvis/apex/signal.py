@@ -10,7 +10,12 @@ nothing it can't back up:
 - a ``probability_estimate`` exists only with its interval and a calibration sample of at
   least ``MIN_CALIBRATION`` decided cases — never a bare number;
 - ``validation_state`` comes from the validation protocol (``docs/APEX_VALIDATION_PROTOCOL.md``),
-  never from the strategy itself.
+  never from the strategy itself;
+- the SignalPlan fields (``setup_state``, ``stage``, ``eligibility``, ``trade_success_probability``,
+  ``net_expected_r``, ``mode``, ``zone_ids``) come from the zone setups and the eligibility gate:
+  ``eligible`` is true only with every gate check passed, a validated and calibrated
+  P(TP before SL) of at least 0.70, a positive stressed expected R and a current (not replay,
+  not synthetic) mode; ``user_executable`` is always false (paper only).
 
 Signals are written once (``apex_signals``, no UPDATE/DELETE); what happened afterwards is a
 separate outcome record.
@@ -71,6 +76,16 @@ class DataQuality(StrEnum):
     FAIL = "FAIL"
 
 
+class SetupState(StrEnum):
+    WATCH = "WATCH"
+    TRIGGER_PENDING = "TRIGGER_PENDING"
+    TRIGGER_CONFIRMED = "TRIGGER_CONFIRMED"
+    ENTRY_ARMED = "ENTRY_ARMED"
+    RESEARCH_ONLY = "RESEARCH_ONLY"
+    NO_TRADE = "NO_TRADE"
+    BLOCKED = "BLOCKED"
+
+
 ORDER_STATES = (SignalStatus.CANDIDATE, SignalStatus.PAPER_VALIDATED)
 
 
@@ -119,9 +134,25 @@ class Signal(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     candidate_id: str | None = None  # the journaled order plan, when there is one
     created_at_utc: datetime
+    # SignalPlan (APEX Ultimate): stage and gate of the zone setups.
+    setup_state: SetupState | None = None
+    stage: str | None = None
+    eligible: bool = False
+    eligibility: list[dict[str, Any]] = Field(default_factory=list)
+    net_expected_r: float | None = None
+    trade_success_probability: dict[str, Any] | None = None
+    conviction: str | None = None
+    mode: str | None = None
+    zone_ids: list[str] = Field(default_factory=list)
+    instrument_id: str | None = None
+    risk_usd: float | None = None
+    expiry_utc: datetime | None = None
+    user_executable: Literal[False] = False
 
     @model_validator(mode="after")
     def _invariants(self) -> Signal:
+        if self.eligible or self.setup_state == SetupState.ENTRY_ARMED:
+            self._qualified()
         plan = (self.entry, self.stop_loss, self.take_profit_1)
         if self.status in ORDER_STATES:
             if self.direction == Direction.NONE or self.entry_type == EntryType.NONE:
@@ -168,6 +199,27 @@ class Signal(BaseModel):
                 raise ValueError("probability outside its interval")
         return self
 
+    def _qualified(self) -> None:
+        """A qualified paper signal can't be faked: every check, a validated probability."""
+        if not (self.eligible and self.setup_state == SetupState.ENTRY_ARMED):
+            raise ValueError("ENTRY_ARMED and eligible go together")
+        if self.status not in ORDER_STATES:
+            raise ValueError("a qualified signal needs an order plan")
+        tsp = self.trade_success_probability or {}
+        value = tsp.get("value")
+        if not (tsp.get("validated") and tsp.get("calibrated") and value is not None):
+            raise ValueError("PROBABILITY NOT VALIDATED — a signal can't qualify without it")
+        if tsp.get("event_definition") != "TP_before_SL_after_fill_within_horizon":
+            raise ValueError("only P(TP before SL) qualifies a trade")
+        if float(value) < 0.70:
+            raise ValueError("P(TP before SL) below 0.70 never qualifies")
+        if self.net_expected_r is None or self.net_expected_r <= 0:
+            raise ValueError("a qualified signal needs a positive stressed expected R")
+        if self.mode not in ("LIVE", "DELAYED"):
+            raise ValueError(f"mode {self.mode} never qualifies (replay, synthetic, historical)")
+        if not self.eligibility or not all(c.get("passed") for c in self.eligibility):
+            raise ValueError("every eligibility check must pass")
+
     def as_record(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
 
@@ -192,7 +244,13 @@ def quality_of(status: str) -> DataQuality:
     return {"OK": DataQuality.PASS, "WARN": DataQuality.WARN}.get(status, DataQuality.FAIL)
 
 
-TIMEFRAMES = {"zone_rejection_5m": "5m", "zone_reaction": "15m"}
+TIMEFRAMES = {
+    "zone_rejection_5m": "5m",
+    "zone_reaction": "15m",
+    "sweep_reclaim": "5m",
+    "rejection_rotation": "5m",
+    "breakout_retest": "5m",
+}
 SUPPORTED = (ValidationState.OOS_SUPPORTED, ValidationState.FORWARD_SUPPORTED)
 
 
@@ -220,6 +278,12 @@ def from_analysis(
         "created_at_utc": created_at,
     }
     zones = {z["id"]: z for z in analysis.get("zones", [])}
+    mapped = analysis.get("zone_map") or {}
+    for z in (*mapped.get("support", []), *mapped.get("resistance", []),
+              *mapped.get("others", [])):  # fmt: skip
+        zones.setdefault(z["zone_id"], _mapped(z))
+    common["mode"] = analysis.get("mode")
+    common["instrument_id"] = data.get("source_id") or data["source"]
     out: list[Signal] = []
     for name, decision in (analysis.get("strategies") or {}).items():
         state = validation.get(name, ValidationState.UNVALIDATED)
@@ -241,21 +305,31 @@ def from_analysis(
         if not plans:
             status = SignalStatus(decision["status"])
             near = [z for z in zones.values() if z.get("side") in ("support", "resistance")]
+            looked = [s["zone"] for s in decision.get("setups") or [] if s.get("zone")]
+            shown = decision.get("setup_state")
             out.append(
                 _make(
                     base,
                     status=status,
                     direction=Direction.NONE,
-                    zones=[_zone(z) for z in near[:2]],
+                    zones=[_zone(zones[z]) for z in looked if z in zones]
+                    or [_zone(z) for z in near[:2]],
                     reasons=list(decision.get("reasons") or [])
                     or ["No zone in reach — nothing to do."],
                     trigger=None,  # no confirmed event (or none that made a valid plan)
+                    setup_state=SetupState(shown) if shown and shown != "ENTRY_ARMED" else None,
+                    stage=decision.get("stage"),
+                    zone_ids=looked,
                 )
             )
             continue
         for plan in plans:
             targets = plan["targets"]
             involved = [plan["zone"], *(t.get("zone") for t in targets)]
+            gate = plan.get("eligibility") or {}
+            shown = gate.get("setup_state") or (
+                "RESEARCH_ONLY" if name in TIMEFRAMES and plan.get("setup") else None
+            )
             out.append(
                 _make(
                     base,
@@ -272,6 +346,16 @@ def from_analysis(
                     invalidation_rule=" ".join(plan.get("rules") or []),
                     reasons=[_why(plan, decision)],
                     candidate_id=str(plan["id"]),
+                    setup_state=SetupState(shown) if shown else None,
+                    stage="ENTRY_ARMED" if plan.get("setup") else None,
+                    eligible=bool(gate.get("eligible")),
+                    eligibility=list(gate.get("checks") or []),
+                    net_expected_r=gate.get("net_expected_r"),
+                    trade_success_probability=plan.get("trade_success_probability"),
+                    conviction=gate.get("conviction"),
+                    zone_ids=list(plan.get("zone_ids") or involved),
+                    risk_usd=plan.get("risk_usd"),
+                    expiry_utc=utc(plan.get("valid_until")),
                 )
             )  # fmt: skip
     return out
@@ -284,16 +368,31 @@ def _make(base: dict[str, Any], **fields: Any) -> Signal:
         for k in ("symbol", "market_data_source", "as_of_utc", "strategy_id",
                   "strategy_version", "status", "direction", "candidate_id")
     }  # fmt: skip
+    # A different probability, gate verdict or zone set is a different signal (a new record,
+    # never an edit of the old one); absent for the older strategies, so their ids stay.
+    for k in ("trade_success_probability", "eligible", "setup_state", "zone_ids"):
+        if raw.get(k):
+            identity[k] = raw[k]
     return Signal(signal_id=signal_id(identity), **raw)
 
 
+def _mapped(z: dict[str, Any]) -> dict[str, Any]:
+    """A zone-map zone in the shape ``_zone`` reads."""
+    return {"id": z["zone_id"], "side": str(z["side"]).lower(), "low": z["bounds"]["low"],
+            "high": z["bounds"]["high"], "kinds": ["zone_map", *z.get("kinds", [])],
+            "confirmed_at": z.get("confirmed_at")}  # fmt: skip
+
+
 def _zone(z: dict[str, Any]) -> SignalZone:
+    kinds = list(z.get("groups") or z.get("kinds") or [])
+    mapped = kinds[:1] == ["zone_map"]
     return SignalZone(
         id=str(z["id"]),
         side=z["side"],
         low=float(z["low"]),
         high=float(z["high"]),
-        source="key_levels:" + ",".join(z.get("groups") or z.get("kinds") or []),
+        confirmed_at_utc=utc(z.get("confirmed_at")),
+        source=("zone_map:" + ",".join(kinds[1:])) if mapped else "key_levels:" + ",".join(kinds),
     )
 
 

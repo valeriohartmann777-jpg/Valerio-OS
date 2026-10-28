@@ -8,7 +8,13 @@
 #   whole label horizon (entry validity + maximum hold, up to 720 minutes for zone_reaction),
 #   not only the maximum hold — 1.0.0 would have let dev labels overlap the next fold and the
 #   holdout. No run ever used 1.0.0.
-protocol_version: "1.1.0"
+#
+# 1.2.0 (2026-10-28, before any run on real data — none was possible: no market data had been
+#   imported): adds the trade-success probability head (section `probability`) for the zone
+#   setups sweep_reclaim / rejection_rotation / breakout_retest. The 1.1.0 numbers are unchanged.
+#   A plan qualifies only with a VALIDATED head, P(TP before SL) >= 0.70, the lower bound of its
+#   reliability tenth >= 0.60 and an effective sample >= 30 there (apex/eligibility.py).
+protocol_version: "1.2.0"
 
 split:
   warmup_days: 21          # first days only feed zones / base rates, no decisions
@@ -44,3 +50,14 @@ neighbours:                 # one parameter at a time, the others at their regis
   min_rr: [1.25, 1.75]
   reach_atr: [2.0, 4.0]
   stop_buffer_atr: [0.10, 0.20]
+
+probability:                # P(TP before SL after the fill) — fitted inside the development window
+  fit_share: 0.60           # first 60 % of the development window's time: L2 logistic regression
+  calibration_share: 0.20   # next 20 %: Platt scaling only; the last 20 %: graded once (test)
+  min_fit: 60               # filled trades per window, below → INSUFFICIENT_DATA, no model
+  min_calibration: 30
+  min_test: 30
+  min_effective: 30         # effective test sample (trades of a day are dependent)
+  max_slope_error: 0.30     # calibration slope on the test window within 1 ± 0.30
+  max_mean_gap: 0.05        # |mean predicted − observed win rate| on the test window
+  permutation_runs: 20      # label shuffles: the real Brier skill must beat their 95th percentile

@@ -261,6 +261,9 @@ class ApexSettings(BaseModel):
     path_horizon_minutes: int = 120  # path event: which barrier first within this horizon
     macro_blackout_before_minutes: int = 30  # high-impact event ahead within this → no signal
     macro_blackout_after_minutes: int = 15  # … or released less than this ago
+    max_alerts_per_day: int = 4  # qualified paper alerts per market and trading day (at most)
+    alert_cooldown_minutes: int = 240  # same zone and direction again within this = duplicate
+    signal_max_age_minutes: int = 10  # last bar older than this → no qualified signal
     markets: dict[str, ApexMarketSettings] = Field(default_factory=dict)
 
 
@@ -298,13 +301,28 @@ class ApexForwardSettings(BaseModel):
     ci_low_above: float = 0.0
 
 
+class ApexProbabilitySettings(BaseModel):
+    """Protocol 1.2.0: the trade-success probability head (``apex/probability.py``)."""
+
+    fit_share: float = 0.60  # of the development window's time
+    calibration_share: float = 0.20  # the rest is the test window
+    min_fit: int = 60  # filled trades
+    min_calibration: int = 30
+    min_test: int = 30
+    min_effective: int = 30  # effective test sample (day clustering)
+    max_slope_error: float = 0.30  # calibration slope within 1 ± this
+    max_mean_gap: float = 0.05  # |mean predicted - observed| on the test window
+    permutation_runs: int = 20  # label shuffles; the skill must beat their 95th percentile
+
+
 class ApexValidationSettings(BaseModel):
     """``config/apex_validation.yaml`` — pre-registered; the defaults equal the file."""
 
     model_config = ConfigDict(populate_by_name=True)
 
-    protocol_version: str = "1.1.0"
+    protocol_version: str = "1.2.0"
     split: ApexSplitSettings = Field(default_factory=ApexSplitSettings)
+    probability: ApexProbabilitySettings = Field(default_factory=ApexProbabilitySettings)
     evidence: ApexEvidenceSettings = Field(default_factory=ApexEvidenceSettings)
     criteria: ApexPassSettings = Field(default_factory=ApexPassSettings, alias="pass")
     holdout: ApexHoldoutSettings = Field(default_factory=ApexHoldoutSettings)

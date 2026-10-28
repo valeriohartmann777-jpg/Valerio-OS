@@ -27,6 +27,10 @@ spread_days: 10          # recent days of Dukascopy ask candles → measured bid
 path_horizon_minutes: 120    # path event: upper vs lower barrier first within this horizon
 macro_blackout_before_minutes: 30  # no signal this long before a high-impact US release …
 macro_blackout_after_minutes: 15   # … nor this long after it (pre-registered, not tuned)
+max_alerts_per_day: 4    # at most this many qualified paper alerts per market and trading day;
+                         # zero is a correct day — nothing is forced to fill the quota
+alert_cooldown_minutes: 240  # the same zone and direction again within this is a duplicate
+signal_max_age_minutes: 10   # a qualified signal needs a last bar at most this old
 forward_interval_minutes: 5  # paper forward log (opt-in, APEX → Validation): a live analysis of
                              # each market this often inside its session window
 
