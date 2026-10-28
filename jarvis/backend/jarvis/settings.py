@@ -258,6 +258,9 @@ class ApexSettings(BaseModel):
     oos_share: float = 0.3  # last part of an evaluation reported as out-of-sample
     spread_days: int = 10  # recent days of ask candles for the measured spread (Dukascopy)
     forward_interval_minutes: int = 5  # paper forward log: a live analysis this often in session
+    path_horizon_minutes: int = 120  # path event: which barrier first within this horizon
+    macro_blackout_before_minutes: int = 30  # high-impact event ahead within this → no signal
+    macro_blackout_after_minutes: int = 15  # … or released less than this ago
     markets: dict[str, ApexMarketSettings] = Field(default_factory=dict)
 
 

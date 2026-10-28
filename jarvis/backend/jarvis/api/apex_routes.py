@@ -86,6 +86,26 @@ async def journal(rt: RuntimeDep, market: str | None = None, limit: int = 100) -
     return await rt.apex.journal(market, min(max(limit, 1), 500))
 
 
+class MacroBody(BaseModel):
+    csv: str = Field(min_length=10, max_length=2_000_000)
+    source: str = Field("owner import", min_length=2, max_length=120)
+
+
+@router.post("/apex/macro/import")
+async def import_macro(body: MacroBody, rt: RuntimeDep) -> dict[str, Any]:
+    """Import a macro calendar (CSV) with its schedule vintage; nothing is fetched online."""
+    return await rt.apex.import_macro(body.csv, body.source)
+
+
+@router.get("/apex/context")
+async def context(market: str, rt: RuntimeDep, as_of: int | None = None) -> dict[str, Any]:
+    """Macro events known at the moment, the blackout and related markets."""
+    try:
+        return await rt.apex.context(market, as_of)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
 @router.get("/apex/zones")
 async def zones(market: str, rt: RuntimeDep, snapshot: str | None = None) -> dict[str, Any]:
     """A stored, immutable zone snapshot: four strongest supports and resistances as of then."""

@@ -15,6 +15,7 @@ import numpy as np
 
 from jarvis.apex import candidates, trigger
 from jarvis.apex.capability import capability_for, factor_matrix
+from jarvis.apex.context import bias, interaction_scenarios, path_cards, path_scenarios
 from jarvis.apex.data import Series, assess, current_contract
 from jarvis.apex.execution import Execution, execution_for
 from jarvis.apex.scenarios import BaseRates, base_rates, scenarios, zone_rate
@@ -32,7 +33,8 @@ from jarvis.training.dataset import TouchRules
 # 1.2.0: execution model (bid/ask side, proxy block), strategy zone_rejection_5m (5-minute
 # trigger, stop entry) next to zone_reaction, per-strategy status — docs/APEX_SIGNAL_SPEC.md.
 # 1.3.0: capability matrix and evidence statuses, the causal zone map (top four per side,
-# lifecycle, episodes) — docs/apex/APEX_ZONE_SPEC.md.
+# lifecycle, episodes), multi-timeframe bias, barrier path events and zone interactions —
+# docs/apex/APEX_ZONE_SPEC.md, APEX_PRODUCT_SPEC.md.
 ENGINE_VERSION = "apex-1.3.0"
 ZONE_DAYS = 14  # minute data behind the zone map
 STRATEGIES = {candidates.TEMPLATE: candidates.VERSION, trigger.STRATEGY: trigger.VERSION}
@@ -286,6 +288,12 @@ def analyze(
         source_ids=[str(head["data"]["provenance"].get("source_id") or known.source)],
         vwap_status=vwap,
     )
+    history = current_contract(known).bars.between(as_of - cfg.history_days * 86400, as_of)
+    paths = path_scenarios(
+        history, as_of, mapped, horizon_minutes=cfg.path_horizon_minutes,
+        window=ctx.window, min_samples=cfg.min_samples,
+    )  # fmt: skip
+    interactions = interaction_scenarios(mapped, cfg.min_samples)
     return {
         **head,
         "blocked": False,
@@ -303,6 +311,10 @@ def analyze(
         "candidates": made,
         "rejected": [r for d in decisions.values() for r in d["rejected"]],
         "zone_map": mapped,
+        "bias": bias(history.between(as_of - 60 * 86400, as_of), as_of),
+        "paths": paths,
+        "interactions": interactions,
+        "path_cards": path_cards(mapped, interactions),
         "chart": chart,
     }
 

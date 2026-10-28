@@ -24,6 +24,9 @@ min_samples: 30          # fewer decided cases → "insufficient data" instead o
 eval_step_minutes: 60    # decision points per hour inside the session window
 oos_share: 0.3           # the last 30% of an evaluation is reported as out-of-sample
 spread_days: 10          # recent days of Dukascopy ask candles → measured bid/ask spread
+path_horizon_minutes: 120    # path event: upper vs lower barrier first within this horizon
+macro_blackout_before_minutes: 30  # no signal this long before a high-impact US release …
+macro_blackout_after_minutes: 15   # … nor this long after it (pre-registered, not tuned)
 forward_interval_minutes: 5  # paper forward log (opt-in, APEX → Validation): a live analysis of
                              # each market this often inside its session window
 

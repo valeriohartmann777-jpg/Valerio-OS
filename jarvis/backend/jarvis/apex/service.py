@@ -32,6 +32,7 @@ import numpy as np
 
 from jarvis.apex.audit import compare, outcome_check
 from jarvis.apex.capability import mode_of
+from jarvis.apex.context import market_context
 from jarvis.apex.data import (
     SYNTHETIC_LABEL,
     Series,
@@ -45,6 +46,7 @@ from jarvis.apex.engine import ENGINE_VERSION, STRATEGIES, MarketContext, analyz
 from jarvis.apex.evaluate import Cancelled, summarize, track_record
 from jarvis.apex.execution import Execution, execution_for, fill_model
 from jarvis.apex.fitness import fitness
+from jarvis.apex.macro import parse_calendar
 from jarvis.apex.narrative import narrate
 from jarvis.apex.resolve import resolve
 from jarvis.apex.signal import ValidationState, from_analysis
@@ -427,6 +429,7 @@ class ApexService:
             lambda: analyze(series, ctx, self._cfg, when, track_records=tracks)
         )
         result["replay"] = as_of is not None
+        result["context"] = await self.context(ctx.name, when)
         behind = int((result["quality"].get("summary") or {}).get("behind_minutes") or 0)
         result["mode"] = mode_of(
             series, when, now, replay=result["replay"], behind_minutes=behind
@@ -506,6 +509,26 @@ class ApexService:
                 if forward["passed"]:
                     states[name] = ValidationState.FORWARD_SUPPORTED
         return states, evidence
+
+    async def context(self, market: str, as_of: int | None = None) -> dict[str, Any]:
+        """Macro events known at ``as_of``, the blackout, related markets (point in time)."""
+        ctx = self._ctx(market)
+        when = self._now() if as_of is None else int(as_of)
+        events = await self.store.macro_events(when - 2 * 86400, when + 3 * 86400)
+        return market_context(
+            ctx.name,
+            when,
+            events,
+            before_minutes=self._cfg.macro_blackout_before_minutes,
+            after_minutes=self._cfg.macro_blackout_after_minutes,
+            calendar_loaded=await self.store.macro_count() > 0,
+        )
+
+    async def import_macro(self, text: str, source: str) -> dict[str, Any]:
+        """Store a macro calendar the owner provides (CSV); nothing is fetched."""
+        rows, refused = parse_calendar(text, source)
+        added = await self.store.add_macro_events(rows)
+        return {"parsed": len(rows), "added": added, "refused": refused[:50]}
 
     async def zones(self, market: str, snapshot_id: str | None = None) -> dict[str, Any]:
         """A stored zone snapshot (the latest of the market when no id is given)."""

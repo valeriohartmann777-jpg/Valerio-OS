@@ -14,7 +14,7 @@ from typing import Any
 
 COMPARED = (
     "quality", "price", "atr15", "structure", "zones", "scenarios", "rejected", "chart",
-    "execution", "zone_map", "factors",
+    "execution", "zone_map", "factors", "bias", "paths", "interactions",
 )  # fmt: skip
 CANDIDATE_FIELDS = ("id", "direction", "entry", "stop", "targets", "valid_until", "risk_points")
 # What each strategy decided (its plans are compared through CANDIDATE_FIELDS; the track record
