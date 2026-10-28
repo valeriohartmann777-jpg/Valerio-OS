@@ -190,6 +190,15 @@ async def data_status(market: str, rt: RuntimeDep) -> dict[str, Any]:
         raise _error(exc) from None
 
 
+@router.get("/apex/fitness/{market}")
+async def fitness(market: str, rt: RuntimeDep) -> dict[str, Any]:
+    """Data fitness of the series an analysis would use now (coverage, gaps, spikes, side)."""
+    try:
+        return await rt.apex.fitness(market)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
 @router.post("/apex/data/{market}/repair")
 async def repair(market: str, rt: RuntimeDep) -> dict[str, Any]:
     """Re-check every trading day without candles and download what is missing (free data)."""

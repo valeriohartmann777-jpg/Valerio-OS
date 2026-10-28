@@ -42,6 +42,7 @@ from jarvis.apex.data import (
 from jarvis.apex.engine import ENGINE_VERSION, STRATEGIES, MarketContext, analyze
 from jarvis.apex.evaluate import Cancelled, summarize, track_record
 from jarvis.apex.execution import Execution, execution_for, fill_model
+from jarvis.apex.fitness import fitness
 from jarvis.apex.narrative import narrate
 from jarvis.apex.resolve import resolve
 from jarvis.apex.signal import ValidationState, from_analysis
@@ -645,6 +646,27 @@ class ApexService:
             (s["id"] for s in out["sources"] if s["state"] in ("ok", "warn", "error")), None
         )
         out["causes"] = _causes(ctx, out["sources"], out["active"])
+        return out
+
+    async def fitness(self, market: str) -> dict[str, Any]:
+        """Coverage, gaps by reason, spikes, quote side and contract of the data an analysis
+        would use now — the Data Fitness view."""
+        ctx = self._ctx(market)
+        now = self._now()
+        series = await self.series(ctx.name, as_of=now)
+        out = await asyncio.to_thread(
+            fitness, series, ctx, self._cfg, now, execution_for(series, ctx.spec)
+        )
+        if series.source == "dukascopy" and not self.fixture:
+            name = str(out["source_id"]).partition(":")[2]
+            first, last = self._span(now)
+            days = await asyncio.to_thread(
+                self._market.days, self._instrument(name), first, last - timedelta(days=1)
+            )
+            counts: dict[str, int] = {}
+            for d in days:
+                counts[d["state"]] = counts.get(d["state"], 0) + 1
+            out["cache_days"] = counts  # the cache's own reason per day (fetched, empty, …)
         return out
 
     async def _dukascopy_status(
