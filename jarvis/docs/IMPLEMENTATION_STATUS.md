@@ -503,6 +503,20 @@ _Last updated: 2026-10-28_
   resolver); E2E APEX step. All on generated data — no real-market APEX result exists yet
   (network policy here blocks Dukascopy / Databento).
 
+### APEX data recovery & UX repair (D-034) — `docs/apex/APEX_DATA_DIAGNOSIS.md`
+- Diagnosis of the owner's blocked XAUUSD screen: GAPS 100 % was a calculation error (zero
+  missing minutes, caused by stale data); SPIKES counted weekend/daily-break reopens; the cache
+  froze silently (empty answers stored as fetched days, failed updates hidden).
+- Repaired: cache healing and loud outages, update reports, data status with causes and one
+  Repair action, corrected gate (engine `apex-1.1.0`, no check removed), measured bid/ask
+  spread, chart endpoint per timeframe, JARVIS reading.
+- APEX is one trading screen (interactive chart 1m-4h, zones, structure, long/short/no-trade,
+  candidates, data status, JARVIS) with journal / track record / data / SENTINEL as sub-areas;
+  QuantLab opens on APEX; `#/apex`.
+- Tests: `test_apex_data_repair.py` (10), `test_apex_pipeline.py` (3: download → decode → cache
+  → gate → structure → zones → candidates → chart → data status → repair, incl. the owner's
+  case rebuilt), `chartView.test.ts` (7); E2E APEX step rewritten.
+
 ## IN PROGRESS
 - —
 
@@ -513,8 +527,10 @@ _Last updated: 2026-10-28_
 0. Learning on the MacBook: first Dukascopy download, first rounds
 0. Trained model on the MacBook: first real verdict (Training Hub → Trained model)
 0. JARVIS 2.0 on the MacBook: owner acceptance run in `docs/JARVIS_2_RELEASE_PLAN.md`
-0. APEX on the MacBook: QuantLab → APEX → XAUUSD → Analyse now (with "Update free data"),
-   then Run track record (120 days) — the first APEX results on real data
+0. APEX on the MacBook: QuantLab → APEX → XAUUSD → Data → **Repair data** (asks again for every
+   day the cache is missing), then Analyse now and Run track record (120 days) — the first APEX
+   results on real data. If Repair fails, APEX → Data names the reason (connection, refusal,
+   API change).
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
 0. QuantLab on the MacBook: connect Databento (Keychain), quote one month of NQ.v.0 1-minute bars,
    approve, build the dataset, run the opening-range template once — first real data

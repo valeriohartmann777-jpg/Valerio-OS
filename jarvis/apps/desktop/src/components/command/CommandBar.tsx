@@ -29,6 +29,20 @@ export function CommandBar() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Pages can hand JARVIS a prepared question (e.g. APEX → "Ask JARVIS about it"): it lands
+  // here as an editable draft — never sent without the owner pressing Enter.
+  useEffect(() => {
+    const onDraft = (event: Event) => {
+      const draft = (event as CustomEvent<unknown>).detail;
+      if (typeof draft !== "string" || !draft.trim()) return;
+      setText(draft.slice(0, 2000));
+      setCursor(null);
+      input.current?.focus();
+    };
+    window.addEventListener("jarvis:draft", onDraft);
+    return () => window.removeEventListener("jarvis:draft", onDraft);
+  }, []);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const command = text.trim();

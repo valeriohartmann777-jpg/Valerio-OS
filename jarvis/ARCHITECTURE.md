@@ -833,14 +833,20 @@ apex/engine.py      analyze(series, ctx, cfg, as_of) — pure; candidates_at (sh
 apex/resolve.py     conservative forward resolution on one-minute bars
 apex/evaluate.py    walk-forward track record, IS/OOS, verdicts
 apex/store.py       apex_* tables (migration 20; immutable journal)
-apex/service.py     sources (vault → dukascopy, fixture), analyses, journal, background
-                    track records
-api/apex_routes.py  /apex/markets, /apex/analyze, /apex/analyses, /apex/journal(/resolve),
-                    /apex/evaluations
+apex/narrative.py   JARVIS's reading of an analysis — built only from its numbers
+apex/service.py     sources (vault → dukascopy, fixture), update status, measured spread,
+                    analyses, journal, chart per timeframe, data status + repair (D-034),
+                    background track records
+api/apex_routes.py  /apex/markets, /apex/analyze, /apex/analyses(/{id}/chart), /apex/journal
+                    (/resolve), /apex/evaluations, /apex/data/{market}(/repair)
+learning/market.py  Dukascopy cache (bid and ask): empty / 404 trading days re-checked, runs of
+                    them fail loudly, every update reported in _checks.json
 ```
 
-UI: `apps/desktop/src/components/quantlab/apex/` (QuantLab → APEX). Method and every
-definition: `docs/apex/APEX_METHOD.md`.
+UI: `apps/desktop/src/components/quantlab/apex/` (QuantLab → APEX, `#/apex`): `Apex.tsx` (the
+screen and its sub-areas), `ApexChart.tsx` (interactive SVG chart), `chartView.ts` (zoom / pan /
+ticks, unit-tested), `ApexData.tsx` (data status and repair). Method and every definition:
+`docs/apex/APEX_METHOD.md`; data diagnosis: `docs/apex/APEX_DATA_DIAGNOSIS.md`.
 
 ## 14. Extension points (designed, not built)
 

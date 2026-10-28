@@ -64,6 +64,7 @@ class EventType(StrEnum):
     APEX_OUTCOME = "apex.outcome"
     APEX_EVALUATION = "apex.evaluation"
     APEX_AUDIT = "apex.audit"
+    APEX_DATA = "apex.data"
     QUANTLAB_RESEARCH_RUN = "quantlab.research.run"
     QUANTLAB_SOURCE = "quantlab.source"
     QUANTLAB_MISSION = "quantlab.mission"

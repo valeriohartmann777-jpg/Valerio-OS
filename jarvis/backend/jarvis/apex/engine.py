@@ -24,7 +24,9 @@ from jarvis.learning.market import Bars, resample
 from jarvis.settings import ApexMarketSettings, ApexSettings
 from jarvis.training.dataset import TouchRules
 
-ENGINE_VERSION = "apex-1.0.0"
+# 1.1.0: quality gate repaired (gaps over the covered span, NO_RECENT_DATA, spikes on
+# consecutive minutes only) — see docs/apex/APEX_DATA_DIAGNOSIS.md.
+ENGINE_VERSION = "apex-1.1.0"
 
 
 @dataclass(frozen=True)

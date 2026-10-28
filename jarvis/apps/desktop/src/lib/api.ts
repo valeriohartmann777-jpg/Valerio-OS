@@ -1,9 +1,12 @@
 import type {
   ApexAnalysis,
   ApexAudit,
+  ApexChartData,
+  ApexDataStatus,
   ApexEvaluation,
   ApexJournal,
   ApexMarket,
+  ApexRepair,
   EvalOverview,
   FeedbackOverview,
   HqSnapshot,
@@ -423,6 +426,15 @@ export const api = {
     request<ApexEvaluation[]>(`/apex/evaluations${market ? `?market=${encodeURIComponent(market)}` : ""}`),
   apexEvaluation: (id: string) => request<ApexEvaluation>(`/apex/evaluations/${encodeURIComponent(id)}`),
   apexAudit: (analysisId: string) => post<ApexAudit>(`/apex/analyses/${encodeURIComponent(analysisId)}/audit`),
+  apexAnalyses: (market?: string) =>
+    request<{ id: string; market: string; as_of: number; synthetic: boolean }[]>(
+      `/apex/analyses${market ? `?market=${encodeURIComponent(market)}` : ""}`,
+    ),
+  apexAnalysis: (id: string) => request<ApexAnalysis>(`/apex/analyses/${encodeURIComponent(id)}`),
+  apexChart: (analysisId: string, minutes: number, limit = 600) =>
+    request<ApexChartData>(`/apex/analyses/${encodeURIComponent(analysisId)}/chart?minutes=${minutes}&limit=${limit}`),
+  apexData: (market: string) => request<ApexDataStatus>(`/apex/data/${encodeURIComponent(market)}`),
+  apexRepair: (market: string) => post<ApexRepair>(`/apex/data/${encodeURIComponent(market)}/repair`),
   feedback: () => request<FeedbackOverview>("/feedback"),
   evals: () => request<EvalOverview>("/training/evals"),
   runEvals: () => post<EvalOverview>("/training/evals/run"),

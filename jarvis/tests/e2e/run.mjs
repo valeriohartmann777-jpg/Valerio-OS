@@ -920,16 +920,21 @@ try {
     await page.getByTestId("tab-home").click();
   });
 
-  await step("APEX: XAUUSD and MNQ analysed on labelled test data — zones, counted scenarios, rule-based candidates, an immutable journal and a track record", async () => {
+  await step("APEX: one trading screen — chart in five timeframes, zones, structure, long/short/no-trade, candidates, data status, JARVIS; journal, SENTINEL and track record in their sub-areas", async () => {
     await page.getByTestId("tab-quantlab").click();
     await page.getByTestId("ql-nav-apex").click();
     await page.getByTestId("apex-panel").waitFor();
     await page.getByTestId("apex-market-XAUUSD").click();
+    await page.getByTestId("apex-tab-analysis").click();
     await page.getByTestId("apex-analyze").click();
     await page.getByTestId("apex-synthetic").waitFor({ timeout: 60_000 });
-    await page.getByTestId("apex-chart").waitFor();
+    assert.equal(await page.getByTestId("apex-data-chip").getAttribute("data-tone"), "warning", "test data is never shown as plain OK");
+    await page.locator('[data-testid="apex-chart"][data-minutes="15"]').waitFor();
     assert.ok((await page.getByTestId("apex-zone").count()) >= 4, "zones above and below the price");
-    assert.equal(await page.getByTestId("apex-scenario").count(), 4, "hold/break for S1 and R1");
+    assert.ok((await page.getByTestId("apex-chart-zone").count()) >= 1, "zones drawn on the chart");
+    assert.equal(await page.getByTestId("apex-scenario").count(), 4, "hold/break for S1 and R1 (long and short cases)");
+    await page.getByTestId("apex-no-trade").waitFor();
+    await page.getByTestId("apex-trend-60").waitFor();
     const shown = await page.getByTestId("apex-candidate").count();
     assert.ok(shown + (await page.getByTestId("apex-rejected").count()) >= 1, "a candidate or the reason why not");
     const journal = await fetch(`${backendUrl}/apex/journal?market=XAUUSD`).then((r) => r.json());
@@ -939,14 +944,47 @@ try {
       await page.getByTestId("apex-candidate").first().click();
       await page.getByTestId("apex-chart-candidate").waitFor();
     }
-    await page.getByTestId("apex-chart").scrollIntoViewIfNeeded();
+    // The chart: zoom, reset, and every timeframe — only bars known at the moment.
+    const chart = page.getByTestId("apex-chart");
+    const before = Number(await chart.getAttribute("data-bars"));
+    await page.getByTestId("apex-chart-zoom-in").click();
+    assert.ok(Number(await chart.getAttribute("data-bars")) < before, "zoom in shows fewer bars");
+    await page.getByTestId("apex-chart-reset").click();
+    assert.equal(Number(await chart.getAttribute("data-bars")), before);
+    const box = await chart.boundingBox();
+    await chart.hover({ position: { x: Math.round(box.width * 0.5), y: Math.round(box.height * 0.4) } }); // scrolls into view first
+    await page.getByTestId("apex-chart-crosshair").waitFor();
+    await page.getByTestId("apex-panel").scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await shot("14a-apex-xauusd-chart");
-    await page.getByTestId("apex-candidate").or(page.getByTestId("apex-rejected")).first().scrollIntoViewIfNeeded();
+    for (const minutes of [1, 5, 60, 240]) {
+      await page.getByTestId(`apex-tf-${minutes}`).click();
+      await page.locator(`[data-testid="apex-chart"][data-minutes="${minutes}"]`).waitFor();
+    }
+    await page.getByTestId("apex-tf-60").click();
+    await page.locator('[data-testid="apex-chart"][data-minutes="60"]').waitFor();
     await page.waitForTimeout(300);
-    await shot("14a-apex-xauusd-candidates");
+    await shot("14b-apex-xauusd-1h");
+    await page.getByTestId("apex-tf-15").click();
+    // JARVIS's reading: only the analysis' own numbers; "Ask" puts an editable question in the command bar.
+    const headline = await page.getByTestId("apex-jarvis-headline").innerText();
+    assert.ok(headline.startsWith("XAUUSD"), headline);
+    await page.getByTestId("apex-jarvis").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("14c-apex-jarvis");
+    await page.getByTestId("apex-ask-jarvis").click();
+    assert.match(await page.getByTestId("command-input").inputValue(), /APEX analysis for XAUUSD/);
+    await page.getByTestId("command-input").press("Escape"); // nothing is sent without Enter
+
+    // Data: the status with causes and actions (test data has nothing to repair).
+    await page.getByTestId("apex-tab-data").click();
+    await page.locator('[data-testid="apex-cause"][data-code="SYNTHETIC"]').waitFor();
+    await page.locator('[data-testid="apex-source"]').first().waitFor();
+    await page.waitForTimeout(300);
+    await shot("14d-apex-data");
 
     // SENTINEL recomputes the stored analysis from the data on disk now and must match it.
+    await page.getByTestId("apex-tab-sentinel").click();
     await page.getByTestId("apex-audit").click();
     await page.locator('[data-testid="apex-audit-result"][data-passed="yes"]').waitFor({ timeout: 60_000 });
     assert.equal(await page.locator('[data-testid="apex-audit-check"][data-passed="yes"]').count(), 3);
@@ -956,14 +994,22 @@ try {
 
     // MNQ: the same index as NQ at $2 per point.
     await page.getByTestId("apex-market-MNQ").click();
+    await page.getByTestId("apex-tab-analysis").click();
     await page.getByTestId("apex-analyze").click();
     await page.getByTestId("apex-synthetic").waitFor({ timeout: 60_000 });
     const mnq = await fetch(`${backendUrl}/apex/analyses?market=MNQ`).then((r) => r.json());
     const latest = await fetch(`${backendUrl}/apex/analyses/${mnq[0].id}`).then((r) => r.json());
     assert.equal(latest.spec.point_value, 2);
     for (const c of latest.candidates) assert.equal(c.risk_usd, Math.round(c.risk_points * 2 * 100) / 100);
+    const chart60 = await fetch(`${backendUrl}/apex/analyses/${latest.id}/chart?minutes=60&limit=100`).then((r) => r.json());
+    assert.ok(chart60.same_data && chart60.bars.length === 100 && chart60.bars.every((b) => b[0] < latest.as_of));
+
+    // The journal keeps every candidate unchanged.
+    await page.getByTestId("apex-tab-journal").click();
+    await page.getByTestId("apex-journal").waitFor();
 
     // The rule's track record: walk-forward on the last 20 days, judged by later bars.
+    await page.getByTestId("apex-tab-track").click();
     await page.getByTestId("apex-days").fill("20");
     await page.getByTestId("apex-evaluate").click();
     await page.getByTestId("apex-verdict").waitFor({ timeout: 180_000 });
@@ -974,11 +1020,12 @@ try {
     assert.ok(["CALIBRATED", "MISCALIBRATED", "INSUFFICIENT"].includes(await calibration.getAttribute("data-code")));
     await page.getByTestId("apex-track").scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
-    await shot("14b-apex-track-record");
+    await shot("14e-apex-track-record");
+    await page.getByTestId("apex-tab-analysis").click();
     // There is no order path anywhere in APEX.
     const routes = await fetch(`${backendUrl}/openapi.json`).then((r) => r.json());
     const apexPaths = Object.keys(routes.paths).filter((p) => p.startsWith("/apex"));
-    assert.ok(apexPaths.length >= 6 && apexPaths.every((p) => !/order|trade|broker|execute/i.test(p)), apexPaths.join(","));
+    assert.ok(apexPaths.length >= 9 && apexPaths.every((p) => !/order|trade|broker|execute/i.test(p)), apexPaths.join(","));
     await page.getByTestId("tab-home").click();
   });
 

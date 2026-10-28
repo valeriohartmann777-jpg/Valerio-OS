@@ -27,6 +27,7 @@ describe("JARVIS 2.0 routes", () => {
   it("keeps old links working", () => {
     expect(fromHash("#/learning")).toEqual({ name: "training" });
     expect(fromHash("#/bots")).toEqual({ name: "quantlab", section: "bots" });
+    expect(fromHash("#/apex")).toEqual({ name: "quantlab", section: "apex" });
     expect(fromHash("#/mission/abc")).toEqual({ name: "mission", id: "abc" });
     expect(normalize({ name: "learning" })).toEqual({ name: "training" });
     expect(normalize({ name: "bots" })).toEqual({ name: "quantlab", section: "bots" });

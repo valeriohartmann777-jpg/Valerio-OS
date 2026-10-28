@@ -1,7 +1,7 @@
-# JARVIS APEX — method (APEX-1)
+# JARVIS APEX — method
 
-Every number APEX shows is defined here. Engine version `apex-1.0.0`
-(`backend/jarvis/apex/`). Settings: `config/apex.yaml`.
+Every number APEX shows is defined here. Engine version `apex-1.1.0` (quality gate repaired,
+D-034; `backend/jarvis/apex/`). Settings: `config/apex.yaml`.
 
 ## 1. Data
 
@@ -15,8 +15,22 @@ Every number APEX shows is defined here. Engine version `apex-1.0.0`
   (`DataHubService.build_dataset` / `load`) — local only, no provider call, no fee.
 - Several contracts on one trading day → the one with the most volume that day is kept
   (front month). Contract changes are recorded; **levels never mix two contracts**.
-- `Update free data first` fetches missing Dukascopy days (free, no key). A Databento
-  purchase is never triggered by APEX; it stays the Data Vault's explicit-approval flow.
+- `Update data first` fetches missing Dukascopy days (free, no key) and today's bars so far.
+  A Databento purchase is never triggered by APEX; it stays the Data Vault's explicit-approval
+  flow.
+- **Cache healing (D-034).** A trading day (Sunday-Friday) that Dukascopy answers without
+  candles, or with 404, is *not* stored as fetched: it is noted in `_checks.json` and asked
+  again — every update while ≤ 5 days old, every 12 hours while ≤ 45 days old, always on a
+  repair. Days that older versions stored as empty are re-checked the same way. Three or more
+  trading days in a row without candles fail the update ("not a holiday: the API changed or is
+  down") and nothing is marked.
+- **Update reports.** Every update records days asked, with data, empty, 404, not yet
+  published, failed, the HTTP answers and the error. The analysis carries the outcome of its
+  own update (`data.update`); a failed one is shown, never swallowed.
+- **Bid / ask.** Gold candles are **bid**. The ask candles of the last `spread_days` (10) are
+  downloaded too: `data.spread` reports the measured ask − bid (median and 90 % overall and in
+  the session window) against the configured round-trip costs. The resolver still works on bid
+  prices with the configured costs (D-034 explains why).
 - `provider: fixture` (tests, E2E only) replaces every source with generated bars labelled
   **SYNTHETIC TEST DATA** in the API, the UI, the journal and the track record. Test-data
   results are never mixed with real-data results.
@@ -35,9 +49,11 @@ identical. **Replay** (`as_of` in the past) uses the same path.
 | Code | Level | Rule |
 |---|---|---|
 | EMPTY / ORDER / OHLC / PRICE | BLOCK | no bars · timestamps not strictly increasing · high/low don't contain open/close · non-positive or outside the market's plausible range |
-| GAPS | WARN (BLOCK > 50 %) | share of missing trading minutes in the last `level_days` (Sun 18:00 → Fri 17:00 New York, daily break 17-18; holidays count as gaps) |
+| NO_RECENT_DATA | BLOCK | no bar at all in the last `level_days` — zones and structure need the recent days (reported with the newest bar's time) |
+| GAPS | WARN (BLOCK > 50 %) | share of missing trading minutes **between the first and the newest bar inside** the last `level_days` (Sun 18:00 → Fri 17:00 New York, daily break 17-18; holidays and minutes without trades count as gaps); the three largest gaps are listed |
 | STALE | WARN | more than `stale_minutes` trading minutes between the newest bar and `as_of` → **no candidates** |
-| SPIKES | WARN | one-minute log returns > 15 robust standard deviations |
+| SPIKES | WARN | on **consecutive minutes only**: a move > 15 robust standard deviations that the next minute takes back (≥ 70 %), or a high/low that far beyond its own body and both neighbours — listed with times |
+| LARGE_MOVES | INFO | moves > 15 robust standard deviations that held (news) — listed, not data errors |
 | SHORT_HISTORY | WARN | fewer than 60 % of `history_days` covered |
 | PROXY / SYNTHETIC / ROLL | WARN / INFO | as in §1 |
 
@@ -150,6 +166,29 @@ Every re-check is stored (`apex_audits`). The ULTRON HQ shows SENTINEL's re-chec
 track records as real work in the ULTRON QuantLab room (`team/hq.py`, `from_apex`). JARVIS can
 answer from APEX in the chat (`apex_analysis` tool, read-only; it names the data source and
 says when it is test data).
+
+## 11b. Data status, repair, chart and JARVIS's reading (D-034)
+
+- `GET /apex/data/{market}` — per source: cache folder, first / last day, minute bars, newest
+  bar and how many trading minutes before today are missing, each day's state in the analysis
+  span (data, weekend, empty, missing, pending, no_trading = asked twice and still empty, a
+  holiday most likely, stored_empty, not_fetched), runs of days without candles, the last update reports, the measured spread. From these: **causes** with
+  level and action — `UPDATE_FAILED` (with what to do for a refused / unreachable / changed
+  API), `CACHE_BEHIND`, `MISSING_DAYS`, `SPREAD`, `SPREAD_UNMEASURED`, `PROXY`,
+  `NO_LOCAL_DATA`, or `OK`.
+- `POST /apex/data/{market}/repair` — in the background: re-checks every trading day without
+  candles in the span (`recheck`), downloads what is missing (bid; ask for the spread) and
+  today's bars; Data Vault sources are skipped (never bought from here). The result per step
+  stays visible.
+- `GET /apex/analyses/{id}/chart?minutes=1|5|15|60|240` — the analysis' own bars at that
+  timeframe, cut at its moment; a last bar still forming then is marked; `same_data` says
+  whether the cache changed since (e.g. healed days).
+- `narrative` — JARVIS's reading of an analysis (headline, points, caveats), built only from
+  its numbers; no model call. "Ask JARVIS about it" puts a question into the command bar; it is
+  sent only when the owner presses Enter.
+- Probabilities on screen: the counted rates are labelled **calibrated** only when the latest
+  track record on the same kind of data found them `CALIBRATED`; otherwise "past share" — a
+  frequency of earlier touches, not a probability.
 
 ## 12. What APEX does not do
 

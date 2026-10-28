@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -162,46 +163,75 @@ def assess(
             _finding(
                 "WARN",
                 "STALE",
-                f"The newest bar is {behind} trading minutes old — no trade candidates on "
-                "stale data. Update the data first.",
+                f"The newest bar is {behind} trading minutes old (closed {_utc(last_close)}) — "
+                "no trade candidates on stale data. Update the data first.",
                 behind,
             )
         )
 
+    # Gaps: only over the span the data covers inside the window (first bar … newest bar).
     window_start = as_of - window_days * 86400
-    expected = trading_minutes(window_start, min(as_of, last_close))
-    have = np.isin(expected, t[t >= window_start])
-    missing = int(len(expected) - np.sum(have))
-    share = missing / len(expected) if len(expected) else 1.0
-    if share > 0.5:
+    inside = t >= window_start
+    share: float | None = None
+    largest: list[dict[str, Any]] = []
+    if not inside.any():
         findings.append(
-            _finding("BLOCK", "GAPS", f"{share:.0%} of trading minutes are missing.", missing)
+            _finding(
+                "BLOCK",
+                "NO_RECENT_DATA",
+                f"No bar in the last {window_days} days — the newest closed {_utc(last_close)}. "
+                "Zones and structure need the recent days: update the data (Data → Repair).",
+            )
         )
-    elif share > 0.02:
+    else:
+        expected = trading_minutes(max(window_start, int(t[inside][0])), min(as_of, last_close))
+        have = np.isin(expected, t[inside])
+        missing = int(len(expected) - np.sum(have))
+        share = missing / len(expected) if len(expected) else 0.0
+        largest = _largest_gaps(expected, have)
+        where = f" — largest from {largest[0]['from']}" if largest else ""
+        if share > 0.5:
+            findings.append(
+                _finding(
+                    "BLOCK",
+                    "GAPS",
+                    f"{share:.0%} of the trading minutes between the first and the newest bar of "
+                    f"the last {window_days} days are missing{where}.",
+                    missing,
+                )
+            )
+        elif share > 0.02:
+            findings.append(
+                _finding(
+                    "WARN",
+                    "GAPS",
+                    f"{share:.1%} of trading minutes in the last {window_days} days are missing "
+                    f"(holidays and minutes without trades included){where}.",
+                    missing,
+                )
+            )
+
+    spikes, moves = _outliers(bars, finite)
+    if spikes:
         findings.append(
             _finding(
                 "WARN",
-                "GAPS",
-                f"{share:.1%} of trading minutes in the last {window_days} days are missing "
-                "(holidays and thin hours included).",
-                missing,
+                "SPIKES",
+                f"{len(spikes)} one-minute price spike(s) that reverse at once or reach far "
+                f"beyond the neighbouring bars — likely bad ticks (first {spikes[0]['at']}).",
+                len(spikes),
             )
         )
-
-    if len(c) > 100:
-        r = np.diff(np.log(c[finite]))
-        if len(r) > 10:
-            mad = float(np.median(np.abs(r - np.median(r)))) or 1e-9
-            spikes = int(np.sum(np.abs(r) > 15 * 1.4826 * mad))
-            if spikes:
-                findings.append(
-                    _finding(
-                        "WARN",
-                        "SPIKES",
-                        "Unusually large one-minute moves — check for bad ticks.",
-                        spikes,
-                    )
-                )
+    if moves:
+        findings.append(
+            _finding(
+                "INFO",
+                "LARGE_MOVES",
+                f"{len(moves)} one-minute move(s) above {SPIKE_SIGMA:g} robust standard "
+                f"deviations that held (news?) — kept, not data errors (largest {moves[0]['at']}).",
+                len(moves),
+            )
+        )
 
     covered = len(np.unique(t // 86400))
     if covered < 0.6 * need_days:
@@ -229,10 +259,88 @@ def assess(
         "first": int(t[0]),
         "last_close": last_close,
         "behind_minutes": behind,
-        "missing_share": round(share, 4),
+        "missing_share": round(share, 4) if share is not None else None,
         "days": covered,
+        "largest_gaps": largest,
+        "spikes": spikes[:10],
+        "large_moves": moves[:5],
     }
     return _verdict(findings, stale=stale, summary=summary)
+
+
+SPIKE_SIGMA = 15.0  # robust standard deviations of one-minute returns
+
+
+def _utc(t: int) -> str:
+    return datetime.fromtimestamp(t, UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _largest_gaps(expected: np.ndarray, have: np.ndarray, top: int = 3) -> list[dict[str, Any]]:
+    """The longest runs of missing trading minutes: from, to (UTC) and their length."""
+    gone = np.flatnonzero(~have)
+    if len(gone) == 0:
+        return []
+    starts = np.r_[0, np.flatnonzero(np.diff(gone) > 1) + 1]
+    ends = np.r_[starts[1:], len(gone)]
+    runs = sorted(zip(starts.tolist(), ends.tolist(), strict=True), key=lambda r: r[0] - r[1])
+    out = []
+    for a, z in runs[:top]:
+        first, last = int(expected[gone[a]]), int(expected[gone[z - 1]])
+        out.append({"from": _utc(first), "to": _utc(last + 60), "t": first, "minutes": int(z - a)})
+    return out
+
+
+def _outliers(bars: Bars, finite: np.ndarray) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Bad-tick candidates and large moves, on **consecutive** minutes only (a reopen after
+    the weekend or the daily break, or after missing minutes, is no one-minute move).
+
+    - spike: a move above ``SPIKE_SIGMA`` robust standard deviations that the next minute
+      takes back (70 % or more), or a high/low that reaches that far beyond its own body and
+      both neighbouring bars;
+    - large move: such a move that held (news) — listed, not a data error.
+    """
+    t, o, h, lo, c = bars.t, bars.open, bars.high, bars.low, bars.close
+    if len(c) < 100 or not finite.all() or (c <= 0).any():
+        return [], []
+    step = 60 * bars.minutes
+    consecutive = np.diff(t) == step
+    r = np.diff(np.log(c))
+    rc = r[consecutive]
+    if len(rc) < 100:
+        return [], []
+    scale = 1.4826 * float(np.median(np.abs(rc - np.median(rc)))) or 1e-9
+    limit = SPIKE_SIGMA * scale
+    big = consecutive & (np.abs(r) > limit)
+    following, follows = np.r_[r[1:], 0.0], np.r_[consecutive[1:], False]
+    back = big & follows & (np.abs(r + following) < 0.3 * np.abs(r))
+    reverting = np.r_[False, back[:-1]]  # the move back from a spike
+    held = big & ~back & ~reverting
+    neighbours = np.r_[False, consecutive] & np.r_[consecutive, False]
+    high_n = np.maximum(np.r_[h[:1], h[:-1]], np.r_[h[1:], h[-1:]])
+    low_n = np.minimum(np.r_[lo[:1], lo[:-1]], np.r_[lo[1:], lo[-1:]])
+    body_hi, body_lo = np.maximum(o, c), np.minimum(o, c)
+    reach = np.maximum(h - np.maximum(body_hi, high_n), np.minimum(body_lo, low_n) - lo) / c
+    wick = neighbours & (reach > limit)
+    spikes: list[dict[str, Any]] = [
+        {"t": int(t[i + 1]), "at": _utc(int(t[i + 1])), "kind": "close",
+         "sigma": round(abs(float(r[i])) / scale, 1)}
+        for i in np.flatnonzero(back).tolist()
+    ] + [
+        {"t": int(t[i]), "at": _utc(int(t[i])), "kind": "wick",
+         "sigma": round(float(reach[i]) / scale, 1)}
+        for i in np.flatnonzero(wick).tolist()
+    ]  # fmt: skip
+    spikes.sort(key=lambda s: int(s["t"]))
+    moves: list[dict[str, Any]] = sorted(
+        (
+            {"t": int(t[i + 1]), "at": _utc(int(t[i + 1])),
+             "move_pct": round(float(np.expm1(r[i])) * 100, 3),
+             "sigma": round(abs(float(r[i])) / scale, 1)}
+            for i in np.flatnonzero(held).tolist()
+        ),
+        key=lambda m: -float(m["sigma"]),
+    )  # fmt: skip
+    return spikes, moves
 
 
 def _verdict(
@@ -241,6 +349,54 @@ def _verdict(
     levels = {f["level"] for f in findings}
     status = "BLOCK" if "BLOCK" in levels else "WARN" if "WARN" in levels else "OK"
     return {"status": status, "stale": stale, "findings": findings, "summary": summary}
+
+
+# Bid / ask -----------------------------------------------------------------------------------
+
+
+def measure_spread(
+    bid: Bars,
+    ask: Bars,
+    *,
+    start: int,
+    end: int,
+    window: tuple[int, int],
+    cost_points: float,
+) -> dict[str, Any]:
+    """Ask minus bid close on the minutes in [start, end) that have both candles: median and
+    90 % overall and inside the session window, against the configured round-trip costs."""
+    b, a = bid.between(start, end), ask.between(start, end)
+    common, ib, ia = np.intersect1d(b.t, a.t, return_indices=True)
+    if len(common) < 100:
+        return {
+            "measured": False,
+            "minutes": len(common),
+            "reason": "Fewer than 100 minutes with both bid and ask candles in the period — "
+            "the spread isn't measured; costs use the configured value.",
+            "cost_points": cost_points,
+        }
+    spread = a.close[ia] - b.close[ib]
+    minute = local_clock(common, NY).minute
+    in_session = (minute >= window[0]) & (minute < window[1])
+    session = spread[in_session] if int(in_session.sum()) >= 30 else spread
+
+    def q(x: np.ndarray, p: float) -> float:
+        return round(float(np.quantile(x, p)), 4)
+
+    return {
+        "measured": True,
+        "minutes": len(common),
+        "from": int(common[0]),
+        "to": int(common[-1]) + 60,
+        "median": q(spread, 0.5),
+        "p90": q(spread, 0.9),
+        "session_median": q(session, 0.5),
+        "session_p90": q(session, 0.9),
+        "max": round(float(spread.max()), 4),
+        "negative": int(np.sum(spread < 0)),
+        "cost_points": cost_points,
+        "exceeds_costs": bool(q(session, 0.5) > cost_points),
+    }
 
 
 # Contract segments -------------------------------------------------------------------------

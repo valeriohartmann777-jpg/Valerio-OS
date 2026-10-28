@@ -69,8 +69,15 @@ def brief(out: dict[str, Any]) -> str:
     """One line for the chat; the full result goes to the model as data."""
     data = out["data"]
     source = "SYNTHETIC test data" if data["synthetic"] else data["label"]
+    update = data.get("update") or {}
+    failed = f" The data update failed: {update['error']}" if update.get("error") else ""
     if out.get("blocked"):
-        return f"APEX {out['market']}: analysis blocked by the data check ({source})."
+        blocks = [f for f in out["quality"]["findings"] if f["level"] == "BLOCK"]
+        reason = f" {blocks[0]['code']}: {blocks[0]['message']}" if blocks else ""
+        return (
+            f"APEX {out['market']}: analysis blocked by the data check ({source}).{reason}"
+            f"{failed} APEX → Data shows the cause and repairs it."
+        )
     zones = {z["id"]: z for z in out["zones"]}
     parts = [f"APEX {out['market']} at {out.get('price')} ({source})"]
     trend = out.get("structure", {}).get("60", {}).get("trend")
@@ -81,7 +88,9 @@ def brief(out: dict[str, Any]) -> str:
         if z:
             parts.append(f"{zid} {z['low']}-{z['high']}: {_rate(z.get('rate'))}")
     parts.append(f"{len(out['candidates'])} candidate(s)")
-    return " · ".join(parts)
+    if out["quality"].get("stale"):
+        parts.append("data stale: no candidates")
+    return " · ".join(parts) + failed
 
 
 def compact(out: dict[str, Any]) -> dict[str, Any]:

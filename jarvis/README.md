@@ -323,7 +323,13 @@ the latest QuantLab run?" — it answers from `quantlab_report`.
 
 ### JARVIS APEX: structure, zones and trade candidates for XAUUSD and NQ/MNQ
 
-**QuantLab → APEX**, choose XAUUSD, NQ or MNQ, press **Analyse now**:
+**QuantLab → APEX** (QuantLab opens on it; short link `#/apex`): choose XAUUSD, NQ or MNQ and
+a timeframe (1m · 5m · 15m · 1h · 4h), press **Analyse now**. One screen shows a large
+candlestick chart (scroll = zoom, drag = pan, crosshair with OHLC, keys ← → + − 0) with the
+zones, swings and BOS/CHoCH drawn in, the market structure, the long / short / no-trade cases,
+entry · stop · target candidates, the data status and **JARVIS's reading** of it all ("Ask
+JARVIS about it" puts a question in the command bar). Journal, track record, data and the
+SENTINEL check are sub-areas of the same screen.
 
 - **Market structure** on 15-minute and 1-hour bars: confirmed swings (HH/HL/LH/LL), trend,
   breaks of structure (BOS) and changes of character (CHoCH).
@@ -343,9 +349,13 @@ the latest QuantLab run?" — it answers from `quantlab_report`.
   identical (nothing looked ahead). JARVIS answers "what does gold look like?" from APEX in
   the chat; CIPHER and SENTINEL show their APEX work in the ULTRON HQ.
 
-Data: gold from the free Dukascopy cache (bid prices; *Update free data first* fetches
-missing days), NQ/MNQ from the Data Vault (or the Dukascopy index CFD, labelled as a proxy).
-APEX never places an order and never buys data. Method: [docs/apex/APEX_METHOD.md](docs/apex/APEX_METHOD.md).
+Data: gold from the free Dukascopy cache (bid prices; *Update data first* fetches missing
+days; the ask candles of the last days measure the spread), NQ/MNQ from the Data Vault (or the
+Dukascopy index CFD, labelled as a proxy). **APEX → Data** shows why data is old or missing —
+a failed update with its reason, days without candles, the cache's newest bar — and **Repair
+data** asks again for every missing day. APEX never places an order and never buys data.
+Method: [docs/apex/APEX_METHOD.md](docs/apex/APEX_METHOD.md) · data diagnosis:
+[docs/apex/APEX_DATA_DIAGNOSIS.md](docs/apex/APEX_DATA_DIAGNOSIS.md).
 
 ### ULTRON: let the team build something
 

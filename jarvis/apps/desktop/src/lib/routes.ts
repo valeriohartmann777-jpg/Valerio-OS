@@ -10,7 +10,8 @@
  *   #/settings/<section>
  *
  * Old names keep working: #/learning → Training Hub, #/bots → QuantLab › MT5 Bots,
- * #/mission/<id> → Home › mission. Tab names never change at runtime.
+ * #/mission/<id> → Home › mission. Short link: #/apex → QuantLab › APEX (the trading screen).
+ * Tab names never change at runtime.
  */
 
 import type { IconName } from "../components/ui/icons";
@@ -91,6 +92,8 @@ export function fromHash(hash: string): View {
       return { name: "training" };
     case "bots":
       return { name: "quantlab", section: "bots" };
+    case "apex":
+      return { name: "quantlab", section: "apex" };
     case "training":
     case "quantlab":
     case "settings":

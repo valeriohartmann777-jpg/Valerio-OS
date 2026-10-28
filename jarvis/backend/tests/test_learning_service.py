@@ -48,7 +48,13 @@ class FakeMarket(MarketData):
         self.synced: list[str] = []
 
     async def sync(
-        self, instrument: Instrument, start: date, end: date, progress: Progress | None = None
+        self,
+        instrument: Instrument,
+        start: date,
+        end: date,
+        progress: Progress | None = None,
+        *,
+        recheck: bool = False,
     ) -> int:
         if self.error:
             raise DataError(self.error)

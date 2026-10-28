@@ -252,6 +252,7 @@ class ApexSettings(BaseModel):
     min_samples: int = 30  # below this, a rate is shown as "insufficient data"
     eval_step_minutes: int = 60  # decision points inside the session window
     oos_share: float = 0.3  # last part of an evaluation reported as out-of-sample
+    spread_days: int = 10  # recent days of ask candles for the measured spread (Dukascopy)
     markets: dict[str, ApexMarketSettings] = Field(default_factory=dict)
 
 

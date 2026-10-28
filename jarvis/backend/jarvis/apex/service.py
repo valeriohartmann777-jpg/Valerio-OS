@@ -8,6 +8,11 @@ all of them with generated test data, labelled SYNTHETIC (tests, E2E).
 
 Every analysis is stored; its candidates go into an immutable journal and are resolved later
 on the **same source**'s newer bars. Track records run in the background.
+
+Data status and repair (``docs/apex/APEX_DATA_DIAGNOSIS.md``): every update's outcome is shown
+with the analysis; ``data_status`` lists the cache's coverage, suspicious days, the latest
+update reports and concrete causes with repair actions; ``repair`` re-checks every trading day
+without candles and downloads what is missing (free Dukascopy data only).
 """
 
 from __future__ import annotations
@@ -21,16 +26,27 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import numpy as np
+
 from jarvis.apex.audit import compare, outcome_check
-from jarvis.apex.data import SYNTHETIC_LABEL, Series, from_table, synthetic_bars
+from jarvis.apex.data import (
+    SYNTHETIC_LABEL,
+    Series,
+    from_table,
+    measure_spread,
+    synthetic_bars,
+    trading,
+    trading_minutes,
+)
 from jarvis.apex.engine import ENGINE_VERSION, MarketContext, analyze
 from jarvis.apex.evaluate import summarize, track_record
+from jarvis.apex.narrative import narrate
 from jarvis.apex.resolve import resolve
 from jarvis.apex.store import ApexStore
 from jarvis.briefing.levels import LevelRules
 from jarvis.events.bus import EventBus
 from jarvis.events.types import EventType
-from jarvis.learning.market import DataError, Instrument, MarketData
+from jarvis.learning.market import Bars, DataError, Instrument, MarketData, resample
 from jarvis.learning.strategy import clock_minutes
 from jarvis.quantlab.hub.service import DataHubService, HubError
 from jarvis.quantlab.vault.service import VaultService
@@ -117,6 +133,10 @@ class ApexService:
         self._now = now
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._progress: dict[str, float] = {}
+        self._repair_tasks: dict[str, asyncio.Task[None]] = {}
+        self._repairs: dict[str, dict[str, Any]] = {}
+        # The series the latest analyses saw (for their charts): analysis id → bars until then.
+        self._seen: dict[str, Series] = {}
         self.contexts = market_contexts(settings)
 
     @property
@@ -129,11 +149,12 @@ class ApexService:
             log.info("APEX: %d interrupted track record run(s) marked as failed", failed)
 
     async def stop(self) -> None:
-        for task in list(self._tasks.values()):
+        for task in [*self._tasks.values(), *self._repair_tasks.values()]:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         self._tasks.clear()
+        self._repair_tasks.clear()
 
     def _ctx(self, market: str) -> MarketContext:
         ctx = self.contexts.get(market.upper())
@@ -180,7 +201,9 @@ class ApexService:
                 if kind == "vault":
                     found = await self._from_vault(ctx, name, first, last, candidate)
                 elif kind == "dukascopy":
-                    found = await self._from_dukascopy(ctx, name, first, last, refresh, candidate)
+                    found = await self._from_dukascopy(
+                        ctx, name, first, last, refresh, candidate, as_of
+                    )
                 else:
                     reasons.append(f"{candidate}: unknown source")
                     continue
@@ -198,29 +221,84 @@ class ApexService:
             status=409,
         )
 
-    async def _from_dukascopy(
-        self, ctx: MarketContext, name: str, first: date, last: date, refresh: bool, source_id: str
-    ) -> Series | None:
+    def _instrument(self, name: str) -> Instrument:
         spec = self._settings.learning.instruments.get(name)
         if spec is None:
             raise ValueError(f"instrument {name} isn't in config/learning.yaml")
-        instrument = Instrument(name, spec.symbol, spec.price_range, spec.code)
-        note = None
+        return Instrument(name, spec.symbol, spec.price_range, spec.code)
+
+    async def _from_dukascopy(
+        self,
+        ctx: MarketContext,
+        name: str,
+        first: date,
+        last: date,
+        refresh: bool,
+        source_id: str,
+        as_of: int,
+    ) -> Series | None:
+        instrument = self._instrument(name)
+        update: dict[str, Any] = {"requested": refresh, "ok": None, "error": None}
         if refresh:
             try:
                 bars = await self._market.recent(instrument, (last - first).days)
+                update["ok"] = True
             except DataError as exc:
-                note = f"Update failed ({exc}); using the cached days."
+                update["ok"], update["error"] = False, str(exc)
                 bars = await asyncio.to_thread(self._market.load, instrument, first, last)
         else:
             bars = await asyncio.to_thread(self._market.load, instrument, first, last)
+        reports = [r for r in self._market.reports(instrument) if r.get("kind") == "sync"]
+        update["report"] = reports[-1] if reports else None
         if len(bars) == 0:
+            if update["error"]:
+                raise DataError(f"the update failed ({update['error']}) and nothing is cached")
             return None
+        spread = await self._spread(instrument, bars, ctx, refresh, as_of)
+        spec = self._settings.learning.instruments[name]
         label = spec.label or f"Dukascopy {spec.symbol}"
-        provenance = {"source_id": source_id, "symbol": spec.symbol, "prices": "bid", "note": note}
+        provenance = {
+            "source_id": source_id,
+            "symbol": spec.symbol,
+            "prices": "bid",
+            "cache": str(self._market.path(instrument)),
+            "update": update,
+            "spread": spread,
+        }
         return Series(
             ctx.name, "dukascopy", label, False, bars, PROXY_TEXT.get(source_id), (), provenance
         )
+
+    async def _spread(
+        self, instrument: Instrument, bid: Bars, ctx: MarketContext, refresh: bool, as_of: int
+    ) -> dict[str, Any]:
+        """The measured bid/ask spread of the recent days (Dukascopy also has ask candles)."""
+        ask = instrument.with_side("ASK")
+        days = self._cfg.spread_days
+        end = datetime.fromtimestamp(as_of, UTC).date()
+        error = None
+        if refresh:
+            try:
+                ask_bars = await self._market.recent(ask, days)
+            except DataError as exc:
+                error = str(exc)
+                ask_bars = await asyncio.to_thread(
+                    self._market.load, ask, end - timedelta(days=days), end
+                )
+        else:
+            ask_bars = await asyncio.to_thread(
+                self._market.load, ask, end - timedelta(days=days), end
+            )
+        out = await asyncio.to_thread(
+            measure_spread,
+            bid,
+            ask_bars,
+            start=as_of - days * 86400,
+            end=as_of,
+            window=ctx.window,
+            cost_points=ctx.spec.cost_points,
+        )
+        return {**out, "days": days, "error": error}
 
     async def _from_vault(
         self, ctx: MarketContext, root: str, first: date, last: date, source_id: str
@@ -308,6 +386,12 @@ class ApexService:
         result = await asyncio.to_thread(analyze, series, ctx, self._cfg, when, track_record=track)
         result["replay"] = as_of is not None
         result["data"]["source_id"] = series.provenance.get("source_id")
+        provenance = result["data"]["provenance"]
+        result["data"]["update"] = provenance.get("update")
+        result["data"]["spread"] = provenance.get("spread")
+        result["data"]["provenance"] = {
+            k: v for k, v in provenance.items() if k not in ("update", "spread")
+        }
         analysis_id = (
             "apa-"
             + hashlib.sha256(
@@ -315,6 +399,12 @@ class ApexService:
             ).hexdigest()[:16]
         )
         result["id"] = analysis_id
+        calibration = None
+        if track and latest:
+            checked = (latest.get("result") or {}).get("calibration") or {}
+            calibration = (checked.get("verdict") or {}).get("code")
+        result["narrative"] = narrate(result, calibration)
+        self._remember(analysis_id, series.until(when))
         await self.store.add_analysis(analysis_id, result)
         recorded = 0
         for c in result["candidates"]:
@@ -379,6 +469,301 @@ class ApexService:
             ]
             stats["synthetic" if synthetic else "real"] = summarize(done, self._cfg.min_samples)
         return {"candidates": items, "stats": stats}
+
+    # Chart ----------------------------------------------------------------------------------
+
+    def _remember(self, analysis_id: str, known: Series) -> None:
+        self._seen[analysis_id] = known
+        while len(self._seen) > 6:  # a few markets' latest analyses
+            self._seen.pop(next(iter(self._seen)))
+
+    async def chart(self, analysis_id: str, minutes: int, limit: int = 300) -> dict[str, Any]:
+        """Bars of an analysis at another timeframe — only bars known at its moment. A last
+        bar still forming then is marked ``forming``; ``same_data`` says whether the bars are
+        the ones the analysis saw (the cache may have healed since)."""
+        if minutes not in CHART_MINUTES:
+            raise ApexError(
+                "TIMEFRAME", f"Charts come in {', '.join(map(str, CHART_MINUTES))} minutes."
+            )
+        stored = await self.store.analysis(analysis_id)
+        if stored is None:
+            raise ApexError("NOT_FOUND", "No such analysis.", status=404)
+        as_of = int(stored["as_of"])
+        known = self._seen.get(analysis_id)
+        if known is None:
+            source_id = stored["data"].get("source_id")
+            series = await self.series(
+                stored["market"],
+                as_of=as_of,
+                source=None if self.fixture or not source_id else str(source_id),
+            )
+            known = series.until(as_of)
+            self._remember(analysis_id, known)
+        limit = max(20, min(int(limit), 1000))
+        # one bar more than shown, so a first bucket cut in half falls off
+        span = min(len(known.bars), (limit + 1) * minutes)
+        tail = known.bars.between(int(known.bars.t[-span]), as_of + 1) if span else known.bars
+        bars = await asyncio.to_thread(resample, tail, minutes) if minutes > 1 and span else tail
+        forming = bool(len(bars)) and int(bars.t[-1]) + 60 * minutes > as_of
+        cut = slice(max(0, len(bars) - limit), len(bars))
+        rows = [
+            [int(t), float(o), float(h), float(lo), float(c), float(v)]
+            for t, o, h, lo, c, v in zip(
+                bars.t[cut], bars.open[cut], bars.high[cut], bars.low[cut], bars.close[cut],
+                bars.volume[cut], strict=True,
+            )
+        ]  # fmt: skip
+        return {
+            "analysis_id": analysis_id,
+            "market": stored["market"],
+            "minutes": minutes,
+            "as_of": as_of,
+            "label": known.label,
+            "synthetic": known.synthetic,
+            "prices": known.provenance.get("prices") or "trades",
+            "same_data": known.digest() == stored["data"]["sha256"],
+            "forming": forming,
+            "bars": rows,
+        }
+
+    # Data status and repair -----------------------------------------------------------------
+
+    async def data_status(self, market: str) -> dict[str, Any]:
+        """Where each source's data stands, why an analysis may be blocked, and what fixes it."""
+        ctx = self._ctx(market)
+        now = self._now()
+        first, last = self._span(now)
+        out: dict[str, Any] = {
+            "market": ctx.name,
+            "checked_at": now,
+            "fixture": self.fixture,
+            "span": [first.isoformat(), last.isoformat()],
+            "market_open": bool(trading(np.array([now - 60]))[0]),
+            "sources": [],
+            "causes": [],
+            "repair": self._repairs.get(ctx.name),
+        }
+        if self.fixture:
+            series = await self.series(ctx.name, as_of=now)
+            newest = int(series.bars.t[-1]) + 60 if len(series.bars) else None
+            out["sources"].append(
+                {
+                    "id": "fixture",
+                    "kind": "fixture",
+                    "label": SYNTHETIC_LABEL,
+                    "state": "ok",
+                    "bars": len(series.bars),
+                    "newest_bar": newest,
+                }
+            )
+            out["causes"].append(
+                _cause(
+                    "SYNTHETIC",
+                    "INFO",
+                    "Generated test data (tests and demos) — nothing to repair, and nothing it "
+                    "shows says anything about the market.",
+                )
+            )
+            return out
+        for source_id in ctx.spec.sources:
+            kind, _, name = source_id.partition(":")
+            try:
+                if kind == "dukascopy":
+                    found = await self._dukascopy_status(ctx, name, source_id, first, last, now)
+                elif kind == "vault":
+                    found = await self._vault_status(name, source_id, first, last)
+                else:
+                    continue
+            except (DataError, HubError, ValueError, OSError) as exc:
+                found = {"id": source_id, "kind": kind, "state": "error", "message": str(exc)}
+            out["sources"].append(found)
+        out["active"] = next(
+            (s["id"] for s in out["sources"] if s["state"] in ("ok", "warn", "error")), None
+        )
+        out["causes"] = _causes(ctx, out["sources"], out["active"])
+        return out
+
+    async def _dukascopy_status(
+        self, ctx: MarketContext, name: str, source_id: str, first: date, last: date, now: int
+    ) -> dict[str, Any]:
+        instrument = self._instrument(name)
+        yesterday = last - timedelta(days=1)
+        coverage = await asyncio.to_thread(self._market.coverage, instrument)
+        days = await asyncio.to_thread(self._market.days, instrument, first, yesterday)
+        newest = None
+        behind = None
+        if coverage:
+            tail = await asyncio.to_thread(self._market.load, instrument, coverage[1], coverage[1])
+            if len(tail):
+                newest = int(tail.t[-1]) + 60
+                today_start = int(datetime(last.year, last.month, last.day, tzinfo=UTC).timestamp())
+                behind = len(trading_minutes(newest, today_start))
+        counts: dict[str, int] = {}
+        for d in days:
+            counts[d["state"]] = counts.get(d["state"], 0) + 1
+        suspicious = _ranges([d for d in days if d["state"] in SUSPICIOUS])
+        reports = self._market.reports(instrument)
+        syncs = [r for r in reports if r.get("kind") == "sync"]
+        bid = (
+            await asyncio.to_thread(
+                self._market.load, instrument, last - timedelta(days=self._cfg.spread_days), last
+            )
+            if coverage
+            else None
+        )
+        spread = None
+        if bid is not None and len(bid):
+            ask = await asyncio.to_thread(
+                self._market.load,
+                instrument.with_side("ASK"),
+                last - timedelta(days=self._cfg.spread_days),
+                last,
+            )
+            spread = measure_spread(
+                bid, ask, start=now - self._cfg.spread_days * 86400, end=now,
+                window=ctx.window, cost_points=ctx.spec.cost_points,
+            )  # fmt: skip
+        last_report = reports[-1] if reports else None
+        if coverage is None:
+            state = "none"
+        elif (last_report and last_report.get("error")) or (behind or 0) > 1380:
+            state = "error"
+        elif suspicious or (spread and spread.get("exceeds_costs")):
+            state = "warn"
+        else:
+            state = "ok"
+        spec = self._settings.learning.instruments[name]
+        return {
+            "id": source_id,
+            "kind": "dukascopy",
+            "label": spec.label or f"Dukascopy {spec.symbol}",
+            "prices": "bid",
+            "proxy": PROXY_TEXT.get(source_id),
+            "state": state,
+            "cache": str(self._market.path(instrument)),
+            "coverage": {
+                "first": coverage[0].isoformat(),
+                "last": coverage[1].isoformat(),
+                "bars": coverage[2],
+            }
+            if coverage
+            else None,
+            "newest_bar": newest,
+            "behind_minutes": behind,
+            "days": counts,
+            "suspicious": suspicious,
+            "last_update": last_report,
+            "last_sync": syncs[-1] if syncs else None,
+            "updates": reports[-8:],
+            "spread": spread,
+        }
+
+    async def _vault_status(
+        self, root: str, source_id: str, first: date, last: date
+    ) -> dict[str, Any]:
+        ready = await self._vault.readiness(
+            root, 1, None, first.isoformat(), (last + timedelta(days=1)).isoformat()
+        )
+        described = ready.get("series") or {}
+        return {
+            "id": source_id,
+            "kind": "vault",
+            "label": described.get("source") or f"Data Vault {root}",
+            "prices": "trades",
+            "state": "ok" if ready["runnable"] else "none",
+            "readiness": ready["status"],
+            "message": ready["message"],
+            "action": ready.get("action"),
+            "coverage": {"first": described.get("start"), "last": described.get("end")}
+            if described
+            else None,
+        }
+
+    async def repair(self, market: str) -> dict[str, Any]:
+        """Re-check every trading day without candles in the analysis span and download what is
+        missing (bid, and ask for the spread), in the background. Free Dukascopy data only —
+        Data Vault sources are never bought from here."""
+        ctx = self._ctx(market)
+        if self.fixture:
+            return {
+                "state": "COMPLETED",
+                "fixture": True,
+                "steps": [],
+                "message": "Generated test data needs no repair.",
+            }
+        task = self._repair_tasks.get(ctx.name)
+        if task and not task.done():
+            return self._repairs[ctx.name]
+        self._repairs[ctx.name] = {
+            "state": "RUNNING",
+            "started": self._now(),
+            "finished": None,
+            "steps": [],
+            "message": None,
+        }
+        self._repair_tasks[ctx.name] = asyncio.create_task(self._repair(ctx))
+        return self._repairs[ctx.name]
+
+    async def _repair(self, ctx: MarketContext) -> None:
+        state = self._repairs[ctx.name]
+        first, last = self._span(self._now())
+        yesterday = last - timedelta(days=1)
+        try:
+            for source_id in ctx.spec.sources:
+                kind, _, name = source_id.partition(":")
+                if kind != "dukascopy":
+                    state["steps"].append(
+                        {
+                            "source": source_id,
+                            "ok": None,
+                            "skipped": "Data Vault data is imported or bought in QuantLab → Data "
+                            "Vault; APEX never downloads or buys it.",
+                        }
+                    )
+                    continue
+                instrument = self._instrument(name)
+                spread_from = yesterday - timedelta(days=self._cfg.spread_days)
+                for item, start in (
+                    (instrument, first),
+                    (instrument.with_side("ASK"), spread_from),
+                ):
+                    step: dict[str, Any] = {
+                        "source": source_id,
+                        "side": item.side,
+                        "range": [start.isoformat(), last.isoformat()],
+                        "ok": None,
+                        "error": None,
+                    }
+                    try:
+                        await self._market.sync(item, start, yesterday, recheck=True)
+                        await self._market.today(item)
+                        step["ok"] = True
+                    except DataError as exc:
+                        step["ok"], step["error"] = False, str(exc)
+                    syncs = [r for r in self._market.reports(item) if r.get("kind") == "sync"]
+                    step["report"] = syncs[-1] if syncs else None
+                    state["steps"].append(step)
+            failed = [s for s in state["steps"] if s.get("ok") is False]
+            state["state"] = "FAILED" if failed else "COMPLETED"
+            state["message"] = (
+                failed[0]["error"]
+                if failed
+                else "Every trading day without candles was asked again; the cache is up to date."
+            )
+        except Exception as exc:  # reported, never retried silently
+            log.exception("APEX data repair failed")
+            state["state"], state["message"] = "FAILED", str(exc)[:500]
+        state["finished"] = self._now()
+        await self._bus.emit(
+            EventType.APEX_DATA,
+            message=f"APEX {ctx.name} data repair: {state['state'].lower()} — {state['message']}",
+            payload={"market": ctx.name, "state": state["state"]},
+        )
+
+    async def wait_repair(self, market: str, timeout: float = 60.0) -> None:  # noqa: ASYNC109
+        task = self._repair_tasks.get(market.upper())
+        if task and not task.done():
+            await asyncio.wait_for(asyncio.shield(task), timeout)
 
     # SENTINEL re-check ----------------------------------------------------------------------
 
@@ -542,6 +927,7 @@ def _brief(evaluation: dict[str, Any]) -> dict[str, Any]:
     result = evaluation.get("result") or {}
     oos = result.get("out_of_sample", {})
     whole = result.get("all", {})
+    calibration = result.get("calibration")
     return {
         "evaluation_id": evaluation["id"],
         "period": [evaluation["start"], evaluation["end"]],
@@ -554,4 +940,167 @@ def _brief(evaluation: dict[str, Any]) -> dict[str, Any]:
         "oos_filled": oos.get("filled"),
         "oos_expectancy_r": (oos.get("expectancy_r") or {}).get("mean"),
         "oos_ci": (oos.get("expectancy_r") or {}).get("ci"),
+        "calibration": {
+            "code": calibration["verdict"]["code"],
+            "skill": calibration.get("skill"),
+            "touches": calibration.get("touches", 0),
+        }
+        if calibration
+        else None,
     }
+
+
+CHART_MINUTES = (1, 5, 15, 60, 240)
+# Day states in the cache that mean "a trading day without candles".
+SUSPICIOUS = ("empty", "missing", "pending", "stored_empty", "not_fetched")
+
+
+def _cause(code: str, level: str, text: str, actions: list[str] | None = None) -> dict[str, Any]:
+    return {"code": code, "level": level, "text": text, "actions": actions or []}
+
+
+def _ranges(days: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Consecutive suspicious days (Saturdays don't break a range) → from, to, count, states."""
+    out: list[dict[str, Any]] = []
+    for d in days:
+        day = date.fromisoformat(d["day"])
+        if out:
+            prev = date.fromisoformat(out[-1]["to"])
+            gap = (day - prev).days
+            if gap == 1 or (gap == 2 and (prev + timedelta(days=1)).weekday() == 5):
+                out[-1]["to"] = d["day"]
+                out[-1]["days"] += 1
+                out[-1]["states"][d["state"]] = out[-1]["states"].get(d["state"], 0) + 1
+                continue
+        out.append({"from": d["day"], "to": d["day"], "days": 1, "states": {d["state"]: 1}})
+    return out
+
+
+def _remedy(error: str) -> str:
+    """What the owner can do about a failed update, by its reason."""
+    text = error.lower()
+    if "refused" in text:
+        return (
+            "Dukascopy refuses requests from this computer (HTTP 401/403). A VPN, proxy or "
+            "firewall can cause it — check the connection, then press Repair."
+        )
+    if "can't reach" in text:
+        return (
+            "No connection to Dukascopy's data API (jetta.dukascopy.com). Check the internet "
+            "connection, then press Repair."
+        )
+    if "in a row" in text:
+        return (
+            "Dukascopy answered without candles for several trading days. A short outage "
+            "usually: Repair asks again. If it stays, the API changed — tell JARVIS."
+        )
+    if "minute candles" in text or "api may have changed" in text:
+        return (
+            "Dukascopy's answer format changed. The decoder refuses it, so no wrong prices get "
+            "in — this needs a code update."
+        )
+    if "expected range" in text:
+        return "Prices outside price_range in config/learning.yaml — check the configured range."
+    return "Press Repair to try again; the reason above says what went wrong."
+
+
+def _causes(
+    ctx: MarketContext, sources: list[dict[str, Any]], active: str | None
+) -> list[dict[str, Any]]:
+    """Concrete causes, most important first, each with the actions that fix it."""
+    causes: list[dict[str, Any]] = []
+    if active is None:
+        gold = ctx.name == "XAUUSD"
+        causes.append(
+            _cause(
+                "NO_LOCAL_DATA",
+                "BLOCK",
+                f"No local minute data for {ctx.name}. "
+                + (
+                    "Repair downloads the free Dukascopy history (about two minutes)."
+                    if gold
+                    else "Import NQ/MNQ futures in the Data Vault, or let Repair download the "
+                    "free Dukascopy Nasdaq-100 CFD as a labelled proxy."
+                ),
+                ["repair"] if gold else ["vault", "repair"],
+            )
+        )
+        return causes
+    source = next(s for s in sources if s["id"] == active)
+    if source["kind"] == "dukascopy":
+        update = source.get("last_update") or {}
+        if update.get("error"):
+            causes.append(
+                _cause(
+                    "UPDATE_FAILED",
+                    "BLOCK" if (source.get("behind_minutes") or 0) > 1380 else "WARN",
+                    f"The last update failed: {update['error']} {_remedy(update['error'])}",
+                    ["repair"],
+                )
+            )
+        behind = source.get("behind_minutes") or 0
+        if behind > 1380:
+            causes.append(
+                _cause(
+                    "CACHE_BEHIND",
+                    "BLOCK",
+                    f"The cache ends {source['coverage']['last']} — {behind // 1380} trading "
+                    "day(s) before today are missing, so the newest bars are old. Repair asks "
+                    "Dukascopy for every missing day.",
+                    ["repair"],
+                )
+            )
+        holes = source.get("suspicious") or []
+        if holes:
+            days = sum(h["days"] for h in holes)
+            listed = ", ".join(
+                h["from"] if h["from"] == h["to"] else f"{h['from']} to {h['to']}"
+                for h in holes[:4]
+            )
+            causes.append(
+                _cause(
+                    "MISSING_DAYS",
+                    "WARN",
+                    f"{days} trading day(s) without candles in the analysis span ({listed}"
+                    f"{' …' if len(holes) > 4 else ''}). Holidays look like this too; Repair "
+                    "asks for every one again.",
+                    ["repair"],
+                )
+            )
+        spread = source.get("spread") or {}
+        if spread.get("measured") and spread.get("exceeds_costs"):
+            causes.append(
+                _cause(
+                    "SPREAD",
+                    "WARN",
+                    f"The measured bid/ask spread in the session (median "
+                    f"{spread['session_median']:g}) is above the configured round-trip costs "
+                    f"({spread['cost_points']:g}) — results look better than they are. Raise "
+                    "cost_points in config/apex.yaml.",
+                )
+            )
+        elif not spread.get("measured"):
+            causes.append(
+                _cause(
+                    "SPREAD_UNMEASURED",
+                    "INFO",
+                    "The bid/ask spread isn't measured: "
+                    + str(spread.get("reason") or "there are no recent bid candles.")
+                    + " Repair downloads the missing bid and ask candles.",
+                    ["repair"],
+                )
+            )
+        if source.get("proxy"):
+            causes.append(_cause("PROXY", "WARN", source["proxy"], ["vault"]))
+    if not [c for c in causes if c["level"] in ("BLOCK", "WARN")]:
+        newest = next((s.get("coverage") for s in sources if s["id"] == active), None) or {}
+        causes.insert(
+            0,
+            _cause(
+                "OK",
+                "OK",
+                f"Data complete through {newest.get('last', '—')}; today's bars are fetched "
+                "with each analysis.",
+            ),
+        )
+    return causes

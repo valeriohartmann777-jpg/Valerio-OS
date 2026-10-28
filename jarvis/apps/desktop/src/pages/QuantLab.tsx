@@ -30,8 +30,8 @@ import { Bots } from "./Bots";
  */
 
 const SECTIONS: { id: Section; modes: Mode[] }[] = [
-  { id: "Backtest Lab", modes: ["Simple", "Research", "Institutional"] },
   { id: "APEX", modes: ["Simple", "Research", "Institutional"] },
+  { id: "Backtest Lab", modes: ["Simple", "Research", "Institutional"] },
   { id: "Data Vault", modes: ["Simple", "Research", "Institutional"] },
   { id: "Idea Inbox", modes: ["Simple", "Research", "Institutional"] },
   { id: "Research Room", modes: ["Simple", "Research", "Institutional"] },
@@ -61,10 +61,10 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 // Old links: #/bots and #/quantlab/bots open the MT5 Bots section.
 const ALIASES: Record<string, Section> = { bots: "MT5 Bots" };
 
-/** The section in the address (#/quantlab/<slug>); Backtest Lab when none or unknown. */
+/** The section in the address (#/quantlab/<slug>); APEX — the trading screen — when none or unknown. */
 function sectionOf(value: string | undefined): Section {
-  if (!value) return "Backtest Lab";
-  return ALIASES[value] ?? SECTIONS.find((s) => slug(s.id) === value)?.id ?? "Backtest Lab";
+  if (!value) return "APEX";
+  return ALIASES[value] ?? SECTIONS.find((s) => slug(s.id) === value)?.id ?? "APEX";
 }
 
 export function QuantLab() {

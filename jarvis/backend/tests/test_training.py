@@ -317,7 +317,13 @@ class SyntheticMarket(MarketData):
         self.syncs: list[tuple[str, date, date]] = []
 
     async def sync(
-        self, instrument: Instrument, start: date, end: date, progress: Progress | None = None
+        self,
+        instrument: Instrument,
+        start: date,
+        end: date,
+        progress: Progress | None = None,
+        *,
+        recheck: bool = False,
     ) -> int:
         self.syncs.append((instrument.name, start, end))
         if self.down:

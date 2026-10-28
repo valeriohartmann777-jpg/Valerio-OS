@@ -14,6 +14,8 @@ export interface ApexRate {
 
 export interface ApexTrackBrief {
   evaluation_id: string;
+  /** Calibration of the stated rates in that period (APEX-3). */
+  calibration?: { code: "CALIBRATED" | "MISCALIBRATED" | "INSUFFICIENT"; skill: number | null; touches: number } | null;
   period: [string, string];
   synthetic: boolean;
   data: string | null;
@@ -138,6 +140,73 @@ export interface ApexRejected {
   reason: string;
 }
 
+/** What one data update did (written next to the cache, ``_checks.json``). */
+export interface ApexUpdateReport {
+  kind: "sync" | "today";
+  at: number;
+  side: "BID" | "ASK";
+  range?: [string, string];
+  recheck?: boolean;
+  code?: string | null;
+  asked?: number;
+  with_data?: number;
+  empty?: number;
+  missing?: number;
+  pending?: number;
+  failed?: number;
+  /** HTTP status (or error type) → count. */
+  answers?: Record<string, number>;
+  empty_run?: [string, string, number] | null;
+  error: string | null;
+  seconds?: number;
+}
+
+export interface ApexUpdate {
+  requested: boolean;
+  ok: boolean | null;
+  error: string | null;
+  report: ApexUpdateReport | null;
+}
+
+/** Measured ask − bid on the recent days (Dukascopy). */
+export interface ApexSpread {
+  measured: boolean;
+  minutes: number;
+  reason?: string;
+  from?: number;
+  to?: number;
+  median?: number;
+  p90?: number;
+  session_median?: number;
+  session_p90?: number;
+  max?: number;
+  negative?: number;
+  cost_points: number;
+  exceeds_costs?: boolean;
+  days?: number;
+  error?: string | null;
+}
+
+export interface ApexQualitySummary {
+  bars: number;
+  first?: number;
+  last_close?: number;
+  behind_minutes?: number;
+  missing_share?: number | null;
+  days?: number;
+  largest_gaps?: { from: string; to: string; t: number; minutes: number }[];
+  spikes?: { t: number; at: string; kind: "close" | "wick"; sigma: number }[];
+  large_moves?: { t: number; at: string; move_pct: number; sigma: number }[];
+}
+
+/** JARVIS's written reading of an analysis — built only from its counted numbers. */
+export interface ApexNarrative {
+  headline: string;
+  points: string[];
+  caveats: string[];
+  question: string;
+}
+
 export interface ApexAnalysis {
   id: string;
   engine: string;
@@ -153,13 +222,16 @@ export interface ApexAnalysis {
     proxy: string | null;
     sha256: string;
     provenance: Record<string, unknown>;
+    update?: ApexUpdate | null;
+    spread?: ApexSpread | null;
   };
   quality: {
     status: "OK" | "WARN" | "BLOCK";
     stale: boolean;
     findings: ApexFinding[];
-    summary: Record<string, number>;
+    summary: ApexQualitySummary;
   };
+  narrative?: ApexNarrative;
   spec: { label: string; tick: number; point_value: number; unit: string; cost_points: number };
   price?: number | null;
   atr15?: number;
@@ -239,6 +311,91 @@ export interface ApexEvaluation {
   error: string | null;
   created_at: string;
   finished_at: string | null;
+}
+
+/** An analysis' bars at another timeframe — only what was known at its moment. */
+export interface ApexChartData {
+  analysis_id: string;
+  market: ApexMarketName;
+  minutes: number;
+  as_of: number;
+  label: string;
+  synthetic: boolean;
+  prices: string;
+  /** false when the cache changed (healed) since the analysis. */
+  same_data: boolean;
+  /** The last bar was still forming at the moment. */
+  forming: boolean;
+  /** [time, open, high, low, close, volume] */
+  bars: [number, number, number, number, number, number][];
+}
+
+export type ApexTimeframe = 1 | 5 | 15 | 60 | 240;
+
+export interface ApexCause {
+  code: string;
+  level: "OK" | "INFO" | "WARN" | "BLOCK";
+  text: string;
+  actions: ("repair" | "vault")[];
+}
+
+export interface ApexDayRange {
+  from: string;
+  to: string;
+  days: number;
+  states: Record<string, number>;
+}
+
+export interface ApexSourceStatus {
+  id: string;
+  kind: "dukascopy" | "vault" | "fixture";
+  label?: string;
+  prices?: string;
+  proxy?: string | null;
+  state: "ok" | "warn" | "error" | "none";
+  message?: string;
+  action?: string | null;
+  readiness?: string;
+  cache?: string;
+  coverage?: { first: string | null; last: string | null; bars?: number } | null;
+  newest_bar?: number | null;
+  behind_minutes?: number | null;
+  days?: Record<string, number>;
+  suspicious?: ApexDayRange[];
+  last_update?: ApexUpdateReport | null;
+  last_sync?: ApexUpdateReport | null;
+  updates?: ApexUpdateReport[];
+  spread?: ApexSpread | null;
+  bars?: number;
+}
+
+export interface ApexRepair {
+  state: "RUNNING" | "COMPLETED" | "FAILED";
+  started?: number;
+  finished?: number | null;
+  steps: {
+    source: string;
+    side?: string;
+    range?: [string, string];
+    ok: boolean | null;
+    error?: string | null;
+    skipped?: string;
+    report?: ApexUpdateReport | null;
+  }[];
+  message: string | null;
+  fixture?: boolean;
+}
+
+export interface ApexDataStatus {
+  market: ApexMarketName;
+  checked_at: number;
+  fixture: boolean;
+  span: [string, string];
+  market_open: boolean;
+  sources: ApexSourceStatus[];
+  active?: string | null;
+  causes: ApexCause[];
+  repair: ApexRepair | null;
 }
 
 /** SENTINEL's independent re-check of a stored analysis. */

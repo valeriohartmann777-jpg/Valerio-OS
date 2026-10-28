@@ -109,3 +109,32 @@ async def evaluation(evaluation_id: str, rt: RuntimeDep) -> dict[str, Any]:
         return await rt.apex.evaluation(evaluation_id)
     except ApexError as exc:
         raise _error(exc) from None
+
+
+@router.get("/apex/analyses/{analysis_id}/chart")
+async def chart(
+    analysis_id: str, rt: RuntimeDep, minutes: int = 15, limit: int = 300
+) -> dict[str, Any]:
+    """The analysis' bars at another timeframe — only what was known at its moment."""
+    try:
+        return await rt.apex.chart(analysis_id, minutes, limit)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.get("/apex/data/{market}")
+async def data_status(market: str, rt: RuntimeDep) -> dict[str, Any]:
+    """Coverage, suspicious days, update reports and concrete causes with repair actions."""
+    try:
+        return await rt.apex.data_status(market)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.post("/apex/data/{market}/repair")
+async def repair(market: str, rt: RuntimeDep) -> dict[str, Any]:
+    """Re-check every trading day without candles and download what is missing (free data)."""
+    try:
+        return await rt.apex.repair(market)
+    except ApexError as exc:
+        raise _error(exc) from None

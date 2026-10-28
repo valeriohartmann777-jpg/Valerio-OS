@@ -160,6 +160,48 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-034 — APEX data repair: no silent "fetched" days, loud outages, one trading screen
+
+- **Decision:**
+  - The market cache no longer marks a trading day (Sunday-Friday) as fetched when Dukascopy
+    answers without candles or with 404. Such days are noted in `_checks.json` and asked again
+    (every update while ≤ 5 days old, every 12 h while ≤ 45 days old, always on a repair).
+    Days an older version stored as empty are re-checked the same way.
+  - Three or more trading days in a row without candles fail the update with that reason
+    ("not a holiday: the data API changed or is down") instead of succeeding with nothing.
+  - Every update writes a report (days asked, with data, empty, 404, failed, HTTP answers,
+    error). A failed update is shown with the analysis and in **APEX → Data** with concrete
+    causes and one **Repair** action.
+  - Quality gate (engine `apex-1.1.0`): gaps measured over the span the data covers inside the
+    window; no bar in the window → `NO_RECENT_DATA` (BLOCK); spikes only on consecutive minutes
+    and only moves that reverse at once or wicks beyond both neighbours; held large moves are
+    listed as `LARGE_MOVES` (INFO).
+  - Ask candles of the recent days measure the gold spread; it is shown and warned about when
+    it exceeds the configured costs.
+  - APEX becomes one screen (chart in five timeframes, structure, long/short/no-trade,
+    candidates, data status, JARVIS's deterministic reading) with journal, track record, data
+    and SENTINEL as sub-areas; QuantLab opens on APEX; `#/apex` links to it.
+- **Reason:** The owner's screenshot (XAUUSD blocked: STALE 26,228 minutes, GAPS 100 %, SPIKES).
+  Diagnosis (`docs/apex/APEX_DATA_DIAGNOSIS.md`): GAPS 100 % counted zero missing minutes (a
+  calculation error caused by stale data); SPIKES counted weekend and daily-break reopens; the
+  cache could freeze without any error because empty answers were stored as fetched days and
+  failed updates were only written to an invisible note.
+- **Alternatives considered:**
+  - Loosening or dropping GAPS/SPIKES so the analysis turns green. Rejected: every check still
+    fires on the case it exists for (tests plant a hole and a bad tick).
+  - Treating every empty day as an outage. Rejected: holidays are real; only runs of ≥ 3
+    trading days fail the update.
+  - Using the ask candles to change fills and stops in the resolver. Not yet: it changes the
+    track record's meaning and needs ask history for the whole period; the measured spread is
+    shown against the costs first.
+  - An LLM-written analysis text. Rejected for the APEX screen: the reading is built only from
+    the analysis' numbers; the chat (`apex_analysis`) can go deeper.
+  - A sixth top-level tab for APEX. Rejected: D-032 fixes five tabs; QuantLab opens on APEX.
+- **Consequences:** `GET /apex/data/{market}`, `POST /apex/data/{market}/repair`,
+  `GET /apex/analyses/{id}/chart?minutes=`; event `apex.data`; SENTINEL reports an `ENGINE`
+  check when a stored analysis was made with another engine version.
+- **Date:** 2026-10-28
+
 ## D-033 — JARVIS APEX: counted rates and rule-based candidates on top of the existing level stack
 
 - **Decision:** APEX (`backend/jarvis/apex/`) analyses XAUUSD and NQ/MNQ at a moment `as_of`

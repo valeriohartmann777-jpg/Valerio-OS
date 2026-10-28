@@ -2,12 +2,16 @@ import type {
   ApexAnalysis,
   ApexAudit,
   ApexCandidate,
+  ApexChartData,
+  ApexDataStatus,
   ApexEvaluation,
   ApexJournal,
   ApexMarket,
   ApexMarketName,
   ApexRate,
+  ApexScenario,
   ApexSummary,
+  ApexTimeframe,
 } from "@jarvis/protocol";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -16,10 +20,14 @@ import { Icon } from "../../ui/icons";
 import { Button, cx } from "../../ui/primitives";
 import { EmptyState, LoadingState, Panel, StatusPill, type PillTone } from "../../ui/shell";
 import { ApexChart } from "./ApexChart";
+import { ApexData, CauseList, SpreadText } from "./ApexData";
+import { structureKey, TIMEFRAMES } from "./chartView";
 
 /**
- * JARVIS APEX in QuantLab: market structure, support/resistance zones, counted scenario rates
- * and entry / stop / target candidates — each candidate journaled and judged on later bars.
+ * JARVIS APEX — one screen for the trade: symbol, timeframe, a large chart with the zones,
+ * market structure, long / short / no-trade scenarios with their counted rates, rule-based
+ * entry / stop / target candidates, the data status and JARVIS's written reading. Journal,
+ * track record, data and SENTINEL's re-check live in their own sub-areas.
  * Research only: nothing here places an order.
  */
 
@@ -35,12 +43,30 @@ const STATE_TONE: Record<string, PillTone> = {
   open: "info",
 };
 
-function savedMarket(): ApexMarketName {
+type Area = "analysis" | "journal" | "track" | "data" | "sentinel";
+const AREAS: { id: Area; label: string }[] = [
+  { id: "analysis", label: "Chart & analysis" },
+  { id: "journal", label: "Journal" },
+  { id: "track", label: "Track record" },
+  { id: "data", label: "Data" },
+  { id: "sentinel", label: "SENTINEL check" },
+];
+
+function saved<T extends string | number>(key: string, allowed: readonly T[], fallback: T): T {
   try {
-    const value = localStorage.getItem("apex.market");
-    return MARKETS.includes(value as ApexMarketName) ? (value as ApexMarketName) : "XAUUSD";
+    const raw = localStorage.getItem(key);
+    const found = allowed.find((a) => String(a) === raw);
+    return found ?? fallback;
   } catch {
-    return "XAUUSD";
+    return fallback;
+  }
+}
+
+function remember(key: string, value: string | number): void {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    /* per-device convenience only */
   }
 }
 
@@ -49,25 +75,36 @@ const pct = (p: number) => `${(p * 100).toFixed(1)}%`;
 
 export function ApexPanel() {
   const [markets, setMarkets] = useState<ApexMarket[] | null>(null);
-  const [market, setMarketState] = useState<ApexMarketName>(savedMarket);
-  const [analysis, setAnalysis] = useState<ApexAnalysis | null>(null);
+  const [market, setMarketState] = useState<ApexMarketName>(() => saved("apex.market", MARKETS, "XAUUSD"));
+  const [minutes, setMinutesState] = useState<ApexTimeframe>(() =>
+    saved<ApexTimeframe>("apex.timeframe", TIMEFRAMES.map((t) => t.minutes), 15),
+  );
+  const [area, setAreaState] = useState<Area>(() => saved("apex.area", AREAS.map((a) => a.id), "analysis"));
+  const [analyses, setAnalyses] = useState<Partial<Record<ApexMarketName, ApexAnalysis>>>({});
+  const [chart, setChart] = useState<ApexChartData | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<{ message: string; suggestion?: string | null } | null>(null);
+  const [error, setError] = useState<{ message: string; suggestion?: string | null; code?: string | null } | null>(null);
   const [journal, setJournal] = useState<ApexJournal | null>(null);
   const [evaluations, setEvaluations] = useState<ApexEvaluation[]>([]);
+  const [status, setStatus] = useState<ApexDataStatus | null>(null);
 
+  const analysis = analyses[market] ?? null;
+  const setArea = (next: Area) => {
+    setAreaState(next);
+    remember("apex.area", next);
+  };
   const setMarket = (next: ApexMarketName) => {
     setMarketState(next);
-    setAnalysis(null);
     setSelected(null);
     setError(null);
-    try {
-      localStorage.setItem("apex.market", next);
-    } catch {
-      /* per-device convenience only */
-    }
+    setStatus(null);
+    remember("apex.market", next);
+  };
+  const setMinutes = (next: ApexTimeframe) => {
+    setMinutesState(next);
+    remember("apex.timeframe", next);
   };
 
   const loadSide = useCallback(async () => {
@@ -76,10 +113,30 @@ export function ApexPanel() {
     setJournal(j);
     setEvaluations(e);
   }, [market]);
+  const loadStatus = useCallback(async () => setStatus(await api.apexData(market)), [market]);
 
   useEffect(() => {
     loadSide().catch(() => setError({ message: "The backend isn't reachable." }));
-  }, [loadSide]);
+    loadStatus().catch(() => undefined);
+  }, [loadSide, loadStatus]);
+
+  // The latest stored analysis of this market is shown at once (local data, no new download).
+  useEffect(() => {
+    if (analyses[market]) return;
+    let live = true;
+    api
+      .apexAnalyses(market)
+      .then(async (rows) => {
+        const latest = rows[0];
+        if (!latest || !live) return;
+        const full = await api.apexAnalysis(latest.id);
+        if (live) setAnalyses((a) => (a[market] ? a : { ...a, [market]: full }));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [market, analyses]);
 
   const running = evaluations.find((e) => e.state === "RUNNING");
   useEffect(() => {
@@ -87,6 +144,30 @@ export function ApexPanel() {
     const timer = setInterval(() => void loadSide(), 1000);
     return () => clearInterval(timer);
   }, [running, loadSide]);
+
+  const repairing = status?.repair?.state === "RUNNING";
+  useEffect(() => {
+    if (!repairing) return;
+    const timer = setInterval(() => void loadStatus(), 1000);
+    return () => clearInterval(timer);
+  }, [repairing, loadStatus]);
+
+  // The chart in the chosen timeframe — only bars the analysis knew.
+  const analysisId = analysis?.id;
+  useEffect(() => {
+    if (!analysisId) {
+      setChart(null);
+      return;
+    }
+    let live = true;
+    api
+      .apexChart(analysisId, minutes, minutes === 1 ? 480 : 600)
+      .then((c) => live && setChart(c))
+      .catch(() => live && setChart(null));
+    return () => {
+      live = false;
+    };
+  }, [analysisId, minutes]);
 
   const info = markets?.find((m) => m.market === market);
   const fixture = info?.fixture ?? false;
@@ -97,85 +178,218 @@ export function ApexPanel() {
     setError(null);
     try {
       const out = await api.apexAnalyze(market, { refresh: refresh && !fixture });
-      setAnalysis(out);
+      setAnalyses((a) => ({ ...a, [market]: out }));
       setSelected(out.candidates[0]?.id ?? null);
-      await loadSide();
+      setArea("analysis");
+      await Promise.all([loadSide(), loadStatus()]);
     } catch (err) {
-      setError(err instanceof ApiError ? { message: err.message, suggestion: err.suggestion } : { message: "That didn't work." });
+      setError(
+        err instanceof ApiError
+          ? { message: err.message, suggestion: err.suggestion, code: err.code }
+          : { message: "That didn't work." },
+      );
+      void loadStatus();
     } finally {
       setBusy(false);
     }
   };
 
+  const repair = async () => {
+    try {
+      const started = await api.apexRepair(market);
+      setStatus((s) => (s ? { ...s, repair: started } : s));
+      setArea("data");
+      await loadStatus();
+    } catch (err) {
+      setError(err instanceof ApiError ? { message: err.message, suggestion: err.suggestion } : { message: "The repair didn't start." });
+    }
+  };
+
   const candidate = useMemo(() => analysis?.candidates.find((c) => c.id === selected) ?? null, [analysis, selected]);
+  const brief = info?.track_record;
+  const calibration = brief && analysis && brief.synthetic === analysis.data.synthetic ? (brief.calibration?.code ?? null) : null;
 
   return (
-    <div className="flex flex-col gap-5" data-testid="apex-panel">
-      <Panel
-        title="APEX · structure, zones, candidates"
-        aside={
-          <span className="flex items-center gap-2 text-[12px] text-fg-muted">
-            <Icon name="lock" size={13} /> Research only — no orders
-          </span>
-        }
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <div role="group" aria-label="Market" className="flex gap-1.5">
-            {MARKETS.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMarket(m)}
-                aria-pressed={market === m}
-                className={cx(
-                  "h-9 rounded-lg border px-3.5 text-[13px] font-bold",
-                  market === m ? "border-quant bg-quant/15 text-fg" : "border-control/70 text-fg-muted hover:text-fg",
-                )}
-                data-testid={`apex-market-${m}`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-          <Button variant="primary" size="lg" onClick={() => void run()} disabled={busy} reason={busy ? "Analysing…" : null} data-testid="apex-analyze">
-            <Icon name="target" size={15} /> {busy ? "Analysing…" : "Analyse now"}
-          </Button>
-          {!fixture && (
-            <label className="flex items-center gap-2 text-[13px] text-fg-muted">
-              <input type="checkbox" checked={refresh} onChange={(e) => setRefresh(e.target.checked)} data-testid="apex-refresh" />
-              Update free data first (Dukascopy; the Data Vault is never charged)
-            </label>
+    <div className="flex flex-col gap-4" data-testid="apex-panel">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-hairline-strong bg-surface/90 px-4 py-3">
+        <Segmented label="Symbol">
+          {MARKETS.map((m) => (
+            <SegmentButton key={m} active={market === m} onClick={() => setMarket(m)} testId={`apex-market-${m}`} bold>
+              {m}
+            </SegmentButton>
+          ))}
+        </Segmented>
+        <Segmented label="Timeframe">
+          {TIMEFRAMES.map((t) => (
+            <SegmentButton key={t.minutes} active={minutes === t.minutes} onClick={() => setMinutes(t.minutes)} testId={`apex-tf-${t.minutes}`}>
+              {t.label}
+            </SegmentButton>
+          ))}
+        </Segmented>
+        <Button variant="primary" size="lg" onClick={() => void run()} disabled={busy} reason={busy ? "Analysing…" : null} data-testid="apex-analyze">
+          <Icon name="target" size={15} /> {busy ? "Analysing…" : "Analyse now"}
+        </Button>
+        {!fixture && (
+          <label className="flex items-center gap-2 text-[12px] text-fg-muted" title="Free Dukascopy data; the Data Vault is never charged">
+            <input type="checkbox" checked={refresh} onChange={(e) => setRefresh(e.target.checked)} data-testid="apex-refresh" />
+            Update data first
+          </label>
+        )}
+        <DataChip analysis={analysis} status={status} onOpen={() => setArea("data")} />
+        <span className="ml-auto flex items-center gap-2 text-[12px] text-fg-muted">
+          <Icon name="lock" size={13} /> Research only — no orders
+        </span>
+      </div>
+
+      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-hairline-strong bg-surface/80 p-1" aria-label="APEX">
+        {AREAS.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => setArea(a.id)}
+            aria-current={area === a.id ? "page" : undefined}
+            className={cx(
+              "min-h-9 flex-1 rounded-lg px-3 text-[13px] font-semibold whitespace-nowrap transition-colors",
+              area === a.id ? "bg-surface-2 text-fg shadow-[inset_0_-3px_0_var(--area)]" : "text-fg-muted hover:bg-white/5 hover:text-fg",
+            )}
+            data-testid={`apex-tab-${a.id}`}
+          >
+            {a.label}
+          </button>
+        ))}
+      </nav>
+
+      {error && (
+        <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-[13px]" role="alert" data-testid="apex-error">
+          <p className="font-semibold text-danger">{error.message}</p>
+          {error.suggestion && <p className="mt-1 text-fg-muted">{error.suggestion}</p>}
+          {status && (
+            <div className="mt-2">
+              <CauseList causes={status.causes} onRepair={() => void repair()} repairing={repairing} compact />
+            </div>
           )}
         </div>
-        <p className="mt-3 max-w-[860px] text-[13px] leading-relaxed text-fg-muted">
-          {info?.label ?? market}. APEX reads only bars that had closed at the moment of analysis. Every probability is a
-          counted rate from earlier data with its sample size and 95% interval; candidates follow fixed rules and are
-          written to a journal that later bars judge — wins and losses alike.
-        </p>
-        {error && (
-          <div className="mt-3 rounded-xl border border-danger/40 bg-danger/10 p-3 text-[13px]" role="alert" data-testid="apex-error">
-            <p className="font-semibold text-danger">{error.message}</p>
-            {error.suggestion && <p className="mt-1 text-fg-muted">{error.suggestion}</p>}
-          </div>
-        )}
-      </Panel>
-
-      {!analysis && !error && (
-        <EmptyState icon="target" title={`No ${market} analysis yet`}>
-          Press “Analyse now”. It takes a second on local data.
-        </EmptyState>
       )}
 
-      {analysis && <Analysis analysis={analysis} candidate={candidate} onSelect={setSelected} decimals={decimals} />}
-
-      <Journal journal={journal} market={market} onResolved={() => void loadSide()} decimals={decimals} />
-      <TrackRecord evaluations={evaluations} market={market} onStarted={() => void loadSide()} />
+      {area === "analysis" &&
+        (analysis ? (
+          <AnalysisView
+            analysis={analysis}
+            chart={chart}
+            minutes={minutes}
+            candidate={candidate}
+            onSelect={setSelected}
+            decimals={decimals}
+            calibration={calibration}
+            status={status}
+            onRepair={() => void repair()}
+            repairing={repairing}
+            onData={() => setArea("data")}
+          />
+        ) : (
+          !error && (
+            <EmptyState icon="target" title={`No ${market} analysis yet`}>
+              Press “Analyse now”. It reads the local data (and fetches the missing free days first).
+            </EmptyState>
+          )
+        ))}
+      {area === "journal" && <Journal journal={journal} market={market} onResolved={() => void loadSide()} decimals={decimals} />}
+      {area === "track" && <TrackRecord evaluations={evaluations} market={market} onStarted={() => void loadSide()} />}
+      {area === "data" && <ApexData market={market} status={status} onRepair={() => void repair()} onAnalyse={() => void run()} />}
+      {area === "sentinel" &&
+        (analysis ? (
+          <SentinelCheck analysis={analysis} />
+        ) : (
+          <EmptyState icon="check" title="Nothing to re-check yet">
+            Make an analysis first; SENTINEL then recomputes it from the data on disk.
+          </EmptyState>
+        ))}
     </div>
   );
 }
 
-function DataBanner({ analysis }: { analysis: ApexAnalysis }) {
+function Segmented({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="flex rounded-lg border border-control/60 p-0.5">
+      {children}
+    </div>
+  );
+}
+
+function SegmentButton({
+  active,
+  onClick,
+  testId,
+  bold,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  testId: string;
+  bold?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cx(
+        "h-8 rounded-md px-3 text-[13px]",
+        bold ? "font-bold" : "font-semibold",
+        active ? "bg-quant/20 text-fg" : "text-fg-muted hover:text-fg",
+      )}
+      data-testid={testId}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** One chip: is the data good enough, and if not, the main reason — a click opens APEX → Data. */
+function DataChip({ analysis, status, onOpen }: { analysis: ApexAnalysis | null; status: ApexDataStatus | null; onOpen: () => void }) {
+  const worst = status?.causes.find((c) => c.level === "BLOCK") ?? status?.causes.find((c) => c.level === "WARN");
+  const quality = analysis?.quality.status;
+  const tone: PillTone =
+    quality === "BLOCK" || worst?.level === "BLOCK"
+      ? "danger"
+      : quality === "WARN" || worst || analysis?.data.synthetic
+        ? "warning"
+        : status || analysis
+          ? "success"
+          : "muted";
+  const text = analysis?.data.synthetic
+    ? "Synthetic test data"
+    : worst
+      ? `Data: ${worst.code.replace(/_/g, " ").toLowerCase()}`
+      : quality
+        ? `Data ${quality}`
+        : status
+          ? "Data checked"
+          : "Data …";
+  return (
+    <button type="button" onClick={onOpen} className="rounded-full" data-testid="apex-data-chip" data-tone={tone} title="Open APEX → Data">
+      <StatusPill tone={tone}>{text}</StatusPill>
+    </button>
+  );
+}
+
+function DataBanner({
+  analysis,
+  status,
+  onRepair,
+  repairing,
+  onData,
+}: {
+  analysis: ApexAnalysis;
+  status: ApexDataStatus | null;
+  onRepair: () => void;
+  repairing: boolean;
+  onData: () => void;
+}) {
   const q = analysis.quality;
+  const update = analysis.data.update;
+  const issues = q.findings.filter((f) => f.level !== "INFO");
   return (
     <div className="flex flex-col gap-2" data-testid="apex-data">
       {analysis.data.synthetic && (
@@ -183,154 +397,431 @@ function DataBanner({ analysis }: { analysis: ApexAnalysis }) {
           SYNTHETIC TEST DATA — generated prices, not the market. Nothing below says anything about real {analysis.market}.
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
+      <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-muted">
         <StatusPill tone={QUALITY_TONE[q.status] ?? "muted"} testId="apex-quality">{`Data ${q.status}`}</StatusPill>
         <span>{analysis.data.label}</span>
-        <span className="text-fg-faint">· as of {when(analysis.as_of)}{analysis.replay ? " (replay)" : ""}</span>
-        <span className="font-mono text-[12px] text-fg-faint" title="SHA-256 of the bars this analysis saw">
+        <span className="text-fg-faint">
+          · as of {when(analysis.as_of)}
+          {analysis.replay ? " (replay)" : ""}
+          {q.summary.last_close ? ` · newest bar ${when(q.summary.last_close)}` : ""}
+        </span>
+        {update?.requested && (
+          <span className={update.ok ? "text-fg-faint" : "font-semibold text-danger"} data-testid="apex-update" data-ok={update.ok ? "yes" : "no"}>
+            · {update.ok ? "updated" : `update failed: ${update.error}`}
+          </span>
+        )}
+        <span className="font-mono text-fg-faint" title="SHA-256 of the bars this analysis saw">
           · {analysis.data.sha256.slice(0, 12)}
         </span>
+        <button type="button" onClick={onData} className="font-semibold text-quant hover:underline" data-testid="apex-data-details">
+          Data details
+        </button>
       </div>
-      {analysis.data.proxy && <p className="text-[13px] text-warning">{analysis.data.proxy}</p>}
-      {q.findings.filter((f) => f.level !== "INFO").length > 0 && (
-        <ul className="list-disc pl-5 text-[12px] text-fg-muted">
-          {q.findings
-            .filter((f) => f.level !== "INFO")
-            .map((f) => (
-              <li key={f.code}>
-                <b className={f.level === "BLOCK" ? "text-danger" : "text-warning"}>{f.code}</b> {f.message}
-              </li>
-            ))}
+      {analysis.data.proxy && <p className="text-[12px] text-warning">{analysis.data.proxy}</p>}
+      {issues.length > 0 && (
+        <ul className="flex flex-col gap-1 text-[12px] text-fg-muted">
+          {issues.map((f) => (
+            <li key={f.code} data-testid="apex-finding" data-code={f.code}>
+              <b className={f.level === "BLOCK" ? "text-danger" : "text-warning"}>{f.code.replace(/_/g, " ")}</b> {f.message}
+            </li>
+          ))}
         </ul>
+      )}
+      {(analysis.blocked || q.stale || update?.ok === false) && status && (
+        <CauseList causes={status.causes} onRepair={onRepair} repairing={repairing} compact />
       )}
     </div>
   );
 }
 
-function Analysis({
+function AnalysisView({
+  analysis,
+  chart,
+  minutes,
+  candidate,
+  onSelect,
+  decimals,
+  calibration,
+  status,
+  onRepair,
+  repairing,
+  onData,
+}: {
+  analysis: ApexAnalysis;
+  chart: ApexChartData | null;
+  minutes: ApexTimeframe;
+  candidate: ApexCandidate | null;
+  onSelect: (id: string) => void;
+  decimals: number;
+  calibration: string | null;
+  status: ApexDataStatus | null;
+  onRepair: () => void;
+  repairing: boolean;
+  onData: () => void;
+}) {
+  const fmt = (p: number) => p.toFixed(decimals);
+  const frame = TIMEFRAMES.find((t) => t.minutes === minutes)?.name ?? `${minutes} minutes`;
+  const fallback = minutes === 15 && !chart ? analysis.chart.map((b) => [...b, 0] as [number, number, number, number, number, number]) : null;
+  const bars = chart?.minutes === minutes ? chart.bars : (fallback ?? []);
+  const structure = analysis.structure[structureKey(minutes)];
+  return (
+    <div className="flex flex-col gap-4">
+      <Panel padded>
+        <DataBanner analysis={analysis} status={status} onRepair={onRepair} repairing={repairing} onData={onData} />
+      </Panel>
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,2.3fr)_minmax(360px,1fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Panel
+            title={`${analysis.market} · ${analysis.price != null ? fmt(analysis.price) : "—"} · ${frame}`}
+            aside={
+              <span className="text-[12px] text-fg-muted">
+                {chart?.prices === "bid" ? "bid prices · " : ""}
+                {analysis.atr15 != null ? `ATR(15m) ${analysis.atr15.toFixed(decimals)} · ` : ""}scroll = zoom · drag = pan
+              </span>
+            }
+          >
+            {chart && !chart.same_data && (
+              <p className="mb-2 text-[12px] text-warning" data-testid="apex-chart-changed">
+                The cache changed since this analysis (missing days were filled) — the chart shows the data now; analyse again
+                for an analysis on it.
+              </p>
+            )}
+            {bars.length > 0 ? (
+              <ApexChart
+                bars={bars}
+                minutes={minutes}
+                forming={chart?.minutes === minutes ? chart.forming : false}
+                zones={analysis.zones}
+                structure={structure}
+                candidate={candidate}
+                price={analysis.price ?? null}
+                decimals={decimals}
+              />
+            ) : (
+              <LoadingState>Loading the {frame} chart…</LoadingState>
+            )}
+            <Legend />
+          </Panel>
+          {!analysis.blocked && <ZonesTable analysis={analysis} decimals={decimals} calibrated={calibration === "CALIBRATED"} />}
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          {!analysis.blocked && <StructureCard analysis={analysis} decimals={decimals} />}
+          {!analysis.blocked && <ScenarioBoard analysis={analysis} calibration={calibration} />}
+          {!analysis.blocked && <Candidates analysis={analysis} candidate={candidate} onSelect={onSelect} decimals={decimals} calibrated={calibration === "CALIBRATED"} />}
+          {analysis.data.spread && (
+            <p className="px-1 text-[12px] text-fg-muted">
+              Spread: <SpreadText spread={analysis.data.spread} />
+            </p>
+          )}
+        </div>
+      </div>
+      <JarvisPanel analysis={analysis} />
+    </div>
+  );
+}
+
+function Legend() {
+  const item = (color: string, text: string, dashed = false) => (
+    <span className="flex items-center gap-1.5">
+      <span className="inline-block h-0 w-4 border-t-2" style={{ borderColor: color, borderStyle: dashed ? "dashed" : "solid" }} />
+      {text}
+    </span>
+  );
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-fg-faint">
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2.5 w-4 rounded-sm bg-[rgb(66_215_182/0.3)]" /> support zone
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2.5 w-4 rounded-sm bg-[rgb(255_116_125/0.3)]" /> resistance zone
+      </span>
+      {item("#ffe16b", "entry · BOS/CHoCH")}
+      {item("#ff747d", "stop")}
+      {item("#4cdfac", "target")}
+      {item("#becfe7", "price at the moment", true)}
+      <span>▲▼ confirmed swings (HH/HL/LH/LL) · keys: ← → + − 0</span>
+    </div>
+  );
+}
+
+function StructureCard({ analysis, decimals }: { analysis: ApexAnalysis; decimals: number }) {
+  const fmt = (p: number) => p.toFixed(decimals);
+  return (
+    <Panel title="Market structure" testId="apex-structure">
+      <div className="flex flex-col gap-2.5">
+        {Object.entries(analysis.structure).map(([key, s]) => {
+          const e = s.events[s.events.length - 1];
+          return (
+            <div key={key} className="rounded-xl border border-hairline-strong bg-surface-2/40 p-3 text-[13px]">
+              <div className="flex items-center justify-between">
+                <b className="text-fg">{key === "60" ? "1 hour" : `${key} minutes`}</b>
+                <StatusPill tone={s.trend === "up" ? "success" : s.trend === "down" ? "danger" : "muted"} testId={`apex-trend-${key}`}>
+                  {s.trend === "up" ? "uptrend" : s.trend === "down" ? "downtrend" : "range"}
+                </StatusPill>
+              </div>
+              <p className="mt-1.5 text-fg-muted">
+                High {s.last_high ? `${fmt(s.last_high.price)} ${s.last_high.label}` : "—"} · low{" "}
+                {s.last_low ? `${fmt(s.last_low.price)} ${s.last_low.label}` : "—"}
+              </p>
+              {e && (
+                <p className="mt-1 text-fg-faint">
+                  {e.type} {e.direction} through {fmt(e.level)} · {when(e.t)}
+                </p>
+              )}
+            </div>
+          );
+        })}
+        <p className="text-[12px] leading-relaxed text-fg-faint">
+          Swings count once closed bars on both sides confirm them. HH + HL = uptrend, LH + LL = downtrend; BOS = break with the
+          trend, CHoCH = break against it.
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+/** Long, short and no-trade — each built from the counted hold / break rates of S1 and R1. */
+function ScenarioBoard({ analysis, calibration }: { analysis: ApexAnalysis; calibration: string | null }) {
+  const by = Object.fromEntries(analysis.scenarios.map((s) => [s.id, s]));
+  const pick = (...ids: string[]) => ids.map((id) => by[id]).filter((s): s is ApexScenario => Boolean(s));
+  const calibrated = calibration === "CALIBRATED";
+  const noTrade = analysis.candidates.length === 0;
+  return (
+    <Panel
+      title="Scenarios"
+      aside={
+        <StatusPill tone={calibrated ? "success" : calibration === "MISCALIBRATED" ? "danger" : "muted"} testId="apex-calibration-state">
+          {calibrated ? "rates calibrated" : calibration === "MISCALIBRATED" ? "rates miscalibrated" : "calibration not checked"}
+        </StatusPill>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <ScenarioGroup title="Long" tone="text-quant" items={pick("S1-hold", "R1-break")} calibrated={calibrated} />
+        <ScenarioGroup title="Short" tone="text-danger" items={pick("R1-hold", "S1-break")} calibrated={calibrated} />
+        <div className="rounded-xl border border-hairline-strong bg-surface-2/40 p-3 text-[13px]" data-testid="apex-no-trade" data-active={noTrade ? "yes" : "no"}>
+          <b className="text-fg">No trade</b>
+          {noTrade ? (
+            <ul className="mt-1.5 flex flex-col gap-1 text-[12px] text-fg-muted">
+              {(analysis.rejected.length ? analysis.rejected : [{ template: "zone_reaction", reason: "No rule fired at this moment." }]).map((r, k) => (
+                <li key={k} data-testid="apex-rejected">
+                  {"direction" in r && r.direction ? <b className="text-fg-faint">{`${r.direction} at ${r.zone}: `}</b> : null}
+                  {r.reason}
+                </li>
+              ))}
+              <li className="text-fg-faint">Standing aside is the default when no candidate passes its rules.</li>
+            </ul>
+          ) : (
+            <p className="mt-1.5 text-[12px] text-fg-muted">
+              Candidates are limit orders at the zones — if price never reaches them, they expire and nothing happens.
+            </p>
+          )}
+        </div>
+      </div>
+      <p className="mt-3 text-[12px] leading-relaxed text-fg-faint">
+        {calibrated
+          ? "The stated rates matched what later touches did in the last track record — counted, not promised."
+          : "Shares of earlier touches before this moment, with sample size and 95% interval. Not yet shown to match later touches — read them as past frequencies, not probabilities."}
+      </p>
+    </Panel>
+  );
+}
+
+function ScenarioGroup({ title, tone, items, calibrated }: { title: string; tone: string; items: ApexScenario[]; calibrated: boolean }) {
+  return (
+    <div className="rounded-xl border border-hairline-strong bg-surface-2/40 p-3 text-[13px]">
+      <b className={tone}>{title}</b>
+      {items.length === 0 && <p className="mt-1 text-[12px] text-fg-faint">No zone on this side.</p>}
+      <ul className="mt-1.5 flex flex-col gap-1.5">
+        {items.map((s) => (
+          <li key={s.id} className="flex flex-col gap-0.5" data-testid="apex-scenario" data-id={s.id}>
+            <span className="text-fg">{s.statement}</span>
+            <Rate rate={s.rate} calibrated={calibrated} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ZonesTable({ analysis, decimals, calibrated }: { analysis: ApexAnalysis; decimals: number; calibrated: boolean }) {
+  const fmt = (p: number) => p.toFixed(decimals);
+  return (
+    <Panel title="Support & resistance zones" aside={<span className="text-[12px] text-fg-muted">held on touch = counted before this moment</span>}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-[12px] text-fg-faint">
+              <th className="pb-2 font-semibold">Zone</th>
+              <th className="pb-2 font-semibold">Range</th>
+              <th className="pb-2 font-semibold">Why</th>
+              <th className="pb-2 pl-3 text-right font-semibold">Tests</th>
+              <th className="pb-2 pl-3 text-right font-semibold">Away</th>
+              <th className="pb-2 pl-3 text-right font-semibold">Held on touch</th>
+            </tr>
+          </thead>
+          <tbody>
+            {analysis.zones.map((z) => (
+              <tr key={z.id} className="border-t border-hairline-strong/60" data-testid="apex-zone" data-side={z.side}>
+                <td className={cx("py-1.5 font-bold", z.side === "support" ? "text-quant" : "text-danger")}>
+                  {z.id}
+                  {z.inside && <span className="ml-1 text-[11px] text-warning">price inside</span>}
+                </td>
+                <td className="py-1.5 pr-3 font-mono whitespace-nowrap text-fg">
+                  {fmt(z.low)} – {fmt(z.high)}
+                </td>
+                <td className="py-1.5 text-fg-muted">{z.reasons.join(", ")}</td>
+                <td className="py-1.5 pl-3 text-right font-mono text-fg-muted">{z.tests}</td>
+                <td className="py-1.5 pl-3 text-right font-mono whitespace-nowrap text-fg-muted">{z.inside ? "0" : `${z.distance_atr.toFixed(1)} ATR`}</td>
+                <td className="py-1.5 pl-3 text-right">
+                  <Rate rate={z.rate} calibrated={calibrated} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {analysis.base_rates && <p className="mt-3 text-[12px] leading-relaxed text-fg-faint">{analysis.base_rates.definition}</p>}
+    </Panel>
+  );
+}
+
+function Candidates({
   analysis,
   candidate,
   onSelect,
   decimals,
+  calibrated,
 }: {
   analysis: ApexAnalysis;
   candidate: ApexCandidate | null;
   onSelect: (id: string) => void;
   decimals: number;
+  calibrated: boolean;
+}) {
+  return (
+    <Panel title="Entry · stop · target" aside={<span className="text-[12px] text-fg-muted">rules, not predictions</span>}>
+      {analysis.candidates.length === 0 ? (
+        <p className="text-[13px] text-fg-muted" data-testid="apex-no-candidate">
+          {analysis.quality.stale ? "Data is stale — no candidates until it is updated." : "No candidate passes its rules right now (see No trade)."}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {analysis.candidates.map((c) => (
+            <CandidateCard key={c.id} c={c} selected={candidate?.id === c.id} onSelect={() => onSelect(c.id)} decimals={decimals} calibrated={calibrated} />
+          ))}
+          <p className="text-[12px] text-fg-faint">Click a candidate to draw its entry, stop and targets on the chart.</p>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function JarvisPanel({ analysis }: { analysis: ApexAnalysis }) {
+  const story = analysis.narrative;
+  if (!story) return null;
+  const ask = () => window.dispatchEvent(new CustomEvent("jarvis:draft", { detail: story.question }));
+  return (
+    <Panel
+      title={
+        <span className="flex items-center gap-2">
+          <Icon name="spark" size={15} className="text-quant" /> JARVIS
+        </span>
+      }
+      aside={
+        <Button onClick={ask} data-testid="apex-ask-jarvis" title="Puts the question in the command bar — edit it or press Enter">
+          <Icon name="chat" size={14} /> Ask JARVIS about it
+        </Button>
+      }
+      testId="apex-jarvis"
+    >
+      <p className="text-[14px] font-semibold text-fg" data-testid="apex-jarvis-headline">
+        {story.headline}
+      </p>
+      <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-[13px] text-fg-muted">
+        {story.points.map((p, k) => (
+          <li key={k}>{p}</li>
+        ))}
+      </ul>
+      <ul className="mt-3 flex flex-col gap-0.5 text-[12px] text-fg-faint">
+        {story.caveats.map((c, k) => (
+          <li key={k}>{c}</li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
+function CandidateCard({
+  c,
+  selected,
+  onSelect,
+  decimals,
+  calibrated,
+}: {
+  c: ApexCandidate;
+  selected: boolean;
+  onSelect: () => void;
+  decimals: number;
+  calibrated: boolean;
 }) {
   const fmt = (p: number) => p.toFixed(decimals);
-  if (analysis.blocked) {
+  const long = c.direction === "long";
+  const track = c.track_record;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cx("rounded-xl border p-3 text-left text-[13px]", selected ? "border-cta bg-cta/5" : "border-hairline-strong bg-surface-2/40 hover:border-control")}
+      data-testid="apex-candidate"
+      data-direction={c.direction}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <b className={long ? "text-quant" : "text-danger"}>
+          {long ? "LONG" : "SHORT"} at {c.zone} · limit {fmt(c.entry.price)}
+        </b>
+        <span className="text-[12px] text-fg-faint">{c.with_trend == null ? "1h range" : c.with_trend ? "with 1h trend" : "against 1h trend"}</span>
+      </div>
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+        <dt className="text-fg-faint">Stop</dt>
+        <dd className="font-mono text-fg">{fmt(c.stop)}</dd>
+        {c.targets.map((t, k) => (
+          <Fragment2 key={t.price} label={`Target ${k + 1}`} value={`${fmt(t.price)} · ${t.rr}R`} />
+        ))}
+        <dt className="text-fg-faint">Risk</dt>
+        <dd className="font-mono text-fg">
+          {c.risk_points} pts · ${c.risk_usd.toLocaleString()} per {c.unit}
+        </dd>
+        <dt className="text-fg-faint">Valid until</dt>
+        <dd className="text-fg">{when(c.valid_until)}</dd>
+      </dl>
+      <p className="mt-2 text-[12px] text-fg-muted">
+        Zone held on touch: <Rate rate={c.zone_rate ?? null} calibrated={calibrated} inline />
+      </p>
+      <p className="mt-1 text-[12px] text-fg-muted" data-testid="apex-candidate-track">
+        {track
+          ? `Rule track record ${track.period[0]} → ${track.period[1]}${track.synthetic ? " (synthetic data)" : ""}: ${track.verdict?.text ?? ""}`
+          : "No track record for this rule yet — run one (Track record) before trusting it."}
+      </p>
+    </button>
+  );
+}
+
+function Rate({ rate, inline, calibrated }: { rate: ApexRate | null; inline?: boolean; calibrated?: boolean }) {
+  if (!rate) return <span className="text-fg-faint">—</span>;
+  if (rate.status !== "ok" || rate.p == null) {
     return (
-      <Panel title="Analysis blocked">
-        <DataBanner analysis={analysis} />
-      </Panel>
+      <span className="text-fg-faint" title={`${rate.n} cases`}>
+        insufficient data ({rate.n})
+      </span>
     );
   }
+  const text = `${pct(rate.p)} (${rate.ci ? `${pct(rate.ci[0])}–${pct(rate.ci[1])}` : "—"}, n=${rate.n}, ${rate.days} days)`;
+  const tag = calibrated ? "calibrated" : "past share";
   return (
-    <>
-      <Panel title={`${analysis.market} · ${analysis.price != null ? fmt(analysis.price) : "—"}`} aside={<span className="text-[12px] text-fg-muted">ATR(15m) {analysis.atr15?.toFixed(decimals)}</span>}>
-        <DataBanner analysis={analysis} />
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
-          <ApexChart bars={analysis.chart} zones={analysis.zones} candidate={candidate} price={analysis.price ?? null} decimals={decimals} />
-          <div className="flex flex-col gap-3" data-testid="apex-structure">
-            {Object.entries(analysis.structure).map(([minutes, s]) => (
-              <div key={minutes} className="rounded-xl border border-hairline-strong bg-surface-2/40 p-3 text-[13px]">
-                <div className="flex items-center justify-between">
-                  <b className="text-fg">{minutes === "60" ? "1 hour" : `${minutes} minutes`}</b>
-                  <StatusPill tone={s.trend === "up" ? "success" : s.trend === "down" ? "danger" : "muted"} testId={`apex-trend-${minutes}`}>
-                    {s.trend}
-                  </StatusPill>
-                </div>
-                <p className="mt-1.5 text-fg-muted">
-                  Last high {s.last_high ? `${fmt(s.last_high.price)} ${s.last_high.label}` : "—"} · last low{" "}
-                  {s.last_low ? `${fmt(s.last_low.price)} ${s.last_low.label}` : "—"}
-                </p>
-                {s.events.length > 0 && (
-                  <p className="mt-1 text-fg-faint">
-                    {(() => {
-                      const e = s.events[s.events.length - 1];
-                      return e ? `${e.type} ${e.direction} through ${fmt(e.level)} · ${when(e.t)}` : "";
-                    })()}
-                  </p>
-                )}
-              </div>
-            ))}
-            <p className="text-[12px] leading-relaxed text-fg-faint">
-              Swings count only once closed bars on both sides confirm them. HH/HL = up, LH/LL = down; BOS = break with the trend,
-              CHoCH = break against it.
-            </p>
-          </div>
-        </div>
-      </Panel>
-
-      <SentinelCheck analysis={analysis} />
-
-      <Panel title="Zones" aside={<span className="text-[12px] text-fg-muted">hold rate = counted, before this moment</span>}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="text-left text-[12px] text-fg-faint">
-                <th className="pb-2 font-semibold">Zone</th>
-                <th className="pb-2 font-semibold">Range</th>
-                <th className="pb-2 font-semibold">Why</th>
-                <th className="pb-2 text-right font-semibold">Tests</th>
-                <th className="pb-2 text-right font-semibold">Away</th>
-                <th className="pb-2 text-right font-semibold">Held on touch</th>
-              </tr>
-            </thead>
-            <tbody>
-              {analysis.zones.map((z) => (
-                <tr key={z.id} className="border-t border-hairline-strong/60" data-testid="apex-zone" data-side={z.side}>
-                  <td className={cx("py-1.5 font-bold", z.side === "support" ? "text-quant" : "text-danger")}>
-                    {z.id}
-                    {z.inside && <span className="ml-1 text-[11px] text-warning">price inside</span>}
-                  </td>
-                  <td className="py-1.5 font-mono text-fg">
-                    {fmt(z.low)} – {fmt(z.high)}
-                  </td>
-                  <td className="py-1.5 text-fg-muted">{z.reasons.join(", ")}</td>
-                  <td className="py-1.5 text-right font-mono text-fg-muted">{z.tests}</td>
-                  <td className="py-1.5 text-right font-mono text-fg-muted">{z.inside ? "0" : `${z.distance_atr.toFixed(1)} ATR`}</td>
-                  <td className="py-1.5 text-right">
-                    <Rate rate={z.rate} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-
-      <Panel title="Scenarios" aside={<span className="text-[12px] text-fg-muted">{analysis.base_rates?.touches ?? 0} decided touches before this moment</span>}>
-        <ul className="flex flex-col gap-2">
-          {analysis.scenarios.map((s) => (
-            <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline-strong bg-surface-2/40 px-3 py-2 text-[13px]" data-testid="apex-scenario">
-              <span className="text-fg">{s.statement}</span>
-              <Rate rate={s.rate} />
-            </li>
-          ))}
-        </ul>
-        {analysis.base_rates && <p className="mt-3 text-[12px] leading-relaxed text-fg-faint">{analysis.base_rates.definition}</p>}
-      </Panel>
-
-      <Panel title="Trade candidates" aside={<span className="text-[12px] text-fg-muted">rules, not predictions</span>}>
-        {analysis.candidates.length === 0 && <p className="text-[13px] text-fg-muted">No candidate at this moment.</p>}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {analysis.candidates.map((c) => (
-            <CandidateCard key={c.id} c={c} selected={candidate?.id === c.id} onSelect={() => onSelect(c.id)} decimals={decimals} />
-          ))}
-        </div>
-        {analysis.rejected.length > 0 && (
-          <ul className="mt-3 flex flex-col gap-1 text-[12px] text-fg-muted">
-            {analysis.rejected.map((r, k) => (
-              <li key={k} data-testid="apex-rejected">
-                <b className="text-fg-faint">{r.direction ? `${r.direction} at ${r.zone}` : "No candidate"}:</b> {r.reason}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-    </>
+    <span className={inline ? "text-fg" : "font-mono text-[12px] text-fg"} title={calibrated ? "Matched later touches in the last track record" : "Counted share of earlier touches — not checked against later ones yet"}>
+      {text} <span className="font-sans text-[11px] text-fg-faint">{tag}</span>
+    </span>
   );
 }
 
@@ -389,50 +880,6 @@ function SentinelCheck({ analysis }: { analysis: ApexAnalysis }) {
   );
 }
 
-function CandidateCard({ c, selected, onSelect, decimals }: { c: ApexCandidate; selected: boolean; onSelect: () => void; decimals: number }) {
-  const fmt = (p: number) => p.toFixed(decimals);
-  const long = c.direction === "long";
-  const track = c.track_record;
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cx("rounded-xl border p-3 text-left text-[13px]", selected ? "border-cta bg-cta/5" : "border-hairline-strong bg-surface-2/40 hover:border-control")}
-      data-testid="apex-candidate"
-      data-direction={c.direction}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <b className={long ? "text-quant" : "text-danger"}>
-          {long ? "LONG" : "SHORT"} at {c.zone} · limit {fmt(c.entry.price)}
-        </b>
-        <span className="text-[12px] text-fg-faint">{c.with_trend == null ? "1h range" : c.with_trend ? "with 1h trend" : "against 1h trend"}</span>
-      </div>
-      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
-        <dt className="text-fg-faint">Stop</dt>
-        <dd className="font-mono text-fg">{fmt(c.stop)}</dd>
-        {c.targets.map((t, k) => (
-          <Fragment2 key={t.price} label={`Target ${k + 1}`} value={`${fmt(t.price)} · ${t.rr}R`} />
-        ))}
-        <dt className="text-fg-faint">Risk</dt>
-        <dd className="font-mono text-fg">
-          {c.risk_points} pts · ${c.risk_usd.toLocaleString()} per {c.unit}
-        </dd>
-        <dt className="text-fg-faint">Valid until</dt>
-        <dd className="text-fg">{when(c.valid_until)}</dd>
-      </dl>
-      <p className="mt-2 text-[12px] text-fg-muted">
-        Zone held on touch: <Rate rate={c.zone_rate ?? null} inline />
-      </p>
-      <p className="mt-1 text-[12px] text-fg-muted" data-testid="apex-candidate-track">
-        {track
-          ? `Rule track record ${track.period[0]} → ${track.period[1]}${track.synthetic ? " (synthetic data)" : ""}: ${track.verdict?.text ?? ""}`
-          : "No track record for this rule yet — run one below before trusting it."}
-      </p>
-    </button>
-  );
-}
-
 function Fragment2({ label, value }: { label: string; value: string }) {
   return (
     <>
@@ -440,19 +887,6 @@ function Fragment2({ label, value }: { label: string; value: string }) {
       <dd className="font-mono text-fg">{value}</dd>
     </>
   );
-}
-
-function Rate({ rate, inline }: { rate: ApexRate | null; inline?: boolean }) {
-  if (!rate) return <span className="text-fg-faint">—</span>;
-  if (rate.status !== "ok" || rate.p == null) {
-    return (
-      <span className="text-fg-faint" title={`${rate.n} cases`}>
-        insufficient data ({rate.n})
-      </span>
-    );
-  }
-  const text = `${pct(rate.p)} (${rate.ci ? `${pct(rate.ci[0])}–${pct(rate.ci[1])}` : "—"}, n=${rate.n}, ${rate.days} days)`;
-  return inline ? <span className="text-fg">{text}</span> : <span className="font-mono text-[12px] text-fg">{text}</span>;
 }
 
 function Journal({ journal, market, onResolved, decimals }: { journal: ApexJournal | null; market: string; onResolved: () => void; decimals: number }) {

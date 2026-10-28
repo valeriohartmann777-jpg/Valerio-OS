@@ -26,6 +26,16 @@ def core(analysis: dict[str, Any]) -> dict[str, Any]:
 
 def compare(stored: dict[str, Any], recomputed: dict[str, Any]) -> list[dict[str, Any]]:
     checks = []
+    if stored.get("engine") != recomputed.get("engine"):
+        checks.append(
+            {
+                "code": "ENGINE",
+                "passed": False,
+                "detail": f"Made with {stored.get('engine')}, recomputed with "
+                f"{recomputed.get('engine')}: a difference below can come from the engine "
+                "change, not from look-ahead. Analyse again to check this version.",
+            }
+        )
     same_data = stored["data"]["sha256"] == recomputed["data"]["sha256"]
     checks.append(
         {
