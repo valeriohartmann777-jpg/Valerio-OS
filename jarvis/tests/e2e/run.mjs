@@ -977,8 +977,48 @@ try {
     assert.match(await page.getByTestId("command-input").inputValue(), /APEX analysis for XAUUSD/);
     await page.getByTestId("command-input").press("Escape"); // nothing is sent without Enter
 
-    // Data: the status with causes and actions (test data has nothing to repair).
+    // Three states, kept apart: the app is online, the data is test data, the signal is not validated.
+    assert.equal(await page.getByTestId("apex-status-app").getAttribute("data-tone"), "success");
+    assert.equal(await page.getByTestId("apex-status-data").getAttribute("data-tone"), "warning", "test data is never plain ready");
+    assert.notEqual(await page.getByTestId("apex-status-signal").getAttribute("data-tone"), "success", "an unvalidated signal is never green");
+    // The Analyst Panel, per strategy: data, structure, setup, trigger, plan, R:R after costs, evidence, why (not).
+    await page.getByTestId("apex-strategy-zone_rejection_5m").click();
+    for (const id of ["apex-analyst-data", "apex-analyst-setup", "apex-analyst-trigger", "apex-analyst-plan", "apex-analyst-rr", "apex-analyst-evidence", "apex-analyst-why-not"]) {
+      await page.getByTestId(id).waitFor();
+    }
+    assert.equal(await page.getByTestId("apex-analyst-evidence").getAttribute("data-state"), "UNVALIDATED");
+    assert.match(await page.getByTestId("apex-analyst-execution").innerText(), /Generated test data/);
+    await page.getByTestId("apex-analyst").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("14c2-apex-analyst");
+    await page.getByTestId("apex-strategy-zone_reaction").click();
+    await page.locator('[data-testid="apex-analyst-sections"][data-strategy="zone_reaction"]').waitFor();
+    const signals = await fetch(`${backendUrl}/apex/signals?market=XAUUSD`).then((r) => r.json());
+    assert.deepEqual([...new Set(signals.map((x) => x.strategy_id))].sort(), ["zone_reaction", "zone_rejection_5m"]);
+    assert.ok(signals.every((x) => (x.entry == null) === !["CANDIDATE", "PAPER_VALIDATED"].includes(x.status)), "only candidates carry an order plan");
+    assert.ok(signals.every((x) => x.status !== "PAPER_VALIDATED" && x.probability_estimate == null), "nothing validated, no invented probability");
+
+    // The analysis is a job: while it runs it shows its time and can be cancelled; Retry runs it again.
+    await page.route("**/apex/analyze", async (route) => {
+      await new Promise((r) => setTimeout(r, 2500));
+      await route.continue().catch(() => undefined);
+    });
+    await page.getByTestId("apex-analyze").click();
+    await page.locator('[data-testid="apex-job"][data-state="running"]').waitFor();
+    await page.getByTestId("apex-cancel").click();
+    await page.getByTestId("apex-error").filter({ hasText: "Analysis cancelled" }).waitFor();
+    await page.unroute("**/apex/analyze");
+    await page.getByTestId("apex-retry").click();
+    await page.locator('[data-testid="apex-job"][data-state="running"]').waitFor({ state: "detached", timeout: 60_000 });
+    assert.equal(await page.getByTestId("apex-error").count(), 0, "the retried analysis succeeded");
+    await page.getByTestId("apex-analyst").waitFor();
+
+    // Data fitness: coverage, gaps by reason, quote side; the status with causes and actions below.
     await page.getByTestId("apex-tab-data").click();
+    await page.getByTestId("apex-fitness").waitFor();
+    assert.match(await page.getByTestId("apex-fitness-coverage").innerText(), /100\.00%/);
+    assert.equal(await page.getByTestId("apex-gap").count(), 3, "days without bars, long gaps, short gaps");
+    assert.match(await page.getByTestId("apex-fitness-side").innerText(), /generated/);
     await page.locator('[data-testid="apex-cause"][data-code="SYNTHETIC"]').waitFor();
     await page.locator('[data-testid="apex-source"]').first().waitFor();
     await page.waitForTimeout(300);
@@ -1005,12 +1045,15 @@ try {
     const chart60 = await fetch(`${backendUrl}/apex/analyses/${latest.id}/chart?minutes=60&limit=100`).then((r) => r.json());
     assert.ok(chart60.same_data && chart60.bars.length === 100 && chart60.bars.every((b) => b[0] < latest.as_of));
 
-    // The journal keeps every candidate unchanged.
+    // The journal keeps every signal and candidate unchanged.
     await page.getByTestId("apex-tab-journal").click();
     await page.getByTestId("apex-journal").waitFor();
+    await page.getByTestId("apex-signals").waitFor();
+    assert.ok((await page.getByTestId("apex-signal-row").count()) >= 2, "one signal per strategy decision");
 
     // The rule's track record: walk-forward on the last 20 days, judged by later bars.
     await page.getByTestId("apex-tab-track").click();
+    await page.getByTestId("apex-track-strategy-zone_reaction").click();
     await page.getByTestId("apex-days").fill("20");
     await page.getByTestId("apex-evaluate").click();
     await page.getByTestId("apex-verdict").waitFor({ timeout: 180_000 });
@@ -1022,11 +1065,42 @@ try {
     await page.getByTestId("apex-track").scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await shot("14e-apex-track-record");
+
+    // Validation: the pre-registered protocol as a background job — on test data never more than RESEARCH ONLY.
+    await page.getByTestId("apex-tab-validation").click();
+    await page.getByTestId("apex-validation-strategy-zone_reaction").click();
+    await page.getByTestId("apex-validate").click();
+    await page.getByTestId("apex-validation-progress").waitFor();
+    const result = page.getByTestId("apex-validation-result");
+    await result.waitFor({ timeout: 300_000 });
+    assert.equal(await result.getAttribute("data-state"), "RESEARCH_ONLY");
+    assert.equal(await page.getByTestId("apex-criterion").count(), 6);
+    assert.ok((await page.getByTestId("apex-trial").count()) >= 7, "every measured parameter set is a registered trial");
+    await page.getByTestId("apex-holdout").waitFor();
+    await page.waitForTimeout(300);
+    await shot("14f-apex-validation");
+    // A running validation can be cancelled (and run again later).
+    await page.getByTestId("apex-validation-strategy-zone_rejection_5m").click();
+    await page.getByTestId("apex-validate").click();
+    await page.getByTestId("apex-validation-cancel").click();
+    await page.getByTestId("apex-validation-cancelled").waitFor({ timeout: 60_000 });
+    // The paper forward log: opt-in, one round on demand (skipped outside the session), live evidence per strategy.
+    const forward = page.getByTestId("apex-forward");
+    assert.equal(await forward.getAttribute("data-enabled"), "no", "off until switched on");
+    await page.getByTestId("apex-forward-run").click();
+    const round = page.getByTestId("apex-forward-last");
+    await round.waitFor();
+    assert.ok(["ok", "outside_session"].includes(await round.getAttribute("data-state")), await round.innerText());
+    assert.equal(await page.getByTestId("apex-forward-evidence").count(), 2);
+    await page.getByTestId("apex-forward-toggle").click();
+    await page.locator('[data-testid="apex-forward"][data-enabled="yes"]').waitFor();
+    await page.getByTestId("apex-forward-toggle").click();
+    await page.locator('[data-testid="apex-forward"][data-enabled="no"]').waitFor();
     await page.getByTestId("apex-tab-analysis").click();
     // There is no order path anywhere in APEX.
     const routes = await fetch(`${backendUrl}/openapi.json`).then((r) => r.json());
     const apexPaths = Object.keys(routes.paths).filter((p) => p.startsWith("/apex"));
-    assert.ok(apexPaths.length >= 9 && apexPaths.every((p) => !/order|trade|broker|execute/i.test(p)), apexPaths.join(","));
+    assert.ok(apexPaths.length >= 14 && apexPaths.every((p) => !/order|trade|broker|execute/i.test(p)), apexPaths.join(","));
     await page.getByTestId("tab-home").click();
   });
 

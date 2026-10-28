@@ -4,9 +4,15 @@ import type {
   ApexChartData,
   ApexDataStatus,
   ApexEvaluation,
+  ApexFitness,
+  ApexForward,
   ApexJournal,
   ApexMarket,
   ApexRepair,
+  ApexSignal,
+  ApexStrategyName,
+  ApexTrial,
+  ApexValidation,
   EvalOverview,
   FeedbackOverview,
   HqSnapshot,
@@ -134,7 +140,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: { "content-type": "application/json", ...init?.headers },
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw new ApiError(0, "Cancelled.", null, "CANCELLED");
     throw new ApiError(0, "JARVIS backend is not reachable.");
   }
   if (!response.ok) {
@@ -416,12 +423,31 @@ export const api = {
   teamHq: () => request<HqSnapshot>("/team/hq"),
   // JARVIS APEX — research only; nothing here places an order.
   apexMarkets: () => request<ApexMarket[]>("/apex/markets"),
-  apexAnalyze: (market: string, options: { refresh?: boolean; asOf?: number } = {}) =>
-    post<ApexAnalysis>("/apex/analyze", { market, refresh: options.refresh ?? false, as_of: options.asOf ?? null }),
+  apexAnalyze: (market: string, options: { refresh?: boolean; asOf?: number; signal?: AbortSignal } = {}) =>
+    request<ApexAnalysis>("/apex/analyze", {
+      method: "POST",
+      body: JSON.stringify({ market, refresh: options.refresh ?? false, as_of: options.asOf ?? null }),
+      signal: options.signal,
+    }),
   apexJournal: (market?: string) => request<ApexJournal>(`/apex/journal${market ? `?market=${encodeURIComponent(market)}` : ""}`),
   apexResolve: (market?: string) =>
     post<{ checked: number; updated: number }>(`/apex/journal/resolve${market ? `?market=${encodeURIComponent(market)}` : ""}`),
-  apexEvaluate: (market: string, days?: number) => post<ApexEvaluation>("/apex/evaluations", { market, days: days ?? null }),
+  apexEvaluate: (market: string, days?: number, strategy: ApexStrategyName = "zone_reaction") =>
+    post<ApexEvaluation>("/apex/evaluations", { market, days: days ?? null, strategy }),
+  apexSignals: (market: string, strategy?: ApexStrategyName) =>
+    request<ApexSignal[]>(`/apex/signals?market=${encodeURIComponent(market)}${strategy ? `&strategy=${strategy}` : ""}`),
+  apexValidate: (market: string, strategy: ApexStrategyName) => post<ApexValidation>("/apex/validations", { market, strategy }),
+  apexValidations: (market: string) => request<ApexValidation[]>(`/apex/validations?market=${encodeURIComponent(market)}`),
+  apexValidation: (id: string) => request<ApexValidation>(`/apex/validations/${encodeURIComponent(id)}`),
+  apexCancelValidation: (id: string) => post<ApexValidation>(`/apex/validations/${encodeURIComponent(id)}/cancel`),
+  apexTrials: (market: string, strategy: ApexStrategyName) =>
+    request<{ family: string; real: ApexTrial[]; synthetic: ApexTrial[] }>(
+      `/apex/trials?market=${encodeURIComponent(market)}&strategy=${strategy}`,
+    ),
+  apexFitness: (market: string) => request<ApexFitness>(`/apex/fitness/${encodeURIComponent(market)}`),
+  apexForward: (market: string) => request<ApexForward>(`/apex/forward?market=${encodeURIComponent(market)}`),
+  apexSetForward: (enabled: boolean) => post<ApexForward>("/apex/forward", { enabled }),
+  apexForwardRun: () => post<ApexForward>("/apex/forward/run"),
   apexEvaluations: (market?: string) =>
     request<ApexEvaluation[]>(`/apex/evaluations${market ? `?market=${encodeURIComponent(market)}` : ""}`),
   apexEvaluation: (id: string) => request<ApexEvaluation>(`/apex/evaluations/${encodeURIComponent(id)}`),

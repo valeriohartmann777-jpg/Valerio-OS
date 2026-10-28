@@ -402,6 +402,11 @@ class ApexStore:
             "WHERE finished_at >= ?",
             (since,),
         )
+        validations = await self._db.fetch_all(
+            "SELECT id, market, strategy, version, state, finished_at, error "
+            "FROM apex_validations WHERE state = 'RUNNING' OR finished_at >= ?",
+            (since,),
+        )
         out = [
             {
                 "agent": "cipher",
@@ -413,6 +418,18 @@ class ApexStore:
                 "error": r["error"],
             }
             for r in runs
+        ]
+        out += [
+            {
+                "agent": "cipher",
+                "id": r["id"],
+                "market": r["market"],
+                "state": r["state"],
+                "title": f"Validation of {r['strategy']} {r['version']} (pre-registered protocol)",
+                "finished_at": r["finished_at"],
+                "error": r["error"],
+            }
+            for r in validations
         ]
         out += [
             {

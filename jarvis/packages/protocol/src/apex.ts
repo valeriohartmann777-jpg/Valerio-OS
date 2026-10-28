@@ -113,9 +113,13 @@ export interface ApexCandidate {
   zone: string;
   market: ApexMarketName;
   created_at: number;
-  entry: { type: "limit"; price: number };
+  /** limit = zone_reaction (at the zone), stop = zone_rejection_5m (after its trigger). */
+  entry: { type: "limit" | "stop"; price: number };
   stop: number;
   targets: { price: number; rr: number; zone: string }[];
+  strategy_version?: string;
+  trigger?: ApexTrigger;
+  execution?: ApexExecution;
   risk_points: number;
   risk_usd: number;
   cost_usd: number;
@@ -241,8 +245,214 @@ export interface ApexAnalysis {
   base_rates?: { definition: string; touches: number; skipped: Record<string, number> };
   candidates: ApexCandidate[];
   rejected: ApexRejected[];
+  /** Each strategy's point-in-time decision (engine 1.2+). */
+  strategies?: Partial<Record<ApexStrategyName, ApexDecision>>;
+  /** One contract-checked signal per decision, stored immutably (engine 1.2+). */
+  signals?: ApexSignal[];
+  execution?: ApexExecution;
+  validation_ids?: Partial<Record<ApexStrategyName, string>>;
   /** [time, open, high, low, close] of the last 15-minute bars. */
   chart: [number, number, number, number, number][];
+}
+
+export type ApexStrategyName = "zone_reaction" | "zone_rejection_5m";
+export type ApexSignalStatus = "NO_TRADE" | "WAITING_FOR_TRIGGER" | "CANDIDATE" | "PAPER_VALIDATED" | "BLOCKED";
+export type ApexValidationState = "UNVALIDATED" | "RESEARCH_ONLY" | "OOS_SUPPORTED" | "FORWARD_SUPPORTED" | "REJECTED";
+
+/** How an order plan is filled on the data APEX has (backend apex/execution.py). */
+export interface ApexExecution {
+  assumption: "execution_assumption_limited" | "futures_trade_prices" | "synthetic_flat_costs" | "data_unavailable" | string;
+  quotes: "bid" | "trades" | "synthetic";
+  spread: number;
+  spread_source: "measured" | "estimate" | "inside_costs";
+  costs: number;
+  total_cost: number;
+  tradable: boolean;
+  reason: string;
+}
+
+export interface ApexTrigger {
+  bar_utc: number;
+  closed_utc: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  rule: string;
+}
+
+export interface ApexSetup {
+  zone: string;
+  direction: "long" | "short";
+  distance_atr: number;
+}
+
+export interface ApexDecision {
+  strategy: ApexStrategyName;
+  version: string;
+  status: "NO_TRADE" | "WAITING_FOR_TRIGGER" | "CANDIDATE" | "BLOCKED";
+  direction: "long" | "short" | "none";
+  setups: ApexSetup[];
+  trigger: ApexTrigger | null;
+  candidates: ApexCandidate[];
+  rejected: ApexRejected[];
+  reasons: string[];
+}
+
+/** The binding signal contract (backend apex/signal.py — invariants enforced there). */
+export interface ApexSignal {
+  signal_id: string;
+  symbol: ApexMarketName;
+  market_data_source: string;
+  as_of_utc: string;
+  last_closed_bar_utc: string | null;
+  timeframe: string;
+  strategy_id: ApexStrategyName;
+  strategy_version: string;
+  status: ApexSignalStatus;
+  direction: "LONG" | "SHORT" | "NONE";
+  market_structure: "BULLISH" | "BEARISH" | "RANGE" | "UNKNOWN";
+  zones: { id: string; side: "support" | "resistance"; low: number; high: number; confirmed_at_utc: string | null; source: string }[];
+  entry_type: "LIMIT" | "STOP" | "MARKET" | "NONE";
+  entry: number | null;
+  stop_loss: number | null;
+  take_profit_1: number | null;
+  take_profit_2: number | null;
+  risk_reward_after_costs: number | null;
+  probability_estimate: number | null;
+  probability_interval: [number, number] | null;
+  calibration_sample_size: number | null;
+  validation_state: ApexValidationState;
+  invalidation_rule: string;
+  reasons: string[];
+  data_quality: "PASS" | "WARN" | "FAIL";
+  execution_assumption: string;
+  setup: { setups: ApexSetup[] } | null;
+  trigger: ApexTrigger | null;
+  evidence_ids: string[];
+  candidate_id: string | null;
+  created_at_utc: string;
+  synthetic?: boolean;
+  replay?: boolean;
+  analysis_id?: string;
+  outcome?: ApexOutcome | null;
+}
+
+export interface ApexValidationStats {
+  candidates: number;
+  filled: number;
+  trade_days: number;
+  states: Record<string, number>;
+  mean_r: number | null;
+  ci: [number, number] | null;
+  win_rate: number | null;
+  profit_factor: number | null;
+  total_r: number;
+  max_drawdown_r: number;
+}
+
+export interface ApexCriterion {
+  code: "EVIDENCE" | "DEV_CI" | "BASELINE" | "COST_STRESS" | "NEIGHBOURS" | "FOLDS" | string;
+  required: string;
+  measured: string;
+  passed: boolean;
+}
+
+export interface ApexValidationResult {
+  protocol_version: string;
+  strategy: ApexStrategyName;
+  version: string;
+  engine: string;
+  market: ApexMarketName;
+  data: { source_id: string; label: string; synthetic: boolean; sha256: string };
+  execution: ApexExecution;
+  parameters: Record<string, number>;
+  split: { dev: [string, string]; holdout: [string, string]; folds: [string, string][] };
+  development: {
+    decisions: number;
+    embargo_minutes: number;
+    stats: ApexValidationStats;
+    folds: (ApexValidationStats & { fold: number; start: number; end: number; decisions: number })[];
+    cost_stress: ApexValidationStats & { factor: number };
+    neighbours: (ApexValidationStats & { change: Record<string, number> })[];
+    baseline: { runs: number; p_value: number | null; mean_r: number | null; p95_r?: number };
+    trials: { before: number; this_run: number; total: number; alpha: number; alpha_corrected: number };
+    criteria: ApexCriterion[];
+    enough: boolean;
+    passed: boolean;
+  };
+  holdout: { decisions: number; stats: ApexValidationStats; enough: boolean; passed: boolean; opened_by: string } | null;
+  verdict: { validation_state: ApexValidationState; code: string; text: string };
+}
+
+export interface ApexValidation {
+  id: string;
+  market: ApexMarketName;
+  strategy: ApexStrategyName;
+  version: string;
+  protocol_version: string;
+  source_id: string;
+  state: "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  progress: number;
+  synthetic: boolean;
+  data_sha256: string;
+  result: ApexValidationResult | null;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface ApexTrial {
+  id: number;
+  family: string;
+  strategy: ApexStrategyName;
+  version: string;
+  kind: "registered" | "neighbour";
+  params: Record<string, number>;
+  validation_id: string;
+  summary: { filled: number; mean_r: number | null };
+  synthetic: boolean;
+  created_at: string;
+}
+
+export interface ApexGapReason {
+  reason: "day_without_bars" | "long_gap" | "short_gap";
+  text: string;
+  minutes: number;
+  days?: number;
+  count?: number;
+  examples?: (string | { from: string; minutes: number })[];
+}
+
+/** APEX → Data fitness (backend apex/fitness.py). */
+export interface ApexFitness {
+  market: ApexMarketName;
+  as_of: number;
+  source: string;
+  source_id: string;
+  label: string;
+  synthetic: boolean;
+  symbol: string;
+  contract: string;
+  quote_side: "bid" | "trades" | "synthetic";
+  execution: ApexExecution;
+  execution_text: string;
+  granularity: string;
+  timeframes: string;
+  status: "OK" | "WARN" | "BLOCK" | "DATA_UNAVAILABLE";
+  bars: number;
+  first_bar?: number;
+  last_closed_bar?: number;
+  last_closed_text?: string;
+  span_days?: number;
+  coverage: { expected_bars: number; present_bars: number; share: number | null } | null;
+  gaps: { calendar: string; missing_minutes: number; by_reason: ApexGapReason[]; outside_calendar_bars: number } | null;
+  integrity?: { duplicates_or_disorder: number; misaligned: number };
+  spikes: { t: number; at: string; kind: string; sigma: number }[];
+  large_moves?: { t: number; at: string; move_pct: number; sigma: number }[];
+  rolls?: string[];
+  hints: string[];
+  cache_days?: Record<string, number>;
 }
 
 export interface ApexSummary {
@@ -267,6 +477,8 @@ export interface ApexJournal {
 export interface ApexTrackRecord {
   engine: string;
   template: string;
+  strategy_version?: string;
+  execution?: ApexExecution;
   market: ApexMarketName;
   start: string;
   end: string;
@@ -414,4 +626,25 @@ export interface ApexAudit {
   result: { checks: ApexAuditCheck[]; recomputed_at: number; data_source: string } | null;
   created_at: string;
   finished_at: string | null;
+}
+
+export interface ApexForwardEvidence {
+  strategy: ApexStrategyName;
+  version: string;
+  synthetic: boolean;
+  plans: number;
+  filled: number;
+  trade_days: number;
+  mean_r: number | null;
+  ci: [number, number] | null;
+  needed: number;
+  passed: boolean;
+}
+
+/** The paper forward log (APEX → Validation): opt-in live analyses on a schedule. */
+export interface ApexForward {
+  enabled: boolean;
+  interval_minutes: number;
+  markets: Record<string, { state: "ok" | "error" | "outside_session"; at: number; analysis_id?: string; error?: string } | null>;
+  evidence: Record<string, Partial<Record<ApexStrategyName, ApexForwardEvidence>>>;
 }

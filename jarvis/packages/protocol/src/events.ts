@@ -54,6 +54,7 @@ export const EVENT_TYPES = [
   "apex.evaluation",
   "apex.audit",
   "apex.data",
+  "apex.validation",
   "quantlab.research.run",
   "quantlab.source",
   "quantlab.mission",

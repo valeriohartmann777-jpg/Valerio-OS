@@ -26,6 +26,7 @@ import threading
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -48,6 +49,7 @@ from jarvis.apex.resolve import resolve
 from jarvis.apex.signal import ValidationState, from_analysis
 from jarvis.apex.store import ApexStore
 from jarvis.apex.validation import (
+    day_bootstrap,
     describe_split,
     develop,
     holdout_test,
@@ -63,6 +65,7 @@ from jarvis.learning.strategy import clock_minutes
 from jarvis.quantlab.hub.service import DataHubService, HubError
 from jarvis.quantlab.vault.service import VaultService
 from jarvis.settings import Settings
+from jarvis.storage.preferences import Preferences
 from jarvis.training.dataset import TouchRules
 
 log = logging.getLogger("jarvis.apex")
@@ -134,8 +137,12 @@ class ApexService:
         store: ApexStore,
         bus: EventBus,
         now: Callable[[], int] = now_minute,
+        preferences: Preferences | None = None,
     ) -> None:
         self._settings = settings
+        self._preferences = preferences
+        self._forward_task: asyncio.Task[None] | None = None
+        self._forward_status: dict[str, dict[str, Any]] = {}
         self._cfg = settings.apex
         self._market = market
         self._vault = vault
@@ -164,8 +171,11 @@ class ApexService:
         failed = await self.store.fail_running_validations()
         if failed:
             log.info("APEX: %d interrupted validation run(s) marked as failed", failed)
+        if self.forward_enabled():
+            self._start_forward()
 
     async def stop(self) -> None:
+        await self._stop_forward()
         for flag in self._cancel.values():
             flag.set()
         for task in [
@@ -473,9 +483,14 @@ class ApexService:
             if row is None:
                 continue
             state = str(((row.get("result") or {}).get("verdict") or {}).get("validation_state"))
-            if state in ValidationState.__members__:
-                states[name] = ValidationState(state)
-                evidence[name] = row["id"]
+            if state not in ValidationState.__members__:
+                continue
+            states[name] = ValidationState(state)
+            evidence[name] = row["id"]
+            if state == "OOS_SUPPORTED" and not synthetic:
+                forward = await self.forward_evidence(market, name, synthetic=False)
+                if forward["passed"]:
+                    states[name] = ValidationState.FORWARD_SUPPORTED
         return states, evidence
 
     async def signals(
@@ -1013,6 +1028,126 @@ class ApexService:
             EventType.APEX_EVALUATION, message=message, payload={"evaluation_id": evaluation_id}
         )
 
+    # Paper forward log (docs/APEX_VALIDATION_PROTOCOL.md §7) -------------------------------
+
+    def forward_enabled(self) -> bool:
+        return bool(self._preferences and self._preferences.get("apex_forward", False))
+
+    async def set_forward(self, enabled: bool) -> dict[str, Any]:
+        """Switch the paper forward log on or off (kept across restarts)."""
+        if self._preferences is None:
+            raise ApexError("UNAVAILABLE", "Preferences are not available.", status=503)
+        self._preferences.update(apex_forward=bool(enabled))
+        if enabled:
+            self._start_forward()
+        else:
+            await self._stop_forward()
+        await self._bus.emit(
+            EventType.APEX_VALIDATION,
+            message="APEX paper forward log " + ("on" if enabled else "off"),
+            payload={"forward": bool(enabled)},
+        )
+        return await self.forward()
+
+    def _start_forward(self) -> None:
+        if self._forward_task is None or self._forward_task.done():
+            self._forward_task = asyncio.create_task(self._forward_loop())
+
+    async def _stop_forward(self) -> None:
+        task, self._forward_task = self._forward_task, None
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+
+    async def _forward_loop(self) -> None:
+        step = 60 * max(1, self._cfg.forward_interval_minutes)
+        while True:
+            try:
+                await self.forward_tick()
+            except Exception:  # a failed round is recorded per market; the loop goes on
+                log.exception("APEX forward round failed")
+            now = int(datetime.now(UTC).timestamp())
+            await asyncio.sleep(step - now % step + 2)  # just after the next bar boundary
+
+    async def forward_tick(self) -> dict[str, dict[str, Any]]:
+        """One round: a live analysis of every market whose session window is open now."""
+        now = self._now()
+        for name, ctx in self.contexts.items():
+            if not _in_session(now, ctx.window):
+                self._forward_status[name] = {"state": "outside_session", "at": now}
+                continue
+            try:
+                out = await self.analyze(name, refresh=not self.fixture)
+                self._forward_status[name] = {
+                    "state": "ok",
+                    "at": now,
+                    "analysis_id": out["id"],
+                    "signals": [
+                        {"strategy": x["strategy_id"], "status": x["status"]}
+                        for x in out.get("signals", [])
+                    ],
+                }
+            except ApexError as exc:
+                self._forward_status[name] = {"state": "error", "at": now, "error": exc.message}
+        return self._forward_status
+
+    async def forward(self, market: str | None = None) -> dict[str, Any]:
+        """The forward log: on/off, each market's last round, and per strategy version the
+        evidence its live (not replayed) plans produced so far."""
+        names = [self._ctx(market).name] if market else list(self.contexts)
+        evidence = {
+            name: {s: await self.forward_evidence(name, s) for s in STRATEGIES} for name in names
+        }
+        return {
+            "enabled": self.forward_enabled(),
+            "interval_minutes": self._cfg.forward_interval_minutes,
+            "markets": {n: self._forward_status.get(n) for n in names},
+            "evidence": evidence,
+        }
+
+    async def forward_evidence(
+        self, market: str, strategy: str, synthetic: bool | None = None
+    ) -> dict[str, Any]:
+        """Filled live plans of the current strategy version, one per day, side and entry (an
+        identical plan re-made by the next round counts once), judged as in the protocol."""
+        synthetic = self.fixture if synthetic is None else synthetic
+        rows = await self.store.candidates(market, limit=5000)
+        seen: set[tuple[int, str, float]] = set()
+        r: list[float] = []
+        days: list[int] = []
+        for c in sorted(rows, key=lambda x: int(x["created_at"])):
+            if (
+                c.get("template") != strategy
+                or c.get("strategy_version") != STRATEGIES[strategy]
+                or c.get("replay")
+                or bool(c.get("synthetic")) != synthetic
+            ):
+                continue
+            day = datetime.fromtimestamp(int(c["created_at"]), NY_TZ).date().toordinal()
+            key = (day, str(c["direction"]), float(c["entry"]["price"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            outcome = c.get("outcome") or {}
+            if outcome.get("final") and outcome.get("state") in ("win", "loss", "timeout"):
+                r.append(float(outcome["r"]))
+                days.append(day)
+        f = self._settings.apex_validation.forward
+        ci = day_bootstrap(np.array(r), np.array(days), 2000, seed=7) if r else None
+        return {
+            "strategy": strategy,
+            "version": STRATEGIES[strategy],
+            "synthetic": synthetic,
+            "plans": len(seen),
+            "filled": len(r),
+            "trade_days": len(set(days)),
+            "mean_r": round(float(np.mean(r)), 4) if r else None,
+            "ci": list(ci) if ci else None,
+            "needed": max(0, f.min_trades - len(r)),
+            "passed": len(r) >= f.min_trades and bool(ci and ci[0] > f.ci_low_above),
+        }
+
     # Validation (docs/APEX_VALIDATION_PROTOCOL.md) ------------------------------------------
 
     async def validate(self, market: str, strategy: str) -> dict[str, Any]:
@@ -1238,6 +1373,16 @@ class ApexService:
         tasks = [t for t in self._tasks.values() if not t.done()]
         if tasks:
             await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout)
+
+
+NY_TZ = ZoneInfo("America/New_York")
+
+
+def _in_session(now: int, window: tuple[int, int]) -> bool:
+    """A weekday in New York with the clock inside the market's session window."""
+    local = datetime.fromtimestamp(now, NY_TZ)
+    minute = local.hour * 60 + local.minute
+    return local.weekday() < 5 and window[0] <= minute < window[1]
 
 
 def _parameters(cfg: Any) -> dict[str, Any]:

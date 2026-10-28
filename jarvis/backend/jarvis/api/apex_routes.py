@@ -157,6 +157,34 @@ async def trials(market: str, strategy: str, rt: RuntimeDep) -> dict[str, Any]:
         raise _error(exc) from None
 
 
+class ForwardBody(BaseModel):
+    enabled: bool
+
+
+@router.get("/apex/forward")
+async def forward(rt: RuntimeDep, market: str | None = None) -> dict[str, Any]:
+    """The paper forward log: on/off, last round per market, live evidence per strategy."""
+    try:
+        return await rt.apex.forward(market)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.post("/apex/forward")
+async def set_forward(body: ForwardBody, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.apex.set_forward(body.enabled)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.post("/apex/forward/run")
+async def forward_run(rt: RuntimeDep) -> dict[str, Any]:
+    """One forward round now (markets outside their session are skipped)."""
+    await rt.apex.forward_tick()
+    return await rt.apex.forward()
+
+
 @router.get("/apex/evaluations")
 async def evaluations(rt: RuntimeDep, market: str | None = None) -> list[dict[str, Any]]:
     return await rt.apex.evaluations(market)

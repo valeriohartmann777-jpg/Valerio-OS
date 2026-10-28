@@ -442,6 +442,7 @@ class Runtime:
             hub=self.hub,
             store=ApexStore(self.db),
             bus=self.bus,
+            preferences=self.preferences,
         )
 
         self.training = TrainingService(

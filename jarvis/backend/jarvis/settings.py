@@ -257,6 +257,7 @@ class ApexSettings(BaseModel):
     eval_step_minutes: int = 60  # decision points inside the session window
     oos_share: float = 0.3  # last part of an evaluation reported as out-of-sample
     spread_days: int = 10  # recent days of ask candles for the measured spread (Dukascopy)
+    forward_interval_minutes: int = 5  # paper forward log: a live analysis this often in session
     markets: dict[str, ApexMarketSettings] = Field(default_factory=dict)
 
 

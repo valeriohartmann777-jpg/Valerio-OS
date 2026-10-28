@@ -10,18 +10,24 @@ import type {
   ApexMarketName,
   ApexRate,
   ApexScenario,
+  ApexStrategyName,
   ApexSummary,
   ApexTimeframe,
 } from "@jarvis/protocol";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, ApiError } from "../../../lib/api";
+import { headerState, useReadiness, useSupervisor } from "../../../lib/backend";
 import { useJarvis } from "../../../store/store";
 import { Icon } from "../../ui/icons";
 import { Button, cx } from "../../ui/primitives";
 import { EmptyState, LoadingState, Panel, StatusPill, type PillTone } from "../../ui/shell";
+import { AnalystPanel, StatusStrip } from "./ApexAnalyst";
 import { ApexChart } from "./ApexChart";
 import { ApexData, CauseList, SpreadText } from "./ApexData";
+import { FitnessView, SignalJournal } from "./ApexSignals";
+import { ApexValidationPanel } from "./ApexValidation";
+import { STRATEGIES, signalsOf, statusChips } from "./analyst";
 import { structureKey, TIMEFRAMES } from "./chartView";
 
 /**
@@ -44,12 +50,13 @@ const STATE_TONE: Record<string, PillTone> = {
   open: "info",
 };
 
-type Area = "analysis" | "journal" | "track" | "data" | "sentinel";
+type Area = "analysis" | "journal" | "track" | "validation" | "data" | "sentinel";
 const AREAS: { id: Area; label: string }[] = [
   { id: "analysis", label: "Chart & analysis" },
-  { id: "journal", label: "Journal" },
-  { id: "track", label: "Track record" },
-  { id: "data", label: "Data" },
+  { id: "journal", label: "Signal journal" },
+  { id: "track", label: "Backtest" },
+  { id: "validation", label: "Validation" },
+  { id: "data", label: "Data fitness" },
   { id: "sentinel", label: "SENTINEL check" },
 ];
 
@@ -81,6 +88,12 @@ export function ApexPanel() {
     saved<ApexTimeframe>("apex.timeframe", TIMEFRAMES.map((t) => t.minutes), 15),
   );
   const [area, setAreaState] = useState<Area>(() => saved("apex.area", AREAS.map((a) => a.id), "analysis"));
+  const [strategy, setStrategyState] = useState<ApexStrategyName>(() =>
+    saved<ApexStrategyName>("apex.strategy", STRATEGIES.map((s) => s.id), "zone_rejection_5m"),
+  );
+  const [started, setStarted] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const abort = useRef<AbortController | null>(null);
   const [analyses, setAnalyses] = useState<Partial<Record<ApexMarketName, ApexAnalysis>>>({});
   const [chart, setChart] = useState<ApexChartData | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -106,6 +119,10 @@ export function ApexPanel() {
   const setMinutes = (next: ApexTimeframe) => {
     setMinutesState(next);
     remember("apex.timeframe", next);
+  };
+  const setStrategy = (next: ApexStrategyName) => {
+    setStrategyState(next);
+    remember("apex.strategy", next);
   };
 
   const loadSide = useCallback(async () => {
@@ -179,26 +196,46 @@ export function ApexPanel() {
   const fixture = info?.fixture ?? false;
   const decimals = 2; // gold quotes in cents, NQ/MNQ in quarter points
 
+  // The analysis as a job: elapsed time while it runs, Cancel stops waiting, Retry after a failure.
+  useEffect(() => {
+    if (started == null) return;
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 500);
+    return () => clearInterval(timer);
+  }, [started]);
+
   const run = async () => {
+    const controller = new AbortController();
+    abort.current = controller;
     setBusy(true);
+    setStarted(Date.now());
+    setElapsed(0);
     setError(null);
+    setArea("analysis"); // where the job shows — never forced back later if the owner moved on
     try {
-      const out = await api.apexAnalyze(market, { refresh: refresh && !fixture });
+      const out = await api.apexAnalyze(market, { refresh: refresh && !fixture, signal: controller.signal });
       setAnalyses((a) => ({ ...a, [market]: out }));
       setSelected(out.candidates[0]?.id ?? null);
-      setArea("analysis");
       await Promise.all([loadSide(), loadStatus()]);
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? { message: err.message, suggestion: err.suggestion, code: err.status === 0 ? "UNREACHABLE" : err.code }
+          ? err.code === "CANCELLED"
+            ? {
+                message: "Analysis cancelled.",
+                suggestion: "Waiting stopped. If the backend had already started, it finishes and journals the analysis anyway.",
+                code: "CANCELLED",
+              }
+            : { message: err.message, suggestion: err.suggestion, code: err.status === 0 ? "UNREACHABLE" : err.code }
           : { message: "That didn't work." },
       );
       void loadStatus();
     } finally {
+      abort.current = null;
+      setStarted(null);
       setBusy(false);
     }
   };
+  const cancel = () => abort.current?.abort();
 
   const repair = async () => {
     try {
@@ -212,6 +249,9 @@ export function ApexPanel() {
   };
 
   const candidate = useMemo(() => analysis?.candidates.find((c) => c.id === selected) ?? null, [analysis, selected]);
+  const app = headerState(connection, useReadiness(), useSupervisor());
+  const leadSignal = analysis ? (signalsOf(analysis, strategy).find((x) => x.entry != null) ?? signalsOf(analysis, strategy)[0] ?? null) : null;
+  const chips = statusChips(app, analysis, leadSignal);
   const brief = info?.track_record;
   const calibration = brief && analysis && brief.synthetic === analysis.data.synthetic ? (brief.calibration?.code ?? null) : null;
 
@@ -233,8 +273,16 @@ export function ApexPanel() {
           ))}
         </Segmented>
         <Button variant="primary" size="lg" onClick={() => void run()} disabled={busy} reason={busy ? "Analysing…" : null} data-testid="apex-analyze">
-          <Icon name="target" size={15} /> {busy ? "Analysing…" : "Analyse now"}
+          <Icon name="target" size={15} /> {busy ? "Analysing…" : "Start analysis"}
         </Button>
+        {busy && (
+          <span className="flex items-center gap-2 text-[12px] text-fg-muted" data-testid="apex-job" data-state="running">
+            {refresh && !fixture ? "updating data, then analysing" : "analysing"} · {elapsed}s
+            <Button onClick={cancel} data-testid="apex-cancel">
+              <Icon name="x" size={13} /> Cancel
+            </Button>
+          </span>
+        )}
         {!fixture && (
           <label className="flex items-center gap-2 text-[12px] text-fg-muted" title="Free Dukascopy data; the Data Vault is never charged">
             <input type="checkbox" checked={refresh} onChange={(e) => setRefresh(e.target.checked)} data-testid="apex-refresh" />
@@ -246,6 +294,8 @@ export function ApexPanel() {
           <Icon name="lock" size={13} /> Research only — no orders
         </span>
       </div>
+
+      <StatusStrip chips={chips} />
 
       <nav className="flex gap-1 overflow-x-auto rounded-xl border border-hairline-strong bg-surface/80 p-1" aria-label="APEX">
         {AREAS.map((a) => (
@@ -267,7 +317,12 @@ export function ApexPanel() {
 
       {error && (
         <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-[13px]" role="alert" data-testid="apex-error">
-          <p className="font-semibold text-danger">{error.message}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold text-danger">{error.message}</p>
+            <Button onClick={() => void run()} disabled={busy} data-testid="apex-retry">
+              <Icon name="play" size={13} /> Retry
+            </Button>
+          </div>
           {error.suggestion && <p className="mt-1 text-fg-muted">{error.suggestion}</p>}
           {status && (
             <div className="mt-2">
@@ -291,17 +346,33 @@ export function ApexPanel() {
             onRepair={() => void repair()}
             repairing={repairing}
             onData={() => setArea("data")}
+            strategy={strategy}
+            onStrategy={setStrategy}
+            onValidation={() => setArea("validation")}
           />
         ) : (
           !error && (
             <EmptyState icon="target" title={`No ${market} analysis yet`}>
-              Press “Analyse now”. It reads the local data (and fetches the missing free days first).
+              Press “Start analysis”. It reads the local data (and fetches the missing free days first).
             </EmptyState>
           )
         ))}
-      {area === "journal" && <Journal journal={journal} market={market} onResolved={() => void loadSide()} decimals={decimals} />}
-      {area === "track" && <TrackRecord evaluations={evaluations} market={market} onStarted={() => void loadSide()} />}
-      {area === "data" && <ApexData market={market} status={status} onRepair={() => void repair()} onAnalyse={() => void run()} />}
+      {area === "journal" && (
+        <div className="flex flex-col gap-4">
+          <SignalJournal market={market} decimals={decimals} refreshKey={analysis?.id} />
+          <Journal journal={journal} market={market} onResolved={() => void loadSide()} decimals={decimals} />
+        </div>
+      )}
+      {area === "track" && (
+        <TrackRecord evaluations={evaluations} market={market} onStarted={() => void loadSide()} strategy={strategy} onStrategy={setStrategy} />
+      )}
+      {area === "validation" && <ApexValidationPanel market={market} strategy={strategy} onStrategy={setStrategy} />}
+      {area === "data" && (
+        <div className="flex flex-col gap-4">
+          <FitnessView market={market} refreshKey={`${analysis?.id ?? ""}|${status?.checked_at ?? ""}`} />
+          <ApexData market={market} status={status} onRepair={() => void repair()} onAnalyse={() => void run()} />
+        </div>
+      )}
       {area === "sentinel" &&
         (analysis ? (
           <SentinelCheck analysis={analysis} />
@@ -404,7 +475,7 @@ function DataBanner({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 text-[12px] text-fg-muted">
-        <StatusPill tone={QUALITY_TONE[q.status] ?? "muted"} testId="apex-quality">{`Data ${q.status}`}</StatusPill>
+        <StatusPill tone={QUALITY_TONE[q.status] ?? "muted"} testId="apex-quality" title="The data quality gate's verdict — freshness and validation are shown separately">{`Gate ${q.status}`}</StatusPill>
         <span>{analysis.data.label}</span>
         <span className="text-fg-faint">
           · as of {when(analysis.as_of)}
@@ -452,6 +523,9 @@ function AnalysisView({
   onRepair,
   repairing,
   onData,
+  strategy,
+  onStrategy,
+  onValidation,
 }: {
   analysis: ApexAnalysis;
   chart: ApexChartData | null;
@@ -464,6 +538,9 @@ function AnalysisView({
   onRepair: () => void;
   repairing: boolean;
   onData: () => void;
+  strategy: ApexStrategyName;
+  onStrategy: (s: ApexStrategyName) => void;
+  onValidation: () => void;
 }) {
   const fmt = (p: number) => p.toFixed(decimals);
   const frame = TIMEFRAMES.find((t) => t.minutes === minutes)?.name ?? `${minutes} minutes`;
@@ -511,6 +588,14 @@ function AnalysisView({
           {!analysis.blocked && <ZonesTable analysis={analysis} decimals={decimals} calibrated={calibration === "CALIBRATED"} />}
         </div>
         <div className="flex min-w-0 flex-col gap-4">
+          <AnalystPanel
+            analysis={analysis}
+            strategy={strategy}
+            onStrategy={onStrategy}
+            onValidation={onValidation}
+            onSelect={onSelect}
+            decimals={decimals}
+          />
           {!analysis.blocked && <StructureCard analysis={analysis} decimals={decimals} />}
           {!analysis.blocked && <ScenarioBoard analysis={analysis} calibration={calibration} />}
           {!analysis.blocked && <Candidates analysis={analysis} candidate={candidate} onSelect={onSelect} decimals={decimals} calibrated={calibration === "CALIBRATED"} />}
@@ -618,7 +703,8 @@ function ScenarioBoard({ analysis, calibration }: { analysis: ApexAnalysis; cali
             </ul>
           ) : (
             <p className="mt-1.5 text-[12px] text-fg-muted">
-              Candidates are limit orders at the zones — if price never reaches them, they expire and nothing happens.
+              Zone-reaction plans are limits at the zones; 5-minute plans are stop entries after a confirmed rejection. Either
+              expires unfilled if price never gets there — nothing happens then.
             </p>
           )}
         </div>
@@ -782,9 +868,14 @@ function CandidateCard({
       data-testid="apex-candidate"
       data-direction={c.direction}
     >
+      <p className="mb-1 text-[11px] font-semibold text-fg-faint" data-testid="apex-candidate-strategy">
+        {c.template}
+        {c.strategy_version ? ` ${c.strategy_version}` : ""}
+        {c.trigger ? ` · trigger: ${c.trigger.rule}` : ""}
+      </p>
       <div className="flex items-center justify-between gap-2">
         <b className={long ? "text-quant" : "text-danger"}>
-          {long ? "LONG" : "SHORT"} at {c.zone} · limit {fmt(c.entry.price)}
+          {long ? "LONG" : "SHORT"} at {c.zone} · {c.entry.type} {fmt(c.entry.price)}
         </b>
         <span className="text-[12px] text-fg-faint">{c.with_trend == null ? "1h range" : c.with_trend ? "with 1h trend" : "against 1h trend"}</span>
       </div>
@@ -1016,15 +1107,27 @@ function Calibration({ c }: { c: NonNullable<ApexEvaluation["result"]>["calibrat
   );
 }
 
-function TrackRecord({ evaluations, market, onStarted }: { evaluations: ApexEvaluation[]; market: string; onStarted: () => void }) {
+function TrackRecord({
+  evaluations,
+  market,
+  onStarted,
+  strategy,
+  onStrategy,
+}: {
+  evaluations: ApexEvaluation[];
+  market: string;
+  onStarted: () => void;
+  strategy: ApexStrategyName;
+  onStrategy: (s: ApexStrategyName) => void;
+}) {
   const [days, setDays] = useState(120);
   const [error, setError] = useState<string | null>(null);
-  const latest = evaluations[0];
-  const running = latest?.state === "RUNNING";
+  const latest = evaluations.find((e) => e.template === strategy);
+  const running = evaluations.some((e) => e.state === "RUNNING");
   const start = async () => {
     setError(null);
     try {
-      await api.apexEvaluate(market, days);
+      await api.apexEvaluate(market, days, strategy);
       onStarted();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "That didn't work.");
@@ -1032,8 +1135,15 @@ function TrackRecord({ evaluations, market, onStarted }: { evaluations: ApexEval
   };
   const r = latest?.state === "COMPLETED" ? latest.result : null;
   return (
-    <Panel title={`Rule track record · ${market}`} testId="apex-track">
+    <Panel title={`Backtest · ${market}`} testId="apex-track">
       <div className="flex flex-wrap items-center gap-3">
+        <Segmented label="Strategy">
+          {STRATEGIES.map((s) => (
+            <SegmentButton key={s.id} active={strategy === s.id} onClick={() => onStrategy(s.id)} testId={`apex-track-strategy-${s.id}`}>
+              {s.label}
+            </SegmentButton>
+          ))}
+        </Segmented>
         <label className="flex items-center gap-2 text-[13px] text-fg-muted">
           Last
           <input
@@ -1055,9 +1165,10 @@ function TrackRecord({ evaluations, market, onStarted }: { evaluations: ApexEval
         {error && <span className="text-[13px] text-danger">{error}</span>}
       </div>
       <p className="mt-2 text-[12px] leading-relaxed text-fg-faint">
-        Walks through the period as if live: at every hour of the session window the same rules as above make candidates
-        from the data known then; later bars judge them (conservative fills, costs included). The last 30% is reported
-        separately as out-of-sample.
+        Walks through the period as if live: at every decision point of the session window (each hour for the zone reaction,
+        each 5-minute close for the 5-minute rejection) the same rules as above make candidates from the data known then;
+        later bars judge them — conservative fills on the right bid/ask side, costs included. The last 30% is reported
+        separately; the binding test is the Validation tab.
       </p>
       {latest?.state === "FAILED" && <p className="mt-2 text-[13px] text-danger">Last run failed: {latest.error}</p>}
       {r && (
@@ -1104,11 +1215,12 @@ function TrackRecord({ evaluations, market, onStarted }: { evaluations: ApexEval
           </table>
           <p className="mt-2 text-[12px] text-fg-faint">
             {r.start} → {r.end} · {r.decisions} decision points · data: {r.data.label}
+            {r.execution ? ` · ${r.execution.assumption.replace(/_/g, " ")}` : ""}
           </p>
           {r.calibration && <Calibration c={r.calibration} />}
         </div>
       )}
-      {!latest && <p className="mt-3 text-[13px] text-fg-muted">No track record yet for {market}.</p>}
+      {!latest && <p className="mt-3 text-[13px] text-fg-muted">No backtest yet for {strategy} on {market}.</p>}
     </Panel>
   );
 }
