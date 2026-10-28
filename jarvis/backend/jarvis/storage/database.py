@@ -1436,11 +1436,52 @@ MIGRATIONS: list[list[str]] = [
         BEGIN SELECT RAISE(ABORT, 'a holdout is opened once per strategy version'); END
         """,
     ],
+    # 22 — APEX zone snapshots (immutable) and the imported macro calendar (with vintage).
+    [
+        """
+        CREATE TABLE apex_zone_snapshots (
+            id          TEXT PRIMARY KEY,
+            analysis_id TEXT NOT NULL REFERENCES apex_analyses(id),
+            market      TEXT NOT NULL,
+            as_of       INTEGER NOT NULL,
+            version     TEXT NOT NULL,
+            sha256      TEXT NOT NULL,
+            payload     TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER apex_zone_snapshots_no_update BEFORE UPDATE ON apex_zone_snapshots
+        BEGIN SELECT RAISE(ABORT, 'APEX zone snapshots are immutable'); END
+        """,
+        """
+        CREATE TRIGGER apex_zone_snapshots_no_delete BEFORE DELETE ON apex_zone_snapshots
+        BEGIN SELECT RAISE(ABORT, 'APEX zone snapshots are immutable'); END
+        """,
+        "CREATE INDEX idx_apex_zone_snapshots ON apex_zone_snapshots(market, as_of)",
+        """
+        CREATE TABLE apex_macro_events (
+            id                  TEXT PRIMARY KEY,
+            source              TEXT NOT NULL,
+            event               TEXT NOT NULL,
+            category            TEXT NOT NULL,
+            importance          TEXT NOT NULL,
+            currency            TEXT NOT NULL,
+            scheduled_utc       INTEGER NOT NULL,
+            schedule_known_utc  INTEGER NOT NULL,
+            actual              TEXT,
+            released_utc        INTEGER,
+            imported_at         TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_apex_macro_events ON apex_macro_events(scheduled_utc)",
+    ],
 ]
 
 # Reverse of a migration (``Database.rollback_to``): new tables only, never existing data.
 # The database is copied to backups/ before every migration as well.
 DOWNGRADES: dict[int, list[str]] = {
+    22: ["DROP TABLE apex_macro_events", "DROP TABLE apex_zone_snapshots"],
     21: [
         "DROP TABLE apex_holdout_opens",
         "DROP TABLE apex_holdouts",

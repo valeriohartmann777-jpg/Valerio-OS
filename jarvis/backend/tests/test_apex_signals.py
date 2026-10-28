@@ -305,7 +305,7 @@ async def test_migration_21_rolls_back_and_applies_again(tmp_path: Path) -> None
     assert "apex_signals" not in tables and "apex_analyses" in tables
     kept = await db.fetch_one("SELECT COUNT(*) AS n FROM apex_analyses")
     assert kept is not None and kept["n"] == 1  # existing data stays
-    assert list((tmp_path / "backups").glob("jarvis-v21-*.db"))  # copied before the rollback
+    assert list((tmp_path / "backups").glob("jarvis-v*-*.db"))  # copied before the rollback
     await db.close()
     again = Database(tmp_path / "jarvis.db")
     await again.connect()

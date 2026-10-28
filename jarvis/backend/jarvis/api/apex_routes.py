@@ -86,6 +86,15 @@ async def journal(rt: RuntimeDep, market: str | None = None, limit: int = 100) -
     return await rt.apex.journal(market, min(max(limit, 1), 500))
 
 
+@router.get("/apex/zones")
+async def zones(market: str, rt: RuntimeDep, snapshot: str | None = None) -> dict[str, Any]:
+    """A stored, immutable zone snapshot: four strongest supports and resistances as of then."""
+    try:
+        return await rt.apex.zones(market, snapshot)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
 @router.get("/apex/signals")
 async def signals(
     rt: RuntimeDep, market: str | None = None, strategy: str | None = None, limit: int = 100

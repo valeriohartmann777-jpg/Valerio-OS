@@ -14,10 +14,12 @@ from typing import Any
 import numpy as np
 
 from jarvis.apex import candidates, trigger
+from jarvis.apex.capability import capability_for, factor_matrix
 from jarvis.apex.data import Series, assess, current_contract
 from jarvis.apex.execution import Execution, execution_for
 from jarvis.apex.scenarios import BaseRates, base_rates, scenarios, zone_rate
 from jarvis.apex.structure import structure
+from jarvis.apex.zonemap import zone_map
 from jarvis.apex.zones import build_zones
 from jarvis.briefing.levels import LevelRules
 from jarvis.learning.features import atr
@@ -29,7 +31,10 @@ from jarvis.training.dataset import TouchRules
 # consecutive minutes only) — see docs/apex/APEX_DATA_DIAGNOSIS.md.
 # 1.2.0: execution model (bid/ask side, proxy block), strategy zone_rejection_5m (5-minute
 # trigger, stop entry) next to zone_reaction, per-strategy status — docs/APEX_SIGNAL_SPEC.md.
-ENGINE_VERSION = "apex-1.2.0"
+# 1.3.0: capability matrix and evidence statuses, the causal zone map (top four per side,
+# lifecycle, episodes) — docs/apex/APEX_ZONE_SPEC.md.
+ENGINE_VERSION = "apex-1.3.0"
+ZONE_DAYS = 14  # minute data behind the zone map
 STRATEGIES = {candidates.TEMPLATE: candidates.VERSION, trigger.STRATEGY: trigger.VERSION}
 
 
@@ -221,6 +226,9 @@ def analyze(
         },
         "execution": execution.as_dict(),
     }
+    capability = capability_for(known, ctx.spec)
+    head["capability"] = capability.as_dict()
+    head["factors"] = factor_matrix(capability, stale=bool(quality["stale"]))
     if quality["status"] == "BLOCK":
         reason = "Data quality gate: " + "; ".join(
             f"{f['code']} — {f['message']}" for f in quality["findings"] if f["level"] == "BLOCK"
@@ -265,6 +273,19 @@ def analyze(
         c["synthetic"] = known.synthetic
         c["engine"] = ENGINE_VERSION
     chart = _chart(view.get("bars"))
+    vwap = next(f["status"] for f in head["factors"] if f["factor"] == "vwap")
+    zones_now = view["bars"].between(as_of - ZONE_DAYS * 86400, as_of)
+    mapped = zone_map(
+        zones_now,
+        ctx.name,
+        as_of,
+        a15=view["atr15"],
+        tick=ctx.spec.tick,
+        round_step=ctx.level_rules.major_step,
+        reach_atr=cfg.reach_atr,
+        source_ids=[str(head["data"]["provenance"].get("source_id") or known.source)],
+        vwap_status=vwap,
+    )
     return {
         **head,
         "blocked": False,
@@ -281,6 +302,7 @@ def analyze(
         "strategies": decisions,
         "candidates": made,
         "rejected": [r for d in decisions.values() for r in d["rejected"]],
+        "zone_map": mapped,
         "chart": chart,
     }
 

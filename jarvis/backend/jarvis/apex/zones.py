@@ -22,7 +22,7 @@ GROUP_OF = {kind: group for group, kinds in KIND_GROUPS.items() for kind in kind
 GROUP_LABELS = {
     "k_day_extreme": "previous day high/low",
     "k_day_close": "previous day close",
-    "k_profile": "volume profile (POC / value area)",
+    "k_profile": "previous day profile POC/VA (proxy: bar or quote volume, not trades)",
     "k_overnight": "overnight / Asia range",
     "k_week": "previous week high/low",
     "k_swing": "swing high/low",
@@ -50,10 +50,12 @@ class Zone:
 
     @property
     def score(self) -> float:
+        """Legacy ordering score. The profile group is a proxy (no traded volume) and adds
+        nothing; the ranked zone map (``zonemap.py``) is the scored view."""
         week = 1.0 if "k_week" in self.groups else 0.0
+        groups = len([g for g in self.groups if g != "k_profile"])
         return round(
-            len(self.groups) + (1.0 if self.major_round else 0.0) + 0.5 * min(self.tests, 3) + week,
-            2,
+            groups + (1.0 if self.major_round else 0.0) + 0.5 * min(self.tests, 3) + week, 2
         )
 
     def as_dict(self) -> dict[str, Any]:

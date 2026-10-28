@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 from jarvis.apex.audit import compare, outcome_check
+from jarvis.apex.capability import mode_of
 from jarvis.apex.data import (
     SYNTHETIC_LABEL,
     Series,
@@ -57,6 +58,7 @@ from jarvis.apex.validation import (
     trading_days,
     verdict,
 )
+from jarvis.apex.zonemap import snapshot_hash
 from jarvis.briefing.levels import LevelRules
 from jarvis.events.bus import EventBus
 from jarvis.events.types import EventType
@@ -425,6 +427,10 @@ class ApexService:
             lambda: analyze(series, ctx, self._cfg, when, track_records=tracks)
         )
         result["replay"] = as_of is not None
+        behind = int((result["quality"].get("summary") or {}).get("behind_minutes") or 0)
+        result["mode"] = mode_of(
+            series, when, now, replay=result["replay"], behind_minutes=behind
+        ).value
         result["data"]["source_id"] = series.provenance.get("source_id")
         provenance = result["data"]["provenance"]
         result["data"]["update"] = provenance.get("update")
@@ -452,6 +458,9 @@ class ApexService:
         signals = from_analysis(result, states, created_at=datetime.fromtimestamp(now, UTC))
         result["signals"] = [sig.as_record() for sig in signals]
         self._remember(analysis_id, series.until(when))
+        zones_now = result.get("zone_map")
+        if zones_now and zones_now.get("price") is not None:
+            result["zone_snapshot_id"] = "zs-" + snapshot_hash(zones_now)[:20]
         await self.store.add_analysis(analysis_id, result)
         recorded = 0
         for c in result["candidates"]:
@@ -459,6 +468,11 @@ class ApexService:
         for record in result["signals"]:
             await self.store.add_signal(
                 analysis_id, record, synthetic=series.synthetic, replay=result["replay"]
+            )
+        zones = result.get("zone_map")
+        if zones and zones.get("price") is not None:
+            await self.store.add_zone_snapshot(
+                result["zone_snapshot_id"], analysis_id, zones, snapshot_hash(zones)
             )
         await self._bus.emit(
             EventType.APEX_ANALYSIS,
@@ -492,6 +506,22 @@ class ApexService:
                 if forward["passed"]:
                     states[name] = ValidationState.FORWARD_SUPPORTED
         return states, evidence
+
+    async def zones(self, market: str, snapshot_id: str | None = None) -> dict[str, Any]:
+        """A stored zone snapshot (the latest of the market when no id is given)."""
+        ctx = self._ctx(market)
+        if snapshot_id is None:
+            rows = await self.store.zone_snapshots(ctx.name, limit=1)
+            if not rows:
+                raise ApexError(
+                    "NO_SNAPSHOT", f"No {ctx.name} zone map yet — analyse first.", status=404
+                )
+            snapshot_id = str(rows[0]["id"])
+        found = await self.store.zone_snapshot(snapshot_id)
+        if found is None or found["market"] != ctx.name:
+            raise ApexError("NOT_FOUND", "No such zone snapshot.", status=404)
+        found["history"] = await self.store.zone_snapshots(ctx.name, limit=50)
+        return found
 
     async def signals(
         self, market: str | None = None, *, strategy: str | None = None, limit: int = 100

@@ -208,6 +208,79 @@ class ApexStore:
             for r in rows
         ]
 
+    # zone snapshots ---------------------------------------------------------------------------
+
+    async def add_zone_snapshot(
+        self, snapshot_id: str, analysis_id: str, snapshot: dict[str, Any], sha256: str
+    ) -> bool:
+        """Store a zone snapshot once (immutable); False if it was already there."""
+        return (
+            await self._db.execute_count(
+                "INSERT OR IGNORE INTO apex_zone_snapshots (id, analysis_id, market, as_of, "
+                "version, sha256, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    snapshot_id,
+                    analysis_id,
+                    snapshot["market"],
+                    int(snapshot["as_of"]),
+                    snapshot["version"],
+                    sha256,
+                    json.dumps(snapshot),
+                    utcnow().isoformat(),
+                ),
+            )
+            == 1
+        )
+
+    async def zone_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
+        row = await self._db.fetch_one(
+            "SELECT id, analysis_id, sha256, payload FROM apex_zone_snapshots WHERE id = ?",
+            (snapshot_id,),
+        )
+        if row is None:
+            return None
+        payload: dict[str, Any] = _loads(row["payload"])
+        return payload | {
+            "snapshot_id": row["id"], "analysis_id": row["analysis_id"], "sha256": row["sha256"],
+        }  # fmt: skip
+
+    async def zone_snapshots(self, market: str, limit: int = 50) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            "SELECT id, analysis_id, as_of, version, sha256 FROM apex_zone_snapshots "
+            "WHERE market = ? ORDER BY as_of DESC LIMIT ?",
+            (market, limit),
+        )
+        return [dict(r) for r in rows]
+
+    # macro calendar ---------------------------------------------------------------------------
+
+    async def add_macro_events(self, rows: list[dict[str, Any]]) -> int:
+        added = 0
+        for r in rows:
+            added += await self._db.execute_count(
+                "INSERT OR IGNORE INTO apex_macro_events (id, source, event, category, importance, "
+                "currency, scheduled_utc, schedule_known_utc, actual, released_utc, imported_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    r["id"], r["source"], r["event"], r["category"], r["importance"],
+                    r["currency"], r["scheduled_utc"], r["schedule_known_utc"], r.get("actual"),
+                    r.get("released_utc"), utcnow().isoformat(),
+                ),
+            )  # fmt: skip
+        return added
+
+    async def macro_events(self, start: int, end: int) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            "SELECT * FROM apex_macro_events WHERE scheduled_utc >= ? AND scheduled_utc < ? "
+            "ORDER BY scheduled_utc",
+            (start, end),
+        )
+        return [dict(r) for r in rows]
+
+    async def macro_count(self) -> int:
+        row = await self._db.fetch_one("SELECT COUNT(*) AS n FROM apex_macro_events")
+        return int(row["n"]) if row else 0
+
     # validation (docs/APEX_VALIDATION_PROTOCOL.md) ----------------------------------------
 
     async def add_validation(self, row: dict[str, Any]) -> None:
