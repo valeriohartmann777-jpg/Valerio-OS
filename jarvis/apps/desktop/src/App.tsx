@@ -1,9 +1,11 @@
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Suspense, lazy, useEffect } from "react";
 
+import { BackendBanner } from "./components/BackendBanner";
 import { CommandBar } from "./components/command/CommandBar";
 import { TopBar } from "./components/TopBar";
 import { LoadingState, SafeErrorBoundary } from "./components/ui/shell";
+import { useBackendWatch } from "./lib/backend";
 import { connectHistory } from "./lib/history";
 import { useInterfacePrefs } from "./lib/interface";
 import { TABS, tabOf, toHash } from "./lib/routes";
@@ -21,7 +23,9 @@ const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m
 
 export function App() {
   const view = useJarvis((s) => s.view);
+  const connection = useJarvis((s) => s.connection);
   const prefs = useInterfacePrefs();
+  useBackendWatch(connection);
   const tab = tabOf(view);
 
   useEffect(() => connectEvents(dispatch), []);
@@ -35,6 +39,7 @@ export function App() {
     <MotionConfig reducedMotion={prefs.motion === "reduced" ? "always" : "user"}>
       <div className="flex h-full flex-col" style={{ "--area": area } as React.CSSProperties} data-tab={tab} data-route={toHash(view)}>
         <TopBar />
+        <BackendBanner />
         <AnimatePresence mode="wait" initial={false}>
           <motion.main
             key={key}

@@ -16,6 +16,7 @@ import type {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError } from "../../../lib/api";
+import { useJarvis } from "../../../store/store";
 import { Icon } from "../../ui/icons";
 import { Button, cx } from "../../ui/primitives";
 import { EmptyState, LoadingState, Panel, StatusPill, type PillTone } from "../../ui/shell";
@@ -115,10 +116,15 @@ export function ApexPanel() {
   }, [market]);
   const loadStatus = useCallback(async () => setStatus(await api.apexData(market)), [market]);
 
+  // Loaded again whenever the backend (re)connects: a request that failed while it was
+  // starting must not leave a stale "not reachable" behind.
+  const connection = useJarvis((s) => s.connection);
   useEffect(() => {
-    loadSide().catch(() => setError({ message: "The backend isn't reachable." }));
+    if (connection !== "online") return;
+    setError((e) => (e && e.code === "UNREACHABLE" ? null : e));
+    loadSide().catch(() => setError({ message: "The backend isn't reachable.", code: "UNREACHABLE" }));
     loadStatus().catch(() => undefined);
-  }, [loadSide, loadStatus]);
+  }, [loadSide, loadStatus, connection]);
 
   // The latest stored analysis of this market is shown at once (local data, no new download).
   useEffect(() => {
@@ -185,7 +191,7 @@ export function ApexPanel() {
     } catch (err) {
       setError(
         err instanceof ApiError
-          ? { message: err.message, suggestion: err.suggestion, code: err.code }
+          ? { message: err.message, suggestion: err.suggestion, code: err.status === 0 ? "UNREACHABLE" : err.code }
           : { message: "That didn't work." },
       );
       void loadStatus();

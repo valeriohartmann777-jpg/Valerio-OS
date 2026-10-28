@@ -66,6 +66,13 @@ const supervisor = new BackendSupervisor(
   BACKEND_URL,
   PROJECT_ROOT,
   DEV_RENDERER_URL ? [new URL(DEV_RENDERER_URL).origin] : [],
+  {
+    // What the backend prints (keys redacted) — shown in the window when it can't start.
+    logFile: path.join(app.getPath("userData"), "logs", "backend-console.log"),
+    onChange: (status) => mainWindow?.webContents.send("jarvis:backend:status", status),
+    // Tests shorten the waits between restarts (e.g. "200"); never set in normal use.
+    restartDelaysMs: process.env.JARVIS_BACKEND_RESTART_DELAYS_MS?.split(",").map(Number).filter((n) => n > 0),
+  },
 );
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -463,6 +470,20 @@ async function restart(): Promise<void> {
   app.exit(0);
 }
 
+function registerBackendIpc(): void {
+  ipcMain.handle("jarvis:backend:status", () => supervisor.status);
+  ipcMain.handle("jarvis:backend:restart", async (event) => {
+    if (!trusted(event)) return supervisor.status;
+    await supervisor.restart();
+    return supervisor.status;
+  });
+  ipcMain.handle("jarvis:backend:repair", async (event) => {
+    if (!trusted(event)) return supervisor.status;
+    await supervisor.repair();
+    return supervisor.status;
+  });
+}
+
 function registerUpdateIpc(): void {
   ipcMain.handle("jarvis:update:status", () => updateStatus);
   ipcMain.handle("jarvis:update:check", async (event) => {
@@ -505,6 +526,7 @@ void (async () => {
   if (process.platform === "darwin" && MODE !== "app") app.dock?.setIcon(ICON);
   registerAppProtocol();
   registerUpdateIpc();
+  registerBackendIpc();
   registerAppIpc();
   startBackgroundMode();
   startUpdater();

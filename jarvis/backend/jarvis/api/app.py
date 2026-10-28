@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from jarvis import __version__
 from jarvis.api.ai_routes import router as ai_router
 from jarvis.api.apex_routes import router as apex_router
+from jarvis.api.health_routes import router as health_router
 from jarvis.api.quantlab_hub_routes import router as hub_router
 from jarvis.api.quantlab_mission_routes import router as mission_router
 from jarvis.api.quantlab_research_routes import router as research_router
@@ -53,4 +54,5 @@ def create_app(settings: Settings | None = None, *, runtime: Runtime | None = No
     app.include_router(vault_router)
     app.include_router(team_router)
     app.include_router(apex_router)
+    app.include_router(health_router)
     return app

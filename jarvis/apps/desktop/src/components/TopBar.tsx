@@ -4,17 +4,13 @@ import { HAS_TITLEBAR_OVERLAY, HAS_TRAFFIC_LIGHTS } from "../lib/config";
 import { clock } from "../lib/format";
 import { go } from "../lib/history";
 import { TABS, type Tab, tabOf } from "../lib/routes";
+import { headerState, useReadiness, useSupervisor } from "../lib/backend";
 import { useJarvis, useNow } from "../store/store";
 import { routeChip, useAiStatus } from "./settings/AiBilling";
 import { Icon } from "./ui/icons";
 import { StatusDot, cx, textTone } from "./ui/primitives";
 import { UpdateButton } from "./UpdateControls";
 
-const CONNECTION = {
-  online: { text: "System online", tone: "success" as const },
-  connecting: { text: "Connecting", tone: "warning" as const },
-  offline: { text: "Offline", tone: "danger" as const },
-};
 
 /**
  * The app header: brand, exactly five tabs (icon + label + active bar in the area colour) and
@@ -27,7 +23,8 @@ export function TopBar() {
   const build = useJarvis((s) => s.build);
   const active = useJarvis((s) => tabOf(s.view));
   const now = useNow(1000);
-  const status = CONNECTION[connection];
+  // "Backend online" only when the event stream is up AND /health/ready passed (lib/backend.ts).
+  const status = headerState(connection, useReadiness(), useSupervisor());
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // Arrow keys move between tabs (Home/End jump), Enter/Space activates — no hidden gestures.
@@ -92,7 +89,7 @@ export function TopBar() {
           </span>
         )}
         <span className="flex items-center gap-2 text-2xs font-semibold tracking-[0.12em] text-fg-muted uppercase" role="status" title={status.text}>
-          <StatusDot tone={status.tone} live={connection !== "online"} />
+          <StatusDot tone={status.tone} live={status.tone !== "success"} />
           {/* below 1280 px only the dot shows; the text stays for screen readers and the tooltip */}
           <span data-testid="connection-status" className="sr-only xl:not-sr-only">
             {status.text}

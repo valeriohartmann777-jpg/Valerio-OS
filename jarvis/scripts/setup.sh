@@ -17,6 +17,9 @@ echo "Using $("$PYTHON" --version) and Node $(node --version)"
 [ -d backend/.venv ] || "$PYTHON" -m venv backend/.venv
 backend/.venv/bin/python -m pip install --upgrade pip
 backend/.venv/bin/python -m pip install -e "backend[dev]"
+# The same stamp scripts/preflight.mjs and the app's backend supervisor compare: the packages
+# match this pyproject.toml, so they aren't installed again until it changes.
+backend/.venv/bin/python -c "import hashlib; print(hashlib.sha256(open('backend/pyproject.toml','rb').read()).hexdigest())" > backend/.venv/.jarvis-deps
 npm install --no-save
 [ -f .env ] || cp .env.example .env
 

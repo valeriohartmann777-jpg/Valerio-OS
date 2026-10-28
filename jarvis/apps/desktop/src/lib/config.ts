@@ -1,5 +1,6 @@
 import { DEFAULT_BACKEND_URL } from "@jarvis/protocol";
 
+import type { BackendBridge } from "./backend";
 import type { UpdatesBridge } from "./updates";
 
 export interface LoginItem {
@@ -24,6 +25,7 @@ interface Bridge {
   backendUrl?: string;
   platform?: string;
   updates?: UpdatesBridge;
+  backend?: BackendBridge;
   app?: AppBridge;
 }
 

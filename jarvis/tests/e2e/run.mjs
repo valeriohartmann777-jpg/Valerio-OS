@@ -15,7 +15,8 @@
  */
 
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -139,7 +140,7 @@ try {
     for (let i = 0; i < 120 && (await health())?.build === "0000000-outdated"; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    await page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 30_000 });
+    await page.getByTestId("connection-status").filter({ hasText: "Backend online" }).waitFor({ timeout: 30_000 });
     const current = await health();
     assert.notEqual(current?.build, "0000000-outdated");
     assert.equal(stale.exitCode !== null || stale.signalCode !== null, true, "stale backend still running");
@@ -1122,9 +1123,12 @@ try {
     assert.equal(await visible(), true);
   });
 
-  await step("a crashed backend is started again", async () => {
+  await step("a crashed backend is started again — the window says so meanwhile and recovers", async () => {
     const before = await health();
     process.kill(before.pid, "SIGKILL");
+    // While it is down the window says so (never "online"), then the banner goes away again.
+    await page.getByTestId("backend-banner").waitFor({ timeout: 15_000 });
+    assert.notEqual(await page.getByTestId("connection-status").innerText(), "BACKEND ONLINE");
     let after = null;
     for (let i = 0; i < 120 && !(after && after.pid !== before.pid); i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1132,6 +1136,8 @@ try {
     }
     assert.ok(after && after.pid !== before.pid, "the backend did not come back");
     await headline.filter({ hasText: "Everything is nominal." }).waitFor(); // the dashboard reconnected
+    await page.getByTestId("connection-status").filter({ hasText: "Backend online" }).waitFor({ timeout: 30_000 });
+    await page.getByTestId("backend-banner").waitFor({ state: "detached", timeout: 30_000 });
   });
 
   await step("idle state returns", async () => {
@@ -1196,7 +1202,7 @@ await step("starting a newer version takes over from the running one; the same v
     JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-takeover-")),
   });
   const online = (page) =>
-    page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 60_000 });
+    page.getByTestId("connection-status").filter({ hasText: "Backend online" }).waitFor({ timeout: 60_000 });
 
   const older = await electron.launch({ executablePath: electronBinary, args: launchArgs, env: env("1111111-older") });
   await online(await older.firstWindow());
@@ -1216,9 +1222,81 @@ await step("starting a newer version takes over from the running one; the same v
     const code = await new Promise((resolve) => again.once("exit", resolve));
     assert.equal(code, 0);
     assert.equal((await health())?.build, "2222222-newer");
-    await page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor();
+    await page.getByTestId("connection-status").filter({ hasText: "Backend online" }).waitFor();
   } finally {
     await newer.close();
+  }
+});
+
+await step("a backend that can't start is diagnosed in the window — missing package (Repair), busy port (who holds it); no endless restarts", async () => {
+  const launchArgs = [appDir, ...(process.platform === "linux" ? ["--no-sandbox"] : [])];
+  const base = {
+    ...process.env,
+    JARVIS_UPDATES: "off",
+    JARVIS_SYSTEM_BACKEND: "simulated",
+    JARVIS_BACKEND_RESTART_DELAYS_MS: "200", // the real app waits 1, 3, 10, 30 s
+  };
+  // 1. A backend whose package is missing (a stand-in Python that fails like one; pip "works").
+  const fake = mkdtempSync(path.join(tmpdir(), "jarvis-e2e-broken-"));
+  const python = path.join(fake, "python");
+  writeFileSync(
+    python,
+    `#!/bin/sh\nif [ "$2" = "pip" ]; then touch "${fake}/pip-ran"; exit 0; fi\n` +
+      `echo "Traceback (most recent call last):" 1>&2\necho "ModuleNotFoundError: No module named 'pyarrow'" 1>&2\nexit 1\n`,
+  );
+  chmodSync(python, 0o755);
+  const broken = await electron.launch({
+    executablePath: electronBinary,
+    args: launchArgs,
+    env: { ...base, JARVIS_BACKEND_URL: "http://127.0.0.1:8689", JARVIS_PYTHON: python, JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-broken-data-")) },
+  });
+  try {
+    const win = await broken.firstWindow();
+    const crashed = win.locator('[data-testid="backend-banner"][data-state="crashed"]');
+    await crashed.waitFor({ timeout: 60_000 }); // five quick crashes, then it stops trying
+    await win.locator('[data-testid="backend-diagnosis"][data-code="MISSING_DEPENDENCY"]').waitFor();
+    assert.match(await win.getByTestId("backend-diagnosis").innerText(), /pyarrow/);
+    assert.match(await win.getByTestId("connection-status").innerText(), /offline/i);
+    await win.getByTestId("backend-diagnostics").click();
+    assert.match(await win.getByTestId("backend-log").innerText(), /ModuleNotFoundError: No module named 'pyarrow'/);
+    await win.waitForTimeout(300);
+    await win.screenshot({ path: path.join(outDir, "15a-backend-missing-package.png") });
+    await win.getByTestId("backend-repair").click();
+    for (let i = 0; i < 100 && !existsSync(path.join(fake, "pip-ran")); i += 1) await new Promise((r) => setTimeout(r, 100));
+    assert.ok(existsSync(path.join(fake, "pip-ran")), "Repair reinstalled the backend's packages");
+    await crashed.waitFor({ timeout: 60_000 }); // the stand-in stays broken: diagnosed again, no loop
+  } finally {
+    await broken.close();
+  }
+
+  // 2. The port is held by another program: the real backend can't bind and the window says who holds it.
+  const blocker = http.createServer((_req, res) => {
+    res.statusCode = 404;
+    res.end("not JARVIS");
+  });
+  await new Promise((resolve) => blocker.listen(8688, "127.0.0.1", resolve));
+  const busy = await electron.launch({
+    executablePath: electronBinary,
+    args: launchArgs,
+    env: { ...base, JARVIS_BACKEND_URL: "http://127.0.0.1:8688", JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-busy-")) },
+  });
+  try {
+    const win = await busy.firstWindow();
+    await win.locator('[data-testid="backend-diagnosis"][data-code="PORT_IN_USE"]').waitFor({ timeout: 120_000 });
+    assert.match(await win.getByTestId("backend-diagnosis").innerText(), new RegExp(`pid ${process.pid}`));
+    await win.waitForTimeout(300);
+    await win.screenshot({ path: path.join(outDir, "15b-backend-port-in-use.png") });
+    // Free the port (dropping kept-alive connections, or close() waits for them), press
+    // Restart backend: the real backend starts and the header says so.
+    blocker.close();
+    blocker.closeAllConnections();
+    await win.getByTestId("backend-restart").click();
+    await win.getByTestId("connection-status").filter({ hasText: "Backend online" }).waitFor({ timeout: 90_000 });
+    await win.getByTestId("backend-banner").waitFor({ state: "detached", timeout: 30_000 });
+  } finally {
+    blocker.close();
+    blocker.closeAllConnections();
+    await busy.close();
   }
 });
 
@@ -1232,7 +1310,7 @@ await step("the Mac app's loader starts JARVIS from the checkout and replaces a 
     JARVIS_DATA_DIR: mkdtempSync(path.join(tmpdir(), "jarvis-e2e-loader-")),
   };
   const online = (page) =>
-    page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 60_000 });
+    page.getByTestId("connection-status").filter({ hasText: "Backend online" }).waitFor({ timeout: 60_000 });
 
   const terminal = await electron.launch({ executablePath: electronBinary, args: launchArgs(appDir), env });
   await online(await terminal.firstWindow());
@@ -1328,7 +1406,7 @@ await step("the Update button installs a newer version and JARVIS restarts on it
   try {
     const before = await attach();
     const { page } = before;
-    await page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 60_000 });
+    await page.getByTestId("connection-status").filter({ hasText: "Backend online" }).waitFor({ timeout: 60_000 });
     await page.getByTestId("update-button").click({ timeout: 30_000 });
     await page.getByTestId("update-panel").getByText("Add voice control").waitFor();
     await page.waitForTimeout(200);
@@ -1346,7 +1424,7 @@ await step("the Update button installs a newer version and JARVIS restarts on it
     await before.browser.close().catch(() => {});
 
     const after = await attach();
-    await after.page.getByTestId("connection-status").filter({ hasText: "System online" }).waitFor({ timeout: 60_000 });
+    await after.page.getByTestId("connection-status").filter({ hasText: "Backend online" }).waitFor({ timeout: 60_000 });
     assert.ok((await after.page.getByTestId("build").innerText()).includes(newer.slice(0, 7)));
     assert.equal((await updateHealth())?.build, newer);
     assert.ok(existsSync(path.join(checkout, "UPDATE-TEST.md")));

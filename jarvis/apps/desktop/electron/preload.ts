@@ -14,6 +14,18 @@ contextBridge.exposeInMainWorld("jarvis", {
     background: () => ipcRenderer.invoke("jarvis:app:background"),
     setStartAtLogin: (enabled: boolean) => ipcRenderer.invoke("jarvis:app:login", enabled),
   },
+  backend: {
+    status: () => ipcRenderer.invoke("jarvis:backend:status"),
+    restart: () => ipcRenderer.invoke("jarvis:backend:restart"),
+    repair: () => ipcRenderer.invoke("jarvis:backend:repair"),
+    subscribe: (listener: (status: unknown) => void) => {
+      const handler = (_event: IpcRendererEvent, status: unknown) => listener(status);
+      ipcRenderer.on("jarvis:backend:status", handler);
+      return () => {
+        ipcRenderer.removeListener("jarvis:backend:status", handler);
+      };
+    },
+  },
   updates: {
     status: () => ipcRenderer.invoke("jarvis:update:status"),
     check: () => ipcRenderer.invoke("jarvis:update:check"),
