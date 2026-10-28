@@ -41,14 +41,26 @@ Branch `claude/jarvis-foundation-mxnsz4`. Rollback point before APEX: `f6419d0`.
 
 ## Last verified run
 
-`./scripts/check.sh` green — pytest **655** (625 before APEX + 30 in `test_apex.py`), vitest 47,
-ruff, mypy ×3, typecheck. E2E **35/35** incl. the APEX step (XAUUSD + MNQ analysed, candidates
-journaled, SENTINEL re-check 3/3, SENTINEL in the HQ, track record verdict, no order route).
-Screenshots: `docs/screenshots/apex-*.png` (all on SYNTHETIC test data).
+APEX-R (2026-10-28): `./scripts/check.sh` green — pytest **668** (incl. `test_apex.py` 30,
+`test_apex_data_repair.py` 10, `test_apex_pipeline.py` 3), vitest **54** (incl.
+`chartView.test.ts` 7), ruff, mypy ×3, typecheck. E2E **35/35** incl. the rewritten APEX step
+(chart in five timeframes, zoom / reset / crosshair, zones, long/short/no-trade, JARVIS reading
+and the command-bar draft, data status, SENTINEL 3/3, MNQ, journal, track record with
+calibration, no order route). The owner's case was also rebuilt in the real app (local
+provider, cache ending four weeks back, Dukascopy unreachable): `STALE` + `NO_RECENT_DATA`
+instead of "GAPS 100 %", and `UPDATE_FAILED` / `CACHE_BEHIND` / `MISSING_DAYS` with one Repair
+action. Screenshots: `docs/screenshots/apex-*.png` (all on SYNTHETIC test data).
+
+Also fixed on the way: `TrainingService._refresh` set the new report and the run history in
+two steps with an await between them, so a status read could see a report next to an empty
+history (an intermittent `test_training` failure). Both are now read first and set together.
 
 ## Mocked / not verified here
 
 - All market data in tests and E2E is generated (SYNTHETIC). The container's network policy
   blocks Dukascopy and Databento, so **no APEX result on real market data exists yet**.
 - Real runs happen on the owner's Mac with its Dukascopy cache and Data Vault.
-- Not verified: macOS, real Dukascopy refresh, real Databento bars through APEX.
+- Not verified: macOS, a real Dukascopy refresh or repair (the container's network policy
+  refuses `jetta.dukascopy.com`), real Databento bars through APEX. Which silent path froze
+  the owner's cache (empty answers, 404s or a failed update) is shown by APEX → Data on the
+  Mac after the next update.

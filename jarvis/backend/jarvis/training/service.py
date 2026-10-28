@@ -181,8 +181,11 @@ class TrainingService:
         )
 
     async def _refresh(self) -> None:
-        self._report = await self._store.latest_report()
-        self._history = await self._store.runs(limit=30)
+        # Both are read first and set together: a status read between the two awaits would
+        # otherwise show the new report next to the old history.
+        report = await self._store.latest_report()
+        history = await self._store.runs(limit=30)
+        self._report, self._history = report, history
 
     async def _set(
         self,
