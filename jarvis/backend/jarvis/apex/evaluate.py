@@ -37,6 +37,10 @@ NY = ZoneInfo("America/New_York")
 Progress = Callable[[float], None]
 
 
+class Cancelled(Exception):
+    """A long run was cancelled from the window."""
+
+
 def decision_times(start: date, end: date, window: tuple[int, int], step_minutes: int) -> list[int]:
     """Epoch seconds of the decision points on weekdays in [start, end)."""
     out: list[int] = []
@@ -63,14 +67,18 @@ def collect(
     execution: Execution,
     *,
     progress: Progress | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Every distinct candidate ``strategy`` made at the decision ``times`` (as if live)."""
     made_all: list[dict[str, Any]] = []
     skipped = {"stale": 0, "no_data": 0}
     seen: set[tuple[int, str, float]] = set()
     for k, when in enumerate(times):
-        if progress and k % 25 == 0:
-            progress(k / max(len(times), 1))
+        if k % 25 == 0:
+            if cancelled and cancelled():
+                raise Cancelled
+            if progress:
+                progress(k / max(len(times), 1))
         known = series.until(when)
         if len(known.bars) == 0:
             skipped["no_data"] += 1

@@ -110,6 +110,53 @@ async def evaluate(body: EvaluateBody, rt: RuntimeDep) -> dict[str, Any]:
         raise _error(exc) from None
 
 
+class ValidateBody(BaseModel):
+    market: str = Field(min_length=2, max_length=10)
+    strategy: str = Field(min_length=3, max_length=40)
+
+
+@router.post("/apex/validations")
+async def validate(body: ValidateBody, rt: RuntimeDep) -> dict[str, Any]:
+    """Run the pre-registered validation protocol (background job; poll or listen)."""
+    try:
+        return await rt.apex.validate(body.market, body.strategy)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.get("/apex/validations")
+async def validations(rt: RuntimeDep, market: str | None = None) -> list[dict[str, Any]]:
+    try:
+        return await rt.apex.validations(market)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.get("/apex/validations/{validation_id}")
+async def validation(validation_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.apex.validation(validation_id)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.post("/apex/validations/{validation_id}/cancel")
+async def cancel_validation(validation_id: str, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.apex.cancel_validation(validation_id)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.get("/apex/trials")
+async def trials(market: str, strategy: str, rt: RuntimeDep) -> dict[str, Any]:
+    """The append-only trial register of a market and strategy."""
+    try:
+        return await rt.apex.trials(market, strategy)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
 @router.get("/apex/evaluations")
 async def evaluations(rt: RuntimeDep, market: str | None = None) -> list[dict[str, Any]]:
     return await rt.apex.evaluations(market)

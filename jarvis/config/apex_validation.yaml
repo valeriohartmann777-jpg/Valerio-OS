@@ -3,13 +3,20 @@
 # Registered 2026-10-28, BEFORE any holdout of any APEX strategy was evaluated (no real market
 # data had been analysed yet). Changing a number here is a new protocol version: bump
 # `protocol_version`; earlier verdicts keep the version they were judged with.
-protocol_version: "1.0.0"
+#
+# 1.1.0 (2026-10-28, before the first run of any version): the embargo covers a strategy's
+#   whole label horizon (entry validity + maximum hold, up to 720 minutes for zone_reaction),
+#   not only the maximum hold — 1.0.0 would have let dev labels overlap the next fold and the
+#   holdout. No run ever used 1.0.0.
+protocol_version: "1.1.0"
 
 split:
   warmup_days: 21          # first days only feed zones / base rates, no decisions
   holdout_share: 0.20      # the last 20 % of the available days at the first run — then frozen
   folds: 4                 # chronological walk-forward folds over the development window
-  embargo_minutes: 480     # = max hold: decisions this close to a fold end are dropped
+  embargo_minutes: 480     # at least; the strategy's label horizon (validity + max hold) when
+                           # longer. Decisions this close to a fold end or the holdout are
+                           # dropped, so no outcome window overlaps the next period.
 
 evidence:
   min_dev_trades: 60       # filled trades over all development folds

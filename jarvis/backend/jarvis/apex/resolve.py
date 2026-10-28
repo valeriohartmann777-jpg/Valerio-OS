@@ -12,6 +12,7 @@ are the traded price and the spread is inside ``cost_points``.
 Conservative, because one-minute bars don't show the order of high and low:
 - a limit fills at its price, never better, when a bar trades through it;
 - a stop entry fills at its price, or at the bar's open when the bar opened beyond it (gap);
+- a market entry (the random baseline) fills at the open of the first bar after it;
 - in the bar that fills, only the stop can be hit (a target in that bar is not counted);
 - after the fill, a bar that reaches both stop and target counts as a stop, and a bar that
   opens beyond the stop exits at that open;
@@ -40,7 +41,8 @@ def resolve(
     """Outcome of ``candidate`` given the minute bars after it (``now`` = how far data goes)."""
     created = int(candidate["created_at"])
     entry = float(candidate["entry"]["price"])
-    stop_entry = candidate["entry"].get("type") == "stop"
+    kind = candidate["entry"].get("type", "limit")
+    stop_entry = kind == "stop"
     stop = float(candidate["stop"])
     target = float(candidate["targets"][0]["price"])
     long = candidate["direction"] == "long"
@@ -67,7 +69,9 @@ def resolve(
     for i in range(len(t)):
         if t[i] >= valid_until:
             return _out("expired", checked=int(t[i]))
-        if stop_entry:
+        if kind == "market":
+            touched, price = True, float(e_open[i])
+        elif stop_entry:
             touched = e_high[i] >= entry if long else e_low[i] <= entry
             gap = (e_open[i] > entry) if long else (e_open[i] < entry)
             price = float(e_open[i]) if touched and gap else entry

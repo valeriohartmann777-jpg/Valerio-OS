@@ -22,6 +22,7 @@ import contextlib
 import hashlib
 import logging
 import secrets
+import threading
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -39,12 +40,20 @@ from jarvis.apex.data import (
     trading_minutes,
 )
 from jarvis.apex.engine import ENGINE_VERSION, STRATEGIES, MarketContext, analyze
-from jarvis.apex.evaluate import summarize, track_record
+from jarvis.apex.evaluate import Cancelled, summarize, track_record
 from jarvis.apex.execution import Execution, execution_for, fill_model
 from jarvis.apex.narrative import narrate
 from jarvis.apex.resolve import resolve
 from jarvis.apex.signal import ValidationState, from_analysis
 from jarvis.apex.store import ApexStore
+from jarvis.apex.validation import (
+    describe_split,
+    develop,
+    holdout_test,
+    plan_split,
+    trading_days,
+    verdict,
+)
 from jarvis.briefing.levels import LevelRules
 from jarvis.events.bus import EventBus
 from jarvis.events.types import EventType
@@ -137,6 +146,8 @@ class ApexService:
         self._progress: dict[str, float] = {}
         self._repair_tasks: dict[str, asyncio.Task[None]] = {}
         self._repairs: dict[str, dict[str, Any]] = {}
+        self._validations: dict[str, asyncio.Task[None]] = {}  # market → running validation
+        self._cancel: dict[str, threading.Event] = {}  # validation id → its cancel flag
         # The series the latest analyses saw (for their charts): analysis id → bars until then.
         self._seen: dict[str, Series] = {}
         self.contexts = market_contexts(settings)
@@ -149,14 +160,24 @@ class ApexService:
         failed = await self.store.fail_running()
         if failed:
             log.info("APEX: %d interrupted track record run(s) marked as failed", failed)
+        failed = await self.store.fail_running_validations()
+        if failed:
+            log.info("APEX: %d interrupted validation run(s) marked as failed", failed)
 
     async def stop(self) -> None:
-        for task in [*self._tasks.values(), *self._repair_tasks.values()]:
+        for flag in self._cancel.values():
+            flag.set()
+        for task in [
+            *self._tasks.values(),
+            *self._repair_tasks.values(),
+            *self._validations.values(),
+        ]:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         self._tasks.clear()
         self._repair_tasks.clear()
+        self._validations.clear()
 
     def _ctx(self, market: str) -> MarketContext:
         ctx = self.contexts.get(market.upper())
@@ -970,6 +991,212 @@ class ApexService:
             EventType.APEX_EVALUATION, message=message, payload={"evaluation_id": evaluation_id}
         )
 
+    # Validation (docs/APEX_VALIDATION_PROTOCOL.md) ------------------------------------------
+
+    async def validate(self, market: str, strategy: str) -> dict[str, Any]:
+        """Start the pre-registered validation of ``strategy`` on ``market`` (background)."""
+        ctx = self._ctx(market)
+        if strategy not in STRATEGIES:
+            raise ApexError("UNKNOWN_STRATEGY", f"APEX strategies: {', '.join(STRATEGIES)}.")
+        running = self._validations.get(ctx.name)
+        if running and not running.done():
+            raise ApexError(
+                "RUNNING", f"A validation for {ctx.name} is already running.", status=409
+            )
+        protocol = self._settings.apex_validation
+        now = self._now()
+        series = await self.series(ctx.name, as_of=now)
+        execution = execution_for(series, ctx.spec)
+        if not execution.tradable:
+            raise ApexError("DATA_UNAVAILABLE", execution.reason, status=409)
+        source_id = str(series.provenance.get("source_id") or series.source)
+        locked = await self.store.holdout(ctx.name, source_id, series.synthetic)
+        try:
+            split = plan_split(
+                trading_days(series), protocol, (locked["start"], locked["end"]) if locked else None
+            )
+        except ValueError as exc:
+            raise ApexError("TOO_LITTLE_DATA", str(exc), status=409) from None
+        if locked is None:  # the first validation on this data freezes the holdout
+            await self.store.lock_holdout(ctx.name, source_id, series.synthetic, *split["holdout"])
+        version = STRATEGIES[strategy]
+        validation_id = "apv-" + secrets.token_hex(8)  # every run is its own trial
+        await self.store.add_validation(
+            {
+                "id": validation_id,
+                "market": ctx.name,
+                "strategy": strategy,
+                "version": version,
+                "protocol_version": protocol.protocol_version,
+                "source_id": source_id,
+                "synthetic": series.synthetic,
+                "data_sha256": series.digest(),
+            }
+        )
+        self._progress[validation_id] = 0.0
+        self._cancel[validation_id] = threading.Event()
+        self._validations[ctx.name] = asyncio.create_task(
+            self._validate(validation_id, series, ctx, strategy, execution, split, source_id)
+        )
+        await self._bus.emit(
+            EventType.APEX_VALIDATION,
+            message=f"APEX validation started — {strategy} {version} on {ctx.name}",
+            payload={"validation_id": validation_id, "state": "RUNNING"},
+        )
+        return await self.validation(validation_id)
+
+    async def _validate(
+        self,
+        validation_id: str,
+        series: Series,
+        ctx: MarketContext,
+        strategy: str,
+        execution: Execution,
+        split: dict[str, Any],
+        source_id: str,
+    ) -> None:
+        protocol = self._settings.apex_validation
+        version = STRATEGIES[strategy]
+        family = f"{ctx.name}:{strategy}"
+        seed = int(series.digest()[:8], 16)
+        flag = self._cancel[validation_id]
+
+        def progress(value: float) -> None:
+            self._progress[validation_id] = round(0.95 * value, 3)
+
+        try:
+            prior = len(await self.store.trials(family, series.synthetic))
+            dev = await asyncio.to_thread(
+                lambda: develop(
+                    series, ctx, self._cfg, protocol, strategy, execution, split,
+                    prior_trials=prior, seed=seed, progress=progress, cancelled=flag.is_set,
+                )
+            )  # fmt: skip
+            registered = _parameters(self._cfg)
+            for variant in dev["variants"]:
+                row = next((n for n in dev["neighbours"] if n["change"] == variant), dev["stats"])
+                await self.store.add_trial(
+                    {
+                        "family": family,
+                        "strategy": strategy,
+                        "version": version,
+                        "kind": "neighbour" if variant else "registered",
+                        "params": {**registered, **variant},
+                        "validation_id": validation_id,
+                        "data_sha256": series.digest(),
+                        "synthetic": series.synthetic,
+                        "summary": {"filled": row["filled"], "mean_r": row["mean_r"]},
+                    }
+                )
+            held: dict[str, Any] | None = None
+            if dev["passed"]:
+                opened = await self.store.holdout_opened(
+                    ctx.name, source_id, series.synthetic, strategy, version
+                )
+                if opened:  # opened once per version: the first result stands
+                    held = {**opened["result"], "opened_by": opened["validation_id"]}
+                else:
+                    held = await asyncio.to_thread(
+                        lambda: holdout_test(
+                            series, ctx, self._cfg, protocol, strategy, execution, split,
+                            seed=seed, cancelled=flag.is_set,
+                        )
+                    )  # fmt: skip
+                    await self.store.open_holdout(
+                        {
+                            "market": ctx.name,
+                            "source_id": source_id,
+                            "synthetic": series.synthetic,
+                            "strategy": strategy,
+                            "version": version,
+                            "validation_id": validation_id,
+                            "result": held,
+                        }
+                    )
+                    held = {**held, "opened_by": validation_id}
+            judged = verdict(dev, held, synthetic=series.synthetic)
+            result = {
+                "protocol_version": protocol.protocol_version,
+                "strategy": strategy,
+                "version": version,
+                "engine": ENGINE_VERSION,
+                "market": ctx.name,
+                "data": {
+                    "source_id": source_id,
+                    "label": series.label,
+                    "synthetic": series.synthetic,
+                    "sha256": series.digest(),
+                },
+                "execution": execution.as_dict(),
+                "parameters": registered,
+                "split": describe_split(split),
+                "development": dev,
+                "holdout": held,
+                "verdict": judged,
+            }
+            await self.store.update_validation(
+                validation_id, state="COMPLETED", progress=1.0, result=result
+            )
+            message = f"APEX validation {strategy} on {ctx.name}: {judged['validation_state']}"
+        except Cancelled:
+            await self.store.update_validation(validation_id, state="CANCELLED", error="Cancelled.")
+            message = f"APEX validation {strategy} on {ctx.name} cancelled"
+        except Exception as exc:  # reported, never retried silently
+            log.exception("APEX validation failed")
+            await self.store.update_validation(validation_id, state="FAILED", error=str(exc)[:500])
+            message = f"APEX validation {strategy} on {ctx.name} failed: {exc}"
+        self._progress.pop(validation_id, None)
+        self._cancel.pop(validation_id, None)
+        await self._bus.emit(
+            EventType.APEX_VALIDATION, message=message, payload={"validation_id": validation_id}
+        )
+
+    async def cancel_validation(self, validation_id: str) -> dict[str, Any]:
+        flag = self._cancel.get(validation_id)
+        if flag is None:
+            raise ApexError("NOT_RUNNING", "This validation isn't running.", status=409)
+        flag.set()
+        return await self.validation(validation_id)
+
+    async def validation(self, validation_id: str) -> dict[str, Any]:
+        row = await self.store.validation(validation_id)
+        if row is None:
+            raise ApexError("NOT_FOUND", "No such validation.", status=404)
+        if validation_id in self._progress:
+            row["progress"] = self._progress[validation_id]
+        return row
+
+    async def validations(self, market: str | None = None) -> list[dict[str, Any]]:
+        rows = await self.store.validations(self._ctx(market).name if market else None)
+        out = []
+        for row in rows:
+            if row["id"] in self._progress:
+                row["progress"] = self._progress[row["id"]]
+            result = row.get("result") or {}
+            dev = result.get("development") or {}
+            row["result"] = (
+                {k: v for k, v in result.items() if k != "development"}
+                | {"development": {k: v for k, v in dev.items() if k != "ledger"}}
+                if result
+                else None
+            )
+            out.append(row)
+        return out
+
+    async def trials(self, market: str, strategy: str) -> dict[str, Any]:
+        ctx = self._ctx(market)
+        family = f"{ctx.name}:{strategy}"
+        return {
+            "family": family,
+            "real": await self.store.trials(family, False),
+            "synthetic": await self.store.trials(family, True),
+        }
+
+    async def wait_validation(self, market: str, timeout: float = 300.0) -> None:  # noqa: ASYNC109
+        task = self._validations.get(market.upper())
+        if task and not task.done():
+            await asyncio.wait_for(asyncio.shield(task), timeout)
+
     async def evaluation(self, evaluation_id: str) -> dict[str, Any]:
         row = await self.store.evaluation(evaluation_id)
         if row is None:
@@ -989,6 +1216,15 @@ class ApexService:
         tasks = [t for t in self._tasks.values() if not t.done()]
         if tasks:
             await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout)
+
+
+def _parameters(cfg: Any) -> dict[str, Any]:
+    """The registered strategy parameters a validation judged (from config/apex.yaml)."""
+    keys = (
+        "reach_atr", "stop_buffer_atr", "min_rr", "max_stop_atr", "valid_minutes",
+        "trigger_valid_minutes", "max_hold_minutes", "zone_width_atr", "eval_step_minutes",
+    )  # fmt: skip
+    return {k: getattr(cfg, k) for k in keys}
 
 
 def _brief(evaluation: dict[str, Any]) -> dict[str, Any]:

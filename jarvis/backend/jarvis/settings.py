@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from jarvis.permissions.models import ApprovalPolicy, PermissionLevel
 
@@ -260,6 +260,60 @@ class ApexSettings(BaseModel):
     markets: dict[str, ApexMarketSettings] = Field(default_factory=dict)
 
 
+class ApexSplitSettings(BaseModel):
+    warmup_days: int = 21
+    holdout_share: float = 0.20
+    folds: int = 4
+    embargo_minutes: int = 480  # at least; the strategy's label horizon when that is longer
+
+
+class ApexEvidenceSettings(BaseModel):
+    min_dev_trades: int = 60
+    min_holdout_trades: int = 30
+    min_trade_days: int = 20
+    bootstrap_resamples: int = 2000
+    baseline_runs: int = 200
+    alpha: float = 0.05
+
+
+class ApexPassSettings(BaseModel):
+    dev_mean_r_ci_low_above: float = 0.0
+    beats_baseline: bool = True
+    cost_stress_factor: float = 1.5
+    neighbours_positive_share: float = 0.66
+    folds_positive_share: float = 0.75
+
+
+class ApexHoldoutSettings(BaseModel):
+    mean_r_above: float = 0.0
+    ci_low_above: float = 0.0
+
+
+class ApexForwardSettings(BaseModel):
+    min_trades: int = 30
+    ci_low_above: float = 0.0
+
+
+class ApexValidationSettings(BaseModel):
+    """``config/apex_validation.yaml`` — pre-registered; the defaults equal the file."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    protocol_version: str = "1.1.0"
+    split: ApexSplitSettings = Field(default_factory=ApexSplitSettings)
+    evidence: ApexEvidenceSettings = Field(default_factory=ApexEvidenceSettings)
+    criteria: ApexPassSettings = Field(default_factory=ApexPassSettings, alias="pass")
+    holdout: ApexHoldoutSettings = Field(default_factory=ApexHoldoutSettings)
+    forward: ApexForwardSettings = Field(default_factory=ApexForwardSettings)
+    neighbours: dict[str, list[float]] = Field(
+        default_factory=lambda: {
+            "min_rr": [1.25, 1.75],
+            "reach_atr": [2.0, 4.0],
+            "stop_buffer_atr": [0.10, 0.20],
+        }
+    )
+
+
 class Mt5LocationSettings(BaseModel):
     """Found automatically on a Mac; set only if JARVIS can't find MetaTrader."""
 
@@ -459,6 +513,7 @@ class Settings(BaseModel):
     quantlab: QuantLabSettings = Field(default_factory=QuantLabSettings)
     ai: AiSettings = Field(default_factory=AiSettings)
     apex: ApexSettings = Field(default_factory=ApexSettings)
+    apex_validation: ApexValidationSettings = Field(default_factory=ApexValidationSettings)
 
     @property
     def env_file(self) -> Path:
@@ -526,6 +581,7 @@ def load_settings(
     data["ultron"] = _read_yaml(config_dir / "ultron.yaml")
     data["ai"] = _read_yaml(config_dir / "ai.yaml")
     data["apex"] = _read_yaml(config_dir / "apex.yaml")
+    data["apex_validation"] = _read_yaml(config_dir / "apex_validation.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))
