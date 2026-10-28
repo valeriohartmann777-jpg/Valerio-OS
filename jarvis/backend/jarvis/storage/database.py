@@ -1333,7 +1333,122 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # 21 — APEX signals (immutable), validation runs, the trial register, frozen holdouts.
+    [
+        """
+        CREATE TABLE apex_signals (
+            id               TEXT PRIMARY KEY,
+            analysis_id      TEXT NOT NULL REFERENCES apex_analyses(id),
+            market           TEXT NOT NULL,
+            strategy         TEXT NOT NULL,
+            version          TEXT NOT NULL,
+            status           TEXT NOT NULL,
+            direction        TEXT NOT NULL,
+            as_of            INTEGER NOT NULL,
+            validation_state TEXT NOT NULL,
+            synthetic        INTEGER NOT NULL,
+            replay           INTEGER NOT NULL,
+            candidate_id     TEXT,
+            payload          TEXT NOT NULL,
+            created_at       TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER apex_signals_no_update BEFORE UPDATE ON apex_signals
+        BEGIN SELECT RAISE(ABORT, 'APEX signals are immutable'); END
+        """,
+        """
+        CREATE TRIGGER apex_signals_no_delete BEFORE DELETE ON apex_signals
+        BEGIN SELECT RAISE(ABORT, 'APEX signals are immutable'); END
+        """,
+        "CREATE INDEX idx_apex_signals_market ON apex_signals(market, as_of)",
+        """
+        CREATE TABLE apex_validations (
+            id               TEXT PRIMARY KEY,
+            market           TEXT NOT NULL,
+            strategy         TEXT NOT NULL,
+            version          TEXT NOT NULL,
+            protocol_version TEXT NOT NULL,
+            source_id        TEXT NOT NULL,
+            state            TEXT NOT NULL,
+            progress         REAL NOT NULL,
+            synthetic        INTEGER NOT NULL,
+            data_sha256      TEXT NOT NULL,
+            result           TEXT,
+            error            TEXT,
+            created_at       TEXT NOT NULL,
+            finished_at      TEXT
+        )
+        """,
+        """
+        CREATE TABLE apex_trials (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            family        TEXT NOT NULL,
+            strategy      TEXT NOT NULL,
+            version       TEXT NOT NULL,
+            kind          TEXT NOT NULL,
+            params        TEXT NOT NULL,
+            validation_id TEXT NOT NULL REFERENCES apex_validations(id),
+            data_sha256   TEXT NOT NULL,
+            synthetic     INTEGER NOT NULL,
+            summary       TEXT NOT NULL,
+            created_at    TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER apex_trials_no_update BEFORE UPDATE ON apex_trials
+        BEGIN SELECT RAISE(ABORT, 'the APEX trial register is append-only'); END
+        """,
+        """
+        CREATE TRIGGER apex_trials_no_delete BEFORE DELETE ON apex_trials
+        BEGIN SELECT RAISE(ABORT, 'the APEX trial register is append-only'); END
+        """,
+        """
+        CREATE TABLE apex_holdouts (
+            market     TEXT NOT NULL,
+            source_id  TEXT NOT NULL,
+            synthetic  INTEGER NOT NULL,
+            start      INTEGER NOT NULL,
+            "end"      INTEGER NOT NULL,
+            locked_at  TEXT NOT NULL,
+            PRIMARY KEY (market, source_id, synthetic)
+        )
+        """,
+        """
+        CREATE TRIGGER apex_holdouts_frozen BEFORE UPDATE ON apex_holdouts
+        BEGIN SELECT RAISE(ABORT, 'an APEX holdout period is frozen'); END
+        """,
+        """
+        CREATE TABLE apex_holdout_opens (
+            market        TEXT NOT NULL,
+            source_id     TEXT NOT NULL,
+            synthetic     INTEGER NOT NULL,
+            strategy      TEXT NOT NULL,
+            version       TEXT NOT NULL,
+            validation_id TEXT NOT NULL REFERENCES apex_validations(id),
+            result        TEXT NOT NULL,
+            opened_at     TEXT NOT NULL,
+            PRIMARY KEY (market, source_id, synthetic, strategy, version)
+        )
+        """,
+        """
+        CREATE TRIGGER apex_holdout_opens_once BEFORE UPDATE ON apex_holdout_opens
+        BEGIN SELECT RAISE(ABORT, 'a holdout is opened once per strategy version'); END
+        """,
+    ],
 ]
+
+# Reverse of a migration (``Database.rollback_to``): new tables only, never existing data.
+# The database is copied to backups/ before every migration as well.
+DOWNGRADES: dict[int, list[str]] = {
+    21: [
+        "DROP TABLE apex_holdout_opens",
+        "DROP TABLE apex_holdouts",
+        "DROP TABLE apex_trials",
+        "DROP TABLE apex_validations",
+        "DROP TABLE apex_signals",
+    ],
+}
 
 
 BACKUPS_KEPT = 5
@@ -1380,6 +1495,22 @@ class Database:
             await self.conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
             await self.conn.commit()
             log.info("database migrated", extra={"schema_version": version})
+
+    async def rollback_to(self, version: int) -> None:
+        """Undo the migrations above ``version`` (only those listed in ``DOWNGRADES``)."""
+        row = await self.fetch_one("SELECT MAX(version) AS v FROM schema_version")
+        current = int(row["v"]) if row and row["v"] is not None else 0
+        missing = [v for v in range(version + 1, current + 1) if v not in DOWNGRADES]
+        if missing:
+            raise RuntimeError(f"migration(s) {missing} have no downgrade")
+        if current > version:
+            await self._backup_before_migration(current)
+        for v in range(current, version, -1):
+            for statement in DOWNGRADES[v]:
+                await self.conn.execute(statement)
+            await self.conn.execute("DELETE FROM schema_version WHERE version = ?", (v,))
+            await self.conn.commit()
+            log.info("database rolled back", extra={"schema_version": v - 1})
 
     async def _backup_before_migration(self, current: int) -> Path | None:
         """A consistent copy of the database before a schema change touches it.

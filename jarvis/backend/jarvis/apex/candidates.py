@@ -10,6 +10,8 @@ Template ``zone_reaction`` (one rule set, the same for live analysis and the tra
   than ``max_stop_atr`` ATR, when there is no target zone, or when reward/risk to target 1
   after round-trip costs is below ``min_rr``. Price inside a zone → no candidate (no chasing).
 - Valid ``valid_minutes`` for the fill, then held at most ``max_hold_minutes``.
+- Reward/risk counts the costs the execution model deducts (``execution.py``): on bid-only
+  data the spread is modelled on the order's side, the rest of the costs comes off the reward.
 
 These are research candidates. They carry no probability of their own: the zone's counted
 base rate and the template's measured track record are attached separately.
@@ -25,6 +27,8 @@ from jarvis.apex.zones import snap
 from jarvis.settings import ApexMarketSettings, ApexSettings
 
 TEMPLATE = "zone_reaction"
+# 1.1.0: costs from the execution model (bid/ask side on bid-only data); 1.0.0 = flat costs.
+VERSION = "1.1.0"
 
 
 def candidate_id(fields: dict[str, Any]) -> str:
@@ -42,8 +46,10 @@ def generate(
     trend_60: str,
     spec: ApexMarketSettings,
     cfg: ApexSettings,
+    costs: float | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """(candidates, rejected) for the nearest support and resistance zones."""
+    """(candidates, rejected) for the nearest support and resistance zones; ``costs`` are the
+    round-trip costs deducted from the reward (default: the market's ``cost_points``)."""
     out: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     supports = [z for z in zones if z["side"] == "support"]
@@ -59,6 +65,7 @@ def generate(
         made = _one(
             market, zone, direction, supports, resistances,
             price=price, atr15=atr15, as_of=as_of, trend_60=trend_60, spec=spec, cfg=cfg,
+            costs=spec.cost_points if costs is None else costs,
         )  # fmt: skip
         (out if "entry" in made else rejected).append(made)
     return out, rejected
@@ -77,6 +84,7 @@ def _one(
     trend_60: str,
     spec: ApexMarketSettings,
     cfg: ApexSettings,
+    costs: float,
 ) -> dict[str, Any]:
     long = direction == "long"
     base = {"template": TEMPLATE, "direction": direction, "zone": zone["id"]}
@@ -118,7 +126,7 @@ def _one(
         }
     if not targets:
         return {**base, "reason": "No opposing zone mapped for a target."}
-    cost = spec.cost_points
+    cost = costs
     reward = [abs(t - entry) for t in targets]
     rr = [round((r - cost) / risk, 2) for r in reward]
     if rr[0] < cfg.min_rr:
@@ -139,6 +147,7 @@ def _one(
     return {
         "id": candidate_id(fields),
         **base,
+        "strategy_version": VERSION,
         "market": market,
         "created_at": as_of,
         "entry": {"type": "limit", "price": entry},

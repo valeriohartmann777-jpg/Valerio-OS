@@ -1,12 +1,15 @@
-"""Persistence for APEX (``apex_*`` tables, migration 20).
+"""Persistence for APEX (``apex_*`` tables, migrations 20 and 21).
 
-Candidates are written once and never changed (database triggers); an outcome may move from
-``pending`` / ``open`` to a final state, and a final outcome is never changed again.
+Candidates and signals are written once and never changed (database triggers); an outcome may
+move from ``pending`` / ``open`` to a final state, and a final outcome is never changed again.
+The trial register is append-only; a holdout period, once locked, is frozen, and each
+strategy version opens it once.
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 
 from jarvis.storage.database import Database
@@ -138,6 +141,223 @@ class ApexStore:
                 (*values, candidate_id),
             )
 
+    # signals --------------------------------------------------------------------------------
+
+    async def add_signal(
+        self, analysis_id: str, signal: dict[str, Any], *, synthetic: bool, replay: bool
+    ) -> bool:
+        """Record a signal once (same content id → already there); returns False then."""
+        exists = await self._db.fetch_one(
+            "SELECT 1 FROM apex_signals WHERE id = ?", (signal["signal_id"],)
+        )
+        if exists:
+            return False
+        await self._db.execute(
+            "INSERT INTO apex_signals (id, analysis_id, market, strategy, version, status, "
+            "direction, as_of, validation_state, synthetic, replay, candidate_id, payload, "
+            "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                signal["signal_id"],
+                analysis_id,
+                signal["symbol"],
+                signal["strategy_id"],
+                signal["strategy_version"],
+                signal["status"],
+                signal["direction"],
+                int(datetime.fromisoformat(signal["as_of_utc"]).timestamp()),
+                signal["validation_state"],
+                1 if synthetic else 0,
+                1 if replay else 0,
+                signal.get("candidate_id"),
+                json.dumps(signal),
+                utcnow().isoformat(),
+            ),
+        )
+        return True
+
+    async def signals(
+        self,
+        market: str | None = None,
+        *,
+        strategy: str | None = None,
+        analysis_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        where, args = [], []
+        for column, value in (
+            ("s.market", market), ("s.strategy", strategy), ("s.analysis_id", analysis_id),
+        ):  # fmt: skip
+            if value:
+                where.append(f"{column} = ?")
+                args.append(value)
+        rows = await self._db.fetch_all(
+            "SELECT s.payload, s.synthetic, s.replay, s.analysis_id, o.payload AS outcome "
+            "FROM apex_signals s LEFT JOIN apex_outcomes o ON o.candidate_id = s.candidate_id "
+            + ("WHERE " + " AND ".join(where) + " " if where else "")
+            + "ORDER BY s.as_of DESC, s.id LIMIT ?",
+            (*args, limit),
+        )
+        return [
+            _loads(r["payload"])
+            | {
+                "synthetic": bool(r["synthetic"]),
+                "replay": bool(r["replay"]),
+                "analysis_id": r["analysis_id"],
+                "outcome": _loads(r["outcome"]),
+            }
+            for r in rows
+        ]
+
+    # validation (docs/APEX_VALIDATION_PROTOCOL.md) ----------------------------------------
+
+    async def add_validation(self, row: dict[str, Any]) -> None:
+        await self._db.execute(
+            "INSERT INTO apex_validations (id, market, strategy, version, protocol_version, "
+            "source_id, state, progress, synthetic, data_sha256, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'RUNNING', 0, ?, ?, ?)",
+            (
+                row["id"],
+                row["market"],
+                row["strategy"],
+                row["version"],
+                row["protocol_version"],
+                row["source_id"],
+                1 if row["synthetic"] else 0,
+                row["data_sha256"],
+                utcnow().isoformat(),
+            ),
+        )
+
+    async def update_validation(self, validation_id: str, **fields: Any) -> None:
+        if "result" in fields:
+            fields["result"] = json.dumps(fields["result"])
+        if fields.get("state") in ("COMPLETED", "FAILED", "CANCELLED"):
+            fields["finished_at"] = utcnow().isoformat()
+        cols = ", ".join(f'"{k}" = ?' for k in fields)
+        await self._db.execute(
+            f"UPDATE apex_validations SET {cols} WHERE id = ?", (*fields.values(), validation_id)
+        )
+
+    async def validation(self, validation_id: str) -> dict[str, Any] | None:
+        row = await self._db.fetch_one(
+            "SELECT * FROM apex_validations WHERE id = ?", (validation_id,)
+        )
+        return self._validation(row) if row else None
+
+    async def validations(self, market: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            "SELECT * FROM apex_validations "
+            + ("WHERE market = ? " if market else "")
+            + "ORDER BY created_at DESC LIMIT ?",
+            ((market, limit) if market else (limit,)),
+        )
+        return [self._validation(r) for r in rows]
+
+    async def verdicts(self, market: str, synthetic: bool) -> dict[str, dict[str, Any]]:
+        """Each strategy version's latest completed validation on real (or test) data."""
+        rows = await self._db.fetch_all(
+            "SELECT * FROM apex_validations WHERE market = ? AND synthetic = ? "
+            "AND state = 'COMPLETED' ORDER BY finished_at",
+            (market, 1 if synthetic else 0),
+        )
+        return {f"{r['strategy']}@{r['version']}": self._validation(r) for r in rows}
+
+    async def fail_running_validations(self) -> int:
+        return await self._db.execute_count(
+            "UPDATE apex_validations SET state = 'FAILED', error = 'Interrupted by a restart.' "
+            "WHERE state = 'RUNNING'"
+        )
+
+    @staticmethod
+    def _validation(row: Any) -> dict[str, Any]:
+        out = dict(row)
+        out["synthetic"] = bool(out["synthetic"])
+        out["result"] = _loads(out["result"])
+        return out
+
+    async def add_trial(self, row: dict[str, Any]) -> int:
+        await self._db.execute(
+            "INSERT INTO apex_trials (family, strategy, version, kind, params, validation_id, "
+            "data_sha256, synthetic, summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                row["family"],
+                row["strategy"],
+                row["version"],
+                row["kind"],
+                json.dumps(row["params"], sort_keys=True),
+                row["validation_id"],
+                row["data_sha256"],
+                1 if row["synthetic"] else 0,
+                json.dumps(row["summary"]),
+                utcnow().isoformat(),
+            ),
+        )
+        found = await self._db.fetch_one("SELECT MAX(id) AS id FROM apex_trials")
+        return int(found["id"]) if found else 0
+
+    async def trials(self, family: str, synthetic: bool) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            "SELECT * FROM apex_trials WHERE family = ? AND synthetic = ? ORDER BY id",
+            (family, 1 if synthetic else 0),
+        )
+        return [
+            dict(r) | {"params": _loads(r["params"]), "summary": _loads(r["summary"]),
+                       "synthetic": bool(r["synthetic"])}
+            for r in rows
+        ]  # fmt: skip
+
+    async def holdout(self, market: str, source_id: str, synthetic: bool) -> dict[str, Any] | None:
+        row = await self._db.fetch_one(
+            'SELECT market, source_id, synthetic, start, "end", locked_at FROM apex_holdouts '
+            "WHERE market = ? AND source_id = ? AND synthetic = ?",
+            (market, source_id, 1 if synthetic else 0),
+        )
+        return dict(row) | {"synthetic": bool(row["synthetic"])} if row else None
+
+    async def lock_holdout(
+        self, market: str, source_id: str, synthetic: bool, start: int, end: int
+    ) -> dict[str, Any]:
+        """Freeze the holdout period at the first validation run; later calls return it."""
+        await self._db.execute(
+            'INSERT OR IGNORE INTO apex_holdouts (market, source_id, synthetic, start, "end", '
+            "locked_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (market, source_id, 1 if synthetic else 0, start, end, utcnow().isoformat()),
+        )
+        found = await self.holdout(market, source_id, synthetic)
+        assert found is not None
+        return found
+
+    async def holdout_opened(
+        self, market: str, source_id: str, synthetic: bool, strategy: str, version: str
+    ) -> dict[str, Any] | None:
+        row = await self._db.fetch_one(
+            "SELECT * FROM apex_holdout_opens WHERE market = ? AND source_id = ? AND synthetic = ? "
+            "AND strategy = ? AND version = ?",
+            (market, source_id, 1 if synthetic else 0, strategy, version),
+        )
+        return dict(row) | {"result": _loads(row["result"])} if row else None
+
+    async def open_holdout(self, row: dict[str, Any]) -> bool:
+        """Record the one opening of a holdout for a strategy version; False if it was opened."""
+        return (
+            await self._db.execute_count(
+                "INSERT OR IGNORE INTO apex_holdout_opens (market, source_id, synthetic, "
+                "strategy, version, validation_id, result, opened_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    row["market"],
+                    row["source_id"],
+                    1 if row["synthetic"] else 0,
+                    row["strategy"],
+                    row["version"],
+                    row["validation_id"],
+                    json.dumps(row["result"]),
+                    utcnow().isoformat(),
+                ),
+            )
+            == 1
+        )
+
     # audits ---------------------------------------------------------------------------------
 
     async def add_audit(
@@ -251,11 +471,14 @@ class ApexStore:
         )
         return [self._evaluation(r, full=False) for r in rows]
 
-    async def latest_completed(self, market: str) -> dict[str, Any] | None:
+    async def latest_completed(
+        self, market: str, template: str | None = None
+    ) -> dict[str, Any] | None:
         row = await self._db.fetch_one(
             "SELECT * FROM apex_evaluations WHERE market = ? AND state = 'COMPLETED' "
-            "ORDER BY finished_at DESC LIMIT 1",
-            (market,),
+            + ("AND template = ? " if template else "")
+            + "ORDER BY finished_at DESC LIMIT 1",
+            (market, template) if template else (market,),
         )
         return self._evaluation(row) if row else None
 

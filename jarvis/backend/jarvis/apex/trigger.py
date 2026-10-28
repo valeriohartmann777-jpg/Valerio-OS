@@ -43,10 +43,12 @@ def evaluate(
     trend_60: str,
     spec: ApexMarketSettings,
     cfg: ApexSettings,
+    costs: float | None = None,
 ) -> dict[str, Any]:
     """{status, direction, setups, trigger, candidate, rejected, reasons} at ``as_of``.
 
-    ``bars5`` must hold only 5-minute bars that had closed by ``as_of``."""
+    ``bars5`` must hold only 5-minute bars that had closed by ``as_of``; ``costs`` are the
+    round-trip costs deducted from the reward (default: the market's ``cost_points``)."""
     supports = sorted((z for z in zones if z["side"] == "support"), key=lambda z: -z["high"])
     resistances = sorted((z for z in zones if z["side"] == "resistance"), key=lambda z: z["low"])
     reasons: list[str] = []
@@ -117,7 +119,8 @@ def evaluate(
             "rule": f"{'bullish' if long else 'bearish'} 5-minute rejection of {zone['id']}",
         }  # fmt: skip
         plan = _plan(market, zone, long, supports, resistances, trigger, atr15=atr15, as_of=as_of,
-                     trend_60=trend_60, spec=spec, cfg=cfg)  # fmt: skip
+                     trend_60=trend_60, spec=spec, cfg=cfg,
+                     costs=spec.cost_points if costs is None else costs)  # fmt: skip
         if "reason" in plan:
             rejected.append(plan)
             reasons.append(plan["reason"])
@@ -140,6 +143,7 @@ def _plan(
     trend_60: str,
     spec: ApexMarketSettings,
     cfg: ApexSettings,
+    costs: float,
 ) -> dict[str, Any]:
     tick = spec.tick
     buffer = cfg.stop_buffer_atr * atr15
@@ -168,7 +172,7 @@ def _plan(
         }
     if not targets:
         return {**base, "reason": "No opposing zone mapped for a target."}
-    cost = spec.cost_points
+    cost = costs
     rr = [round((abs(t - entry) - cost) / risk, 2) for t in targets]
     if rr[0] < cfg.min_rr:
         return {

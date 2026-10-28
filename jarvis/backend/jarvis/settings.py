@@ -225,6 +225,9 @@ class ApexMarketSettings(BaseModel):
     point_value: float  # USD per 1.0 of price per unit below
     unit: str  # "contract" or "lot (100 oz)"
     cost_points: float  # round-trip costs (commission, spread, slippage) in price points
+    # Bid-only data (Dukascopy): the bid/ask spread modelled on the order's side when the ask
+    # candles aren't measured — an estimate, part of cost_points (docs/APEX_SIGNAL_SPEC.md).
+    spread_points: float = 0.0
     min_stop_points: float
     # Where the minute data comes from, in order of preference:
     #   vault:<ROOT>   QuantLab Data Vault futures bars (Databento / imports)

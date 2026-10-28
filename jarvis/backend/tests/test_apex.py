@@ -27,8 +27,9 @@ from jarvis.apex.data import (
     synthetic_bars,
     trading_minutes,
 )
-from jarvis.apex.engine import analyze, candidates_at
+from jarvis.apex.engine import analyze, plans_at
 from jarvis.apex.evaluate import decision_times, summarize, track_record, verdict
+from jarvis.apex.execution import execution_for
 from jarvis.apex.resolve import resolve
 from jarvis.apex.service import market_contexts
 from jarvis.apex.stats import clustered_mean, wilson
@@ -438,8 +439,9 @@ def test_the_track_record_uses_the_live_rules_and_is_reproducible() -> None:
     assert trades
     # Every trade is exactly what the live analysis would have produced at that moment.
     sample = trades[len(trades) // 2]
-    made, _, _ = candidates_at(series.until(sample["at"]), ctx, CFG, sample["at"])
-    assert sample["id"] in {c["id"] for c in made}
+    known = series.until(sample["at"])
+    decisions, _ = plans_at(known, ctx, CFG, sample["at"], execution_for(known, ctx.spec))
+    assert sample["id"] in {c["id"] for c in decisions["zone_reaction"]["candidates"]}
     states = first["all"]["states"]
     assert sum(states.values()) == first["all"]["candidates"]
     assert first["all"]["filled"] == states["win"] + states["loss"] + states["timeout"]

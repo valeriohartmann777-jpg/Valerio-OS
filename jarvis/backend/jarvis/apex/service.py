@@ -38,10 +38,12 @@ from jarvis.apex.data import (
     trading,
     trading_minutes,
 )
-from jarvis.apex.engine import ENGINE_VERSION, MarketContext, analyze
+from jarvis.apex.engine import ENGINE_VERSION, STRATEGIES, MarketContext, analyze
 from jarvis.apex.evaluate import summarize, track_record
+from jarvis.apex.execution import Execution, execution_for, fill_model
 from jarvis.apex.narrative import narrate
 from jarvis.apex.resolve import resolve
+from jarvis.apex.signal import ValidationState, from_analysis
 from jarvis.apex.store import ApexStore
 from jarvis.briefing.levels import LevelRules
 from jarvis.events.bus import EventBus
@@ -381,9 +383,15 @@ class ApexService:
                 "FUTURE", "An analysis can't be made for a moment that hasn't happened."
             )
         series = await self.series(ctx.name, as_of=when, refresh=refresh and as_of is None)
-        latest = await self.store.latest_completed(ctx.name)
-        track = _brief(latest) if latest and latest["synthetic"] == series.synthetic else None
-        result = await asyncio.to_thread(analyze, series, ctx, self._cfg, when, track_record=track)
+        runs: dict[str, dict[str, Any]] = {}
+        for name in STRATEGIES:
+            found = await self.store.latest_completed(ctx.name, name)
+            if found and found["synthetic"] == series.synthetic:
+                runs[name] = found
+        tracks = {name: _brief(run) for name, run in runs.items()}
+        result = await asyncio.to_thread(
+            lambda: analyze(series, ctx, self._cfg, when, track_records=tracks)
+        )
         result["replay"] = as_of is not None
         result["data"]["source_id"] = series.provenance.get("source_id")
         provenance = result["data"]["provenance"]
@@ -400,17 +408,26 @@ class ApexService:
         )
         result["id"] = analysis_id
         calibration = None
-        if track and latest:
-            checked = (latest.get("result") or {}).get("calibration") or {}
+        if "zone_reaction" in runs:  # the zone rates' calibration is measured with that run
+            checked = (runs["zone_reaction"].get("result") or {}).get("calibration") or {}
             calibration = (checked.get("verdict") or {}).get("code")
         result["narrative"] = narrate(result, calibration)
+        states, evidence = await self._validation_states(ctx.name, series.synthetic)
+        result["validation_ids"] = evidence
+        for c in result["candidates"]:
+            c["source_id"] = result["data"]["source_id"]
+            c["replay"] = result["replay"]
+        signals = from_analysis(result, states, created_at=datetime.fromtimestamp(now, UTC))
+        result["signals"] = [sig.as_record() for sig in signals]
         self._remember(analysis_id, series.until(when))
         await self.store.add_analysis(analysis_id, result)
         recorded = 0
         for c in result["candidates"]:
-            c["source_id"] = result["data"]["source_id"]
-            c["replay"] = result["replay"]
             recorded += int(await self.store.add_candidate(analysis_id, c))
+        for record in result["signals"]:
+            await self.store.add_signal(
+                analysis_id, record, synthetic=series.synthetic, replay=result["replay"]
+            )
         await self._bus.emit(
             EventType.APEX_ANALYSIS,
             message=f"APEX {ctx.name}: {len(result['zones'])} zones, "
@@ -420,6 +437,31 @@ class ApexService:
         )
         await self.resolve_open(ctx.name)
         return result
+
+    async def _validation_states(
+        self, market: str, synthetic: bool
+    ) -> tuple[dict[str, ValidationState], dict[str, str]]:
+        """Each strategy's validation state for its current version (UNVALIDATED until a
+        validation run of this version on this kind of data finished)."""
+        verdicts = await self.store.verdicts(market, synthetic)
+        states: dict[str, ValidationState] = {}
+        evidence: dict[str, str] = {}
+        for name, version in STRATEGIES.items():
+            row = verdicts.get(f"{name}@{version}")
+            if row is None:
+                continue
+            state = str(((row.get("result") or {}).get("verdict") or {}).get("validation_state"))
+            if state in ValidationState.__members__:
+                states[name] = ValidationState(state)
+                evidence[name] = row["id"]
+        return states, evidence
+
+    async def signals(
+        self, market: str | None = None, *, strategy: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        return await self.store.signals(
+            self._ctx(market).name if market else None, strategy=strategy, limit=limit
+        )
 
     async def resolve_open(self, market: str | None = None) -> dict[str, Any]:
         """Re-check every unresolved journal candidate on its own source's newer bars."""
@@ -442,7 +484,8 @@ class ApexService:
             last = int(series.bars.t[-1]) + 60 if len(series.bars) else 0
             ctx = self._ctx(name)
             for c in items:
-                outcome = resolve(c, series.bars, cost_points=ctx.spec.cost_points, now=last)
+                costs, spread = fill_model(c, ctx.spec.cost_points)
+                outcome = resolve(c, series.bars, cost_points=costs, now=last, spread=spread)
                 if outcome["state"] != (c.get("outcome") or {}).get("state") or outcome["final"]:
                     await self.store.set_outcome(c["id"], outcome)
                     updated += 1
@@ -796,7 +839,16 @@ class ApexService:
                 ]
             }
             return await self._record_audit(audit_id, stored, False, row, series.label)
-        recomputed = await asyncio.to_thread(analyze, series, ctx, self._cfg, int(stored["as_of"]))
+        # The execution model is an input of the analysis (like the settings): the stored one.
+        recorded_execution = stored.get("execution")
+        recomputed = await asyncio.to_thread(
+            analyze,
+            series,
+            ctx,
+            self._cfg,
+            int(stored["as_of"]),
+            execution=Execution.from_dict(recorded_execution) if recorded_execution else None,
+        )
         checks = compare(stored, recomputed)
         recorded = [
             c
@@ -804,10 +856,10 @@ class ApexService:
             if c.get("analysis_id") == analysis_id
         ]
         last = int(series.bars.t[-1]) + 60 if len(series.bars) else 0
-        rejudged = {
-            c["id"]: resolve(c, series.bars, cost_points=ctx.spec.cost_points, now=last)
-            for c in recorded
-        }
+        rejudged = {}
+        for c in recorded:
+            costs, spread = fill_model(c, ctx.spec.cost_points)
+            rejudged[c["id"]] = resolve(c, series.bars, cost_points=costs, now=last, spread=spread)
         checks.append(outcome_check(recorded, rejudged))
         passed = all(c["passed"] for c in checks)
         return await self._record_audit(audit_id, stored, passed, {"checks": checks}, series.label)
@@ -838,8 +890,12 @@ class ApexService:
 
     # Track record ---------------------------------------------------------------------------
 
-    async def evaluate(self, market: str, *, days: int | None = None) -> dict[str, Any]:
+    async def evaluate(
+        self, market: str, *, days: int | None = None, strategy: str = "zone_reaction"
+    ) -> dict[str, Any]:
         ctx = self._ctx(market)
+        if strategy not in STRATEGIES:
+            raise ApexError("UNKNOWN_STRATEGY", f"APEX strategies: {', '.join(STRATEGIES)}.")
         if ctx.name in self._tasks and not self._tasks[ctx.name].done():
             raise ApexError(
                 "RUNNING", f"A track record for {ctx.name} is already running.", status=409
@@ -851,17 +907,20 @@ class ApexService:
         series = await self.series(
             ctx.name, as_of=now, extra_days=max(0, span - self._cfg.history_days)
         )
+        execution = execution_for(series, ctx.spec)
+        if not execution.tradable:
+            raise ApexError("DATA_UNAVAILABLE", execution.reason, status=409)
         evaluation_id = (
             "ape-"
             + hashlib.sha256(
-                f"{ctx.name}|{start}|{end}|{series.digest()}|{now}".encode()
+                f"{ctx.name}|{strategy}|{start}|{end}|{series.digest()}|{now}".encode()
             ).hexdigest()[:16]
         )
         await self.store.add_evaluation(
             {
                 "id": evaluation_id,
                 "market": ctx.name,
-                "template": "zone_reaction",
+                "template": strategy,
                 "start": start.isoformat(),
                 "end": end.isoformat(),
                 "synthetic": series.synthetic,
@@ -869,7 +928,7 @@ class ApexService:
         )
         self._progress[evaluation_id] = 0.0
         self._tasks[ctx.name] = asyncio.create_task(
-            self._run(evaluation_id, series, ctx, start, end)
+            self._run(evaluation_id, series, ctx, start, end, strategy, execution)
         )
         await self._bus.emit(
             EventType.APEX_EVALUATION,
@@ -879,15 +938,25 @@ class ApexService:
         return await self.evaluation(evaluation_id)
 
     async def _run(
-        self, evaluation_id: str, series: Series, ctx: MarketContext, start: date, end: date
+        self,
+        evaluation_id: str,
+        series: Series,
+        ctx: MarketContext,
+        start: date,
+        end: date,
+        strategy: str,
+        execution: Execution,
     ) -> None:
         def progress(value: float) -> None:
             self._progress[evaluation_id] = value
 
         try:
             result = await asyncio.to_thread(
-                track_record, series, ctx, self._cfg, start, end, progress=progress
-            )
+                lambda: track_record(
+                    series, ctx, self._cfg, start, end,
+                    strategy=strategy, execution=execution, progress=progress,
+                )
+            )  # fmt: skip
             await self.store.update_evaluation(
                 evaluation_id, state="COMPLETED", progress=1.0, result=result
             )
@@ -930,6 +999,7 @@ def _brief(evaluation: dict[str, Any]) -> dict[str, Any]:
     calibration = result.get("calibration")
     return {
         "evaluation_id": evaluation["id"],
+        "template": evaluation.get("template"),
         "period": [evaluation["start"], evaluation["end"]],
         "synthetic": evaluation["synthetic"],
         "data": (result.get("data") or {}).get("label"),

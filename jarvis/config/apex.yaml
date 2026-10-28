@@ -32,6 +32,9 @@ markets:
     point_value: 100     # USD per 1.0 move for one standard lot (100 oz)
     unit: lot (100 oz)
     cost_points: 0.40    # spread + slippage per round trip (as config/learning.yaml)
+    spread_points: 0.30  # ESTIMATE of the bid/ask spread inside cost_points; buys are modelled
+                         # at bid + spread. The measured session median replaces it as soon as
+                         # Dukascopy ask candles are cached (APEX → Data).
     min_stop_points: 0.8
     sources: [dukascopy:XAUUSD]
     levels: XAUUSD

@@ -38,6 +38,7 @@ class AnalyzeBody(BaseModel):
 class EvaluateBody(BaseModel):
     market: str = Field(min_length=2, max_length=10)
     days: int | None = Field(None, ge=10, le=730)
+    strategy: str = Field("zone_reaction", min_length=3, max_length=40)
 
 
 @router.get("/apex/markets")
@@ -85,6 +86,17 @@ async def journal(rt: RuntimeDep, market: str | None = None, limit: int = 100) -
     return await rt.apex.journal(market, min(max(limit, 1), 500))
 
 
+@router.get("/apex/signals")
+async def signals(
+    rt: RuntimeDep, market: str | None = None, strategy: str | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
+    """The immutable signal journal: one record per strategy decision, with its outcome."""
+    try:
+        return await rt.apex.signals(market, strategy=strategy, limit=min(max(limit, 1), 500))
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
 @router.post("/apex/journal/resolve")
 async def resolve(rt: RuntimeDep, market: str | None = None) -> dict[str, Any]:
     return await rt.apex.resolve_open(market)
@@ -93,7 +105,7 @@ async def resolve(rt: RuntimeDep, market: str | None = None) -> dict[str, Any]:
 @router.post("/apex/evaluations")
 async def evaluate(body: EvaluateBody, rt: RuntimeDep) -> dict[str, Any]:
     try:
-        return await rt.apex.evaluate(body.market, days=body.days)
+        return await rt.apex.evaluate(body.market, days=body.days, strategy=body.strategy)
     except ApexError as exc:
         raise _error(exc) from None
 

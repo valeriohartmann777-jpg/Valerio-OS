@@ -1,10 +1,12 @@
 """Track record of the candidate rules: walk forward through history, as if live.
 
-At every decision point (each ``eval_step_minutes`` inside the market's session window) the
-series is cut to what was known then (``Series.until``) and **the same function as the live
-analysis** (``engine.candidates_at``) makes candidates. Each is resolved on the bars after it
-with the conservative rules of ``resolve.py``, net of costs. A candidate repeating an earlier
-one of the same day (same direction and entry) is counted once.
+At every decision point inside the market's session window — each ``eval_step_minutes`` for
+``zone_reaction``, each 5-minute close for ``zone_rejection_5m`` — the series is cut to what
+was known then (``Series.until``) and **the same function as the live analysis**
+(``engine.plans_at``) makes the strategy's candidates. Each is resolved on the bars after it
+with the conservative rules of ``resolve.py`` and the execution model of ``execution.py``
+(bid/ask side, costs). A candidate repeating an earlier one of the same day (same direction
+and entry) is counted once.
 
 Reported: counts of every outcome, win rate with a 95% Wilson interval, expectancy in R with a
 day-clustered interval, profit factor, drawdown — for the whole period and separately for
@@ -21,9 +23,11 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
+from jarvis.apex import trigger
 from jarvis.apex.calibration import calibration
 from jarvis.apex.data import Series, trading_minutes
-from jarvis.apex.engine import ENGINE_VERSION, MarketContext, candidates_at, segments
+from jarvis.apex.engine import ENGINE_VERSION, STRATEGIES, MarketContext, plans_at, segments
+from jarvis.apex.execution import Execution, execution_for
 from jarvis.apex.resolve import resolve
 from jarvis.apex.scenarios import base_rates
 from jarvis.apex.stats import clustered_mean, wilson
@@ -46,22 +50,26 @@ def decision_times(start: date, end: date, window: tuple[int, int], step_minutes
     return out
 
 
-def track_record(
+def step_minutes(strategy: str, cfg: ApexSettings) -> int:
+    return trigger.BAR_MINUTES if strategy == trigger.STRATEGY else cfg.eval_step_minutes
+
+
+def collect(
     series: Series,
     ctx: MarketContext,
     cfg: ApexSettings,
-    start: date,
-    end: date,
+    times: list[int],
+    strategy: str,
+    execution: Execution,
     *,
     progress: Progress | None = None,
-) -> dict[str, Any]:
-    times = decision_times(start, end, ctx.window, cfg.eval_step_minutes)
-    last_bar = int(series.bars.t[-1]) + 60 if len(series.bars) else 0
-    trades: list[dict[str, Any]] = []
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Every distinct candidate ``strategy`` made at the decision ``times`` (as if live)."""
+    made_all: list[dict[str, Any]] = []
     skipped = {"stale": 0, "no_data": 0}
     seen: set[tuple[int, str, float]] = set()
     for k, when in enumerate(times):
-        if progress and k % 10 == 0:
+        if progress and k % 25 == 0:
             progress(k / max(len(times), 1))
         known = series.until(when)
         if len(known.bars) == 0:
@@ -71,31 +79,62 @@ def track_record(
         if behind > cfg.stale_minutes:
             skipped["stale"] += 1
             continue
-        made, _, _ = candidates_at(known, ctx, cfg, when)
+        decisions, _ = plans_at(known, ctx, cfg, when, execution, (strategy,))
         day = datetime.fromtimestamp(when, NY).date().toordinal()
-        for c in made:
+        for c in (decisions.get(strategy) or {}).get("candidates", []):
             key = (day, c["direction"], float(c["entry"]["price"]))
             if key in seen:
                 continue
             seen.add(key)
-            horizon = int(c["valid_until"]) + 60 * int(c["max_hold_minutes"])
-            if horizon > last_bar:
-                continue  # its outcome isn't known yet in this data
-            outcome = resolve(c, series.bars, cost_points=ctx.spec.cost_points, now=horizon)
-            trades.append(
-                {
-                    "id": c["id"],
-                    "at": when,
-                    "day": day,
-                    "direction": c["direction"],
-                    "with_trend": c["with_trend"],
-                    "entry": c["entry"]["price"],
-                    "stop": c["stop"],
-                    "target": c["targets"][0]["price"],
-                    "rr": c["targets"][0]["rr"],
-                    **{k2: outcome[k2] for k2 in ("state", "r", "filled_at", "exit_at")},
-                }
-            )
+            made_all.append({**c, "at": when, "day": day})
+    return made_all, skipped
+
+
+def judge(made: list[dict[str, Any]], series: Series, execution: Execution) -> list[dict[str, Any]]:
+    """Each candidate's outcome on the bars after it; those still undecided at the end of the
+    data are left out (their outcome isn't known yet)."""
+    last_bar = int(series.bars.t[-1]) + 60 if len(series.bars) else 0
+    trades: list[dict[str, Any]] = []
+    for c in made:
+        horizon = int(c["valid_until"]) + 60 * int(c["max_hold_minutes"])
+        if horizon > last_bar:
+            continue
+        outcome = resolve(
+            c, series.bars, cost_points=execution.costs, now=horizon, spread=execution.spread
+        )
+        trades.append(
+            {
+                "id": c["id"],
+                "at": c["at"],
+                "day": c["day"],
+                "direction": c["direction"],
+                "with_trend": c["with_trend"],
+                "entry": c["entry"]["price"],
+                "stop": c["stop"],
+                "target": c["targets"][0]["price"],
+                "rr": c["targets"][0]["rr"],
+                **{k: outcome[k] for k in ("state", "r", "filled_at", "exit_at")},
+            }
+        )
+    return trades
+
+
+def track_record(
+    series: Series,
+    ctx: MarketContext,
+    cfg: ApexSettings,
+    start: date,
+    end: date,
+    *,
+    strategy: str = "zone_reaction",
+    execution: Execution | None = None,
+    progress: Progress | None = None,
+) -> dict[str, Any]:
+    execution = execution or execution_for(series, ctx.spec)
+    times = decision_times(start, end, ctx.window, step_minutes(strategy, cfg))
+    last_bar = int(series.bars.t[-1]) + 60 if len(series.bars) else 0
+    made, skipped = collect(series, ctx, cfg, times, strategy, execution, progress=progress)
+    trades = judge(made, series, execution)
     if progress:
         progress(1.0)
     # Calibration of the stated scenario rates over the same period (touches decided by then).
@@ -117,7 +156,9 @@ def track_record(
     out_sample = summarize([t for t in trades if t["at"] >= split], cfg.min_samples)
     return {
         "engine": ENGINE_VERSION,
-        "template": "zone_reaction",
+        "template": strategy,
+        "strategy_version": STRATEGIES[strategy],
+        "execution": execution.as_dict(),
         "market": ctx.name,
         "start": start.isoformat(),
         "end": end.isoformat(),
@@ -146,12 +187,13 @@ def track_record(
         "calibration": calibrated,
         "trades": trades[-500:],
         "settings": {
-            "step_minutes": cfg.eval_step_minutes,
+            "step_minutes": step_minutes(strategy, cfg),
             "reach_atr": cfg.reach_atr,
             "stop_buffer_atr": cfg.stop_buffer_atr,
             "min_rr": cfg.min_rr,
             "max_stop_atr": cfg.max_stop_atr,
             "valid_minutes": cfg.valid_minutes,
+            "trigger_valid_minutes": cfg.trigger_valid_minutes,
             "max_hold_minutes": cfg.max_hold_minutes,
             "cost_points": ctx.spec.cost_points,
         },

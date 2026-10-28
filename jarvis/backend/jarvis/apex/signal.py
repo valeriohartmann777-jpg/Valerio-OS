@@ -190,3 +190,122 @@ def structure_of(trend: str | None) -> Structure:
 
 def quality_of(status: str) -> DataQuality:
     return {"OK": DataQuality.PASS, "WARN": DataQuality.WARN}.get(status, DataQuality.FAIL)
+
+
+TIMEFRAMES = {"zone_rejection_5m": "5m", "zone_reaction": "15m"}
+SUPPORTED = (ValidationState.OOS_SUPPORTED, ValidationState.FORWARD_SUPPORTED)
+
+
+def from_analysis(
+    analysis: dict[str, Any],
+    validation: dict[str, ValidationState],
+    *,
+    created_at: datetime,
+) -> list[Signal]:
+    """One signal per strategy decision of a stored analysis — one per order plan when the
+    strategy made several (a long at S1 and a short at R1)."""
+    execution = analysis.get("execution") or {}
+    data = analysis["data"]
+    source = f"{data.get('source_id') or data['source']}|{execution.get('quotes', '?')}"
+    common: dict[str, Any] = {
+        "symbol": analysis["market"],
+        "market_data_source": f"{source}|sha256:{str(data['sha256'])[:16]}",
+        "as_of_utc": utc(analysis["as_of"]),
+        "last_closed_bar_utc": utc(data.get("last_bar")),
+        "market_structure": structure_of(
+            ((analysis.get("structure") or {}).get("60") or {}).get("trend")
+        ),
+        "data_quality": quality_of(str((analysis.get("quality") or {}).get("status"))),
+        "execution_assumption": str(execution.get("assumption") or "unknown"),
+        "created_at_utc": created_at,
+    }
+    zones = {z["id"]: z for z in analysis.get("zones", [])}
+    out: list[Signal] = []
+    for name, decision in (analysis.get("strategies") or {}).items():
+        state = validation.get(name, ValidationState.UNVALIDATED)
+        evidence = [str(analysis.get("id") or "")] + (
+            [str(analysis["validation_ids"][name])] if name in analysis.get("validation_ids", {})
+            else []
+        )  # fmt: skip
+        base = {
+            **common,
+            "timeframe": TIMEFRAMES.get(name, "1m"),
+            "strategy_id": name,
+            "strategy_version": str(decision.get("version") or ""),
+            "validation_state": state,
+            "setup": {"setups": decision.get("setups") or []},
+            "trigger": decision.get("trigger"),
+            "evidence_ids": [e for e in evidence if e],
+        }
+        plans = decision.get("candidates") or []
+        if not plans:
+            status = SignalStatus(decision["status"])
+            near = [z for z in zones.values() if z.get("side") in ("support", "resistance")]
+            out.append(
+                _make(
+                    base,
+                    status=status,
+                    direction=Direction.NONE,
+                    zones=[_zone(z) for z in near[:2]],
+                    reasons=list(decision.get("reasons") or [])
+                    or ["No zone in reach — nothing to do."],
+                    trigger=None,  # no confirmed event (or none that made a valid plan)
+                )
+            )
+            continue
+        for plan in plans:
+            targets = plan["targets"]
+            involved = [plan["zone"], *(t.get("zone") for t in targets)]
+            out.append(
+                _make(
+                    base,
+                    status=SignalStatus.PAPER_VALIDATED if state in SUPPORTED
+                    else SignalStatus.CANDIDATE,
+                    direction=Direction.LONG if plan["direction"] == "long" else Direction.SHORT,
+                    zones=[_zone(zones[z]) for z in involved if z in zones],
+                    entry_type=EntryType(str(plan["entry"]["type"]).upper()),
+                    entry=float(plan["entry"]["price"]),
+                    stop_loss=float(plan["stop"]),
+                    take_profit_1=float(targets[0]["price"]),
+                    take_profit_2=float(targets[1]["price"]) if len(targets) > 1 else None,
+                    risk_reward_after_costs=float(targets[0]["rr"]),
+                    invalidation_rule=" ".join(plan.get("rules") or []),
+                    reasons=[_why(plan, decision)],
+                    candidate_id=str(plan["id"]),
+                )
+            )  # fmt: skip
+    return out
+
+
+def _make(base: dict[str, Any], **fields: Any) -> Signal:
+    raw = {**base, **fields}
+    identity = {
+        k: raw.get(k)
+        for k in ("symbol", "market_data_source", "as_of_utc", "strategy_id",
+                  "strategy_version", "status", "direction", "candidate_id")
+    }  # fmt: skip
+    return Signal(signal_id=signal_id(identity), **raw)
+
+
+def _zone(z: dict[str, Any]) -> SignalZone:
+    return SignalZone(
+        id=str(z["id"]),
+        side=z["side"],
+        low=float(z["low"]),
+        high=float(z["high"]),
+        source="key_levels:" + ",".join(z.get("groups") or z.get("kinds") or []),
+    )
+
+
+def _why(plan: dict[str, Any], decision: dict[str, Any]) -> str:
+    trend = plan.get("trend_60")
+    flag = plan.get("with_trend")
+    with_trend = (
+        "no clear 60-minute trend"
+        if flag is None
+        else ("with" if flag else "against") + " the 60-minute trend"
+    )
+    if decision.get("trigger"):
+        return f"{decision['trigger']['rule']}; {with_trend} ({trend})."
+    side = "support" if plan["direction"] == "long" else "resistance"
+    return f"Limit at {plan['zone']} ({side}); {with_trend} ({trend})."

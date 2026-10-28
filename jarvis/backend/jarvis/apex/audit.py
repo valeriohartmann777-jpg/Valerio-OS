@@ -12,8 +12,14 @@ from __future__ import annotations
 
 from typing import Any
 
-COMPARED = ("quality", "price", "atr15", "structure", "zones", "scenarios", "rejected", "chart")
+COMPARED = (
+    "quality", "price", "atr15", "structure", "zones", "scenarios", "rejected", "chart",
+    "execution",
+)  # fmt: skip
 CANDIDATE_FIELDS = ("id", "direction", "entry", "stop", "targets", "valid_until", "risk_points")
+# What each strategy decided (its plans are compared through CANDIDATE_FIELDS; the track record
+# and journal fields attached to them later are not part of the decision).
+DECISION_FIELDS = ("version", "status", "direction", "setups", "trigger", "reasons")
 
 
 def core(analysis: dict[str, Any]) -> dict[str, Any]:
@@ -21,6 +27,10 @@ def core(analysis: dict[str, Any]) -> dict[str, Any]:
     out["candidates"] = [
         {k: c.get(k) for k in CANDIDATE_FIELDS} for c in analysis.get("candidates", [])
     ]
+    out["strategies"] = {
+        name: {k: d.get(k) for k in DECISION_FIELDS} | {"plans": [c["id"] for c in d["candidates"]]}
+        for name, d in (analysis.get("strategies") or {}).items()
+    }
     return out
 
 

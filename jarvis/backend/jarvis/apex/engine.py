@@ -13,8 +13,9 @@ from typing import Any
 
 import numpy as np
 
-from jarvis.apex.candidates import generate
+from jarvis.apex import candidates, trigger
 from jarvis.apex.data import Series, assess, current_contract
+from jarvis.apex.execution import Execution, execution_for
 from jarvis.apex.scenarios import BaseRates, base_rates, scenarios, zone_rate
 from jarvis.apex.structure import structure
 from jarvis.apex.zones import build_zones
@@ -26,7 +27,10 @@ from jarvis.training.dataset import TouchRules
 
 # 1.1.0: quality gate repaired (gaps over the covered span, NO_RECENT_DATA, spikes on
 # consecutive minutes only) — see docs/apex/APEX_DATA_DIAGNOSIS.md.
-ENGINE_VERSION = "apex-1.1.0"
+# 1.2.0: execution model (bid/ask side, proxy block), strategy zone_rejection_5m (5-minute
+# trigger, stop entry) next to zone_reaction, per-strategy status — docs/APEX_SIGNAL_SPEC.md.
+ENGINE_VERSION = "apex-1.2.0"
+STRATEGIES = {candidates.TEMPLATE: candidates.VERSION, trigger.STRATEGY: trigger.VERSION}
 
 
 @dataclass(frozen=True)
@@ -97,25 +101,81 @@ def zones_and_structure(
     }
 
 
-def candidates_at(
-    series: Series, ctx: MarketContext, cfg: ApexSettings, as_of: int
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    """Candidates at ``as_of`` (used by the live analysis and the track record alike)."""
+def plans_at(
+    series: Series,
+    ctx: MarketContext,
+    cfg: ApexSettings,
+    as_of: int,
+    execution: Execution,
+    strategies: tuple[str, ...] = tuple(STRATEGIES),
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Each strategy's decision at ``as_of`` — the live analysis and the track record alike.
+
+    Per strategy: {strategy, version, status, direction, setups, trigger, candidates, rejected,
+    reasons}; status NO_TRADE | WAITING_FOR_TRIGGER | CANDIDATE | BLOCKED."""
     view = zones_and_structure(series, ctx, cfg, as_of)
     if view["price"] is None:
-        return [], [], view
+        return {}, view
     trend_60 = view["structure"].get("60", {}).get("trend", "range")
-    made, rejected = generate(
-        ctx.name,
-        view["zones"],
-        price=view["price"],
-        atr15=view["atr15"],
-        as_of=as_of,
-        trend_60=trend_60,
-        spec=ctx.spec,
-        cfg=cfg,
+    out: dict[str, dict[str, Any]] = {}
+    if candidates.TEMPLATE in strategies:
+        made, rejected = candidates.generate(
+            ctx.name,
+            view["zones"],
+            price=view["price"],
+            atr15=view["atr15"],
+            as_of=as_of,
+            trend_60=trend_60,
+            spec=ctx.spec,
+            cfg=cfg,
+            costs=execution.costs,
+        )
+        out[candidates.TEMPLATE] = {
+            "strategy": candidates.TEMPLATE,
+            "version": candidates.VERSION,
+            "status": "CANDIDATE" if made else "NO_TRADE",
+            "direction": made[0]["direction"] if len(made) == 1 else "none",
+            "setups": [],
+            "trigger": None,
+            "candidates": made,
+            "rejected": rejected,
+            "reasons": [r["reason"] for r in rejected],
+        }
+    if trigger.STRATEGY in strategies:
+        # Only the last closed 5-minute bars matter for the trigger.
+        recent = view["bars"].between(as_of - 1800, as_of)
+        found = trigger.evaluate(
+            ctx.name,
+            view["zones"],
+            closed(recent, trigger.BAR_MINUTES, as_of),
+            price=view["price"],
+            atr15=view["atr15"],
+            as_of=as_of,
+            trend_60=trend_60,
+            spec=ctx.spec,
+            cfg=cfg,
+            costs=execution.costs,
+        )
+        plan = found.pop("candidate")
+        out[trigger.STRATEGY] = {**found, "candidates": [plan] if plan else []}
+    for decision in out.values():
+        if not execution.tradable:
+            block(decision, "DATA_UNAVAILABLE: " + execution.reason)
+        for c in decision["candidates"]:
+            c["execution"] = execution.as_dict()
+            c["cost_usd"] = round(execution.total_cost * ctx.spec.point_value, 2)
+    return out, view
+
+
+def block(decision: dict[str, Any], reason: str) -> None:
+    """No order plan from this decision, for ``reason``."""
+    decision.update(
+        status="BLOCKED",
+        direction="none",
+        candidates=[],
+        rejected=[{"template": decision["strategy"], "reason": reason}],
+        reasons=[reason],
     )
-    return made, rejected, view
 
 
 def analyze(
@@ -125,9 +185,11 @@ def analyze(
     as_of: int,
     *,
     base: BaseRates | None = None,
-    track_record: dict[str, Any] | None = None,
+    track_records: dict[str, Any] | None = None,
+    execution: Execution | None = None,
 ) -> dict[str, Any]:
     known = series.until(as_of)
+    execution = execution or execution_for(known, ctx.spec)
     quality = assess(
         known,
         as_of,
@@ -147,6 +209,7 @@ def analyze(
             "proxy": known.proxy,
             "sha256": known.digest(),
             "provenance": known.provenance,
+            "last_bar": int(known.bars.t[-1]) if len(known.bars) else None,
         },
         "quality": quality,
         "spec": {
@@ -156,19 +219,28 @@ def analyze(
             "unit": ctx.spec.unit,
             "cost_points": ctx.spec.cost_points,
         },
+        "execution": execution.as_dict(),
     }
     if quality["status"] == "BLOCK":
+        reason = "Data quality gate: " + "; ".join(
+            f"{f['code']} — {f['message']}" for f in quality["findings"] if f["level"] == "BLOCK"
+        )
+        blocked = {name: _blocked(name, reason) for name in STRATEGIES}
         return {
             **head,
             "blocked": True,
             "structure": {},
             "zones": [],
             "scenarios": [],
+            "strategies": blocked,
             "candidates": [],
             "rejected": [],
             "chart": [],
         }
-    made, rejected, view = candidates_at(known, ctx, cfg, as_of)
+    decisions, view = plans_at(known, ctx, cfg, as_of, execution)
+    if not decisions:
+        empty = "No bars of the current contract."
+        decisions = {name: _blocked(name, empty) for name in STRATEGIES}
     if base is None:
         base = base_rates(
             segments(known.until(as_of)),
@@ -183,16 +255,12 @@ def analyze(
         z["id"]: zone_rate(base, z["groups"], z["side"], cfg.min_samples) for z in view["zones"]
     }
     if quality["stale"]:
-        rejected = [
-            {
-                "template": "zone_reaction",
-                "reason": "Data is stale — no candidates until it is updated.",
-            }
-        ]
-        made = []
+        for decision in decisions.values():
+            block(decision, "Data is stale — no candidates until it is updated.")
+    made = [c for d in decisions.values() for c in d["candidates"]]
     for c in made:
         c["zone_rate"] = rates.get(c["zone"])
-        c["track_record"] = track_record
+        c["track_record"] = (track_records or {}).get(c["template"])
         c["data_sha256"] = head["data"]["sha256"]
         c["synthetic"] = known.synthetic
         c["engine"] = ENGINE_VERSION
@@ -210,10 +278,19 @@ def analyze(
             "touches": len(base.decided_before()),
             "skipped": base.dataset.skipped,
         },
+        "strategies": decisions,
         "candidates": made,
-        "rejected": rejected,
+        "rejected": [r for d in decisions.values() for r in d["rejected"]],
         "chart": chart,
     }
+
+
+def _blocked(name: str, reason: str) -> dict[str, Any]:
+    decision: dict[str, Any] = {
+        "strategy": name, "version": STRATEGIES[name], "setups": [], "trigger": None,
+    }  # fmt: skip
+    block(decision, reason)
+    return decision
 
 
 def _chart(bars: Bars | None, count: int = 160) -> list[list[float]]:
