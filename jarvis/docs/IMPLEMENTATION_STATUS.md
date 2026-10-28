@@ -1,6 +1,6 @@
 # Implementation status
 
-_Last updated: 2026-10-11_
+_Last updated: 2026-10-28_
 
 ## DONE
 
@@ -489,6 +489,20 @@ _Last updated: 2026-10-11_
   Not verified: real Claude, real Databento, macOS, DPI scaling, screen readers.
 - Screenshots: `docs/screenshots/jarvis2-*.png`
 
+### JARVIS APEX Trading AI (D-033) — details in `docs/apex/`
+- Audit first (`APEX_AUDIT.md`); rollback point `f6419d0`; migration 20 additive, backed up.
+- XAUUSD (Dukascopy spot, bid), NQ / MNQ (Data Vault futures; Dukascopy index CFD as labelled
+  proxy); quality gate; contract rolls handled; generated test data labelled SYNTHETIC.
+- Market structure (confirmed swings, HH/HL/LH/LL, trend, BOS/CHoCH), S/R zones, scenarios
+  with counted rates (Wilson 95 %, n, days; "insufficient" below 30), rule-based entry / stop /
+  target candidates with risk in $, immutable journal, conservative forward resolution,
+  walk-forward track record with out-of-sample part and verdicts.
+- QuantLab → APEX; JARVIS chat tool `apex_analysis`; SENTINEL re-check of stored analyses;
+  CIPHER / SENTINEL APEX work in the ULTRON HQ. No order path.
+- Tests: `test_apex.py` (27, incl. look-ahead invariance and a random-walk check of the
+  resolver); E2E APEX step. All on generated data — no real-market APEX result exists yet
+  (network policy here blocks Dukascopy / Databento).
+
 ## IN PROGRESS
 - —
 
@@ -499,6 +513,8 @@ _Last updated: 2026-10-11_
 0. Learning on the MacBook: first Dukascopy download, first rounds
 0. Trained model on the MacBook: first real verdict (Training Hub → Trained model)
 0. JARVIS 2.0 on the MacBook: owner acceptance run in `docs/JARVIS_2_RELEASE_PLAN.md`
+0. APEX on the MacBook: QuantLab → APEX → XAUUSD → Analyse now (with "Update free data"),
+   then Run track record (120 days) — the first APEX results on real data
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
 0. QuantLab on the MacBook: connect Databento (Keychain), quote one month of NQ.v.0 1-minute bars,
    approve, build the dataset, run the opening-range template once — first real data

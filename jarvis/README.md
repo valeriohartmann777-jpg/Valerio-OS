@@ -321,6 +321,28 @@ out-of-sample trades and a loss after costs), otherwise INCONCLUSIVE — Release
 leverage, roll, swaps) isn't built yet. Ask JARVIS "what can I conclude from
 the latest QuantLab run?" — it answers from `quantlab_report`.
 
+### JARVIS APEX: structure, zones and trade candidates for XAUUSD and NQ/MNQ
+
+**QuantLab → APEX**, choose XAUUSD, NQ or MNQ, press **Analyse now**:
+
+- **Market structure** on 15-minute and 1-hour bars: confirmed swings (HH/HL/LH/LL), trend,
+  breaks of structure (BOS) and changes of character (CHoCH).
+- **Support / resistance zones** from objective levels (previous day / week, overnight or Asia
+  range, value area, intact swings, round numbers) with their reasons and test count.
+- **Scenarios** "S1 holds / breaks", "R1 holds / breaks" with a **counted** rate from earlier
+  touches of such levels — share, 95 % interval, number of touches and days; "insufficient
+  data" instead of a number when there are fewer than 30.
+- **Candidates**: limit entry at the zone, stop beyond it, targets at the next zones, reward/
+  risk after costs, risk in $ per contract (NQ $20, MNQ $2 per point) or per gold lot. Rejected
+  set-ups show why.
+- Every candidate goes into a **journal that can't be edited**; later bars judge it (fill,
+  stop, target, expiry — conservative when a minute is ambiguous). **Run track record** walks
+  the same rules through history and reports in-sample and out-of-sample results.
+
+Data: gold from the free Dukascopy cache (bid prices; *Update free data first* fetches
+missing days), NQ/MNQ from the Data Vault (or the Dukascopy index CFD, labelled as a proxy).
+APEX never places an order and never buys data. Method: [docs/apex/APEX_METHOD.md](docs/apex/APEX_METHOD.md).
+
 ### ULTRON: let the team build something
 
 1. Make sure Claude is connected (Settings → AI & Billing) — ULTRON's agents use

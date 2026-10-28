@@ -1,0 +1,56 @@
+# JARVIS APEX — market structure, support/resistance zones, scenarios and trade candidates.
+#
+# Research only: APEX produces candidates (entry, stop, targets) and measures them on later
+# bars. There is no order path. Every probability it shows is a counted rate from the data
+# before the moment of analysis, with its sample size and 95% interval.
+
+provider: local          # local = your data (Dukascopy cache, Data Vault); fixture = generated
+                         # test data, labelled SYNTHETIC everywhere (tests and E2E only)
+history_days: 120        # minute data for scenario base rates and the track record
+level_days: 21           # minute data for zones (same as the morning briefing)
+swing_bars: 3            # a swing is confirmed after this many closed bars on each side
+structure_minutes: [15, 60]
+zone_width_atr: 0.25     # half-width of a zone, in ATR(14) of 15-minute bars
+zones_each_side: 4
+reach_atr: 3.0           # a zone further away than this many ATRs gets no candidate
+stop_buffer_atr: 0.15    # stop beyond the far edge of the zone
+min_rr: 1.5              # reward to risk to the first target, after costs
+max_stop_atr: 2.5
+valid_minutes: 240       # a limit entry not filled by then expires
+max_hold_minutes: 480    # a filled candidate still open then is closed at the market
+stale_minutes: 30        # trading minutes without bars → data is stale, no candidates
+min_samples: 30          # fewer decided cases → "insufficient data" instead of a rate
+eval_step_minutes: 60    # decision points per hour inside the session window
+oos_share: 0.3           # the last 30% of an evaluation is reported as out-of-sample
+
+markets:
+  XAUUSD:
+    label: Gold spot (XAUUSD)
+    tick: 0.01
+    point_value: 100     # USD per 1.0 move for one standard lot (100 oz)
+    unit: lot (100 oz)
+    cost_points: 0.40    # spread + slippage per round trip (as config/learning.yaml)
+    min_stop_points: 0.8
+    sources: [dukascopy:XAUUSD]
+    levels: XAUUSD
+    session: XAUUSD      # 03:00-13:30 New York (London + New York morning)
+  NQ:
+    label: E-mini Nasdaq-100 futures (NQ)
+    tick: 0.25
+    point_value: 20
+    unit: contract
+    cost_points: 1.0     # commission + spread/slippage per round trip
+    min_stop_points: 3.0
+    sources: [vault:NQ, vault:MNQ, dukascopy:NQ]
+    levels: NQ
+    session: NQ          # 09:30-16:00 New York (regular session)
+  MNQ:
+    label: Micro E-mini Nasdaq-100 futures (MNQ)
+    tick: 0.25
+    point_value: 2
+    unit: contract
+    cost_points: 1.0
+    min_stop_points: 3.0
+    sources: [vault:MNQ, vault:NQ, dukascopy:NQ]
+    levels: NQ
+    session: NQ

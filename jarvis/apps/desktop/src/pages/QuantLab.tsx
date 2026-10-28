@@ -11,6 +11,7 @@ import { Experiments, TradeExplorer } from "../components/quantlab/research/Expl
 import { Overview, type Section } from "../components/quantlab/research/Overview";
 import { BacktestLab, Reports, RiskExecution, ValidationLab } from "../components/quantlab/research/Results";
 import { StrategyStudio } from "../components/quantlab/research/StrategyStudio";
+import { ApexPanel } from "../components/quantlab/apex/Apex";
 import { BacktestLauncher } from "../components/quantlab/vault/BacktestLauncher";
 import { DataVault } from "../components/quantlab/vault/DataVault";
 import { Badge, ResearchOnly } from "../components/quantlab/ui";
@@ -30,6 +31,7 @@ import { Bots } from "./Bots";
 
 const SECTIONS: { id: Section; modes: Mode[] }[] = [
   { id: "Backtest Lab", modes: ["Simple", "Research", "Institutional"] },
+  { id: "APEX", modes: ["Simple", "Research", "Institutional"] },
   { id: "Data Vault", modes: ["Simple", "Research", "Institutional"] },
   { id: "Idea Inbox", modes: ["Simple", "Research", "Institutional"] },
   { id: "Research Room", modes: ["Simple", "Research", "Institutional"] },
@@ -235,6 +237,7 @@ export function QuantLab() {
           <StrategyStudio mode={mode} tick={tick} datasets={datasets} onRun={(id) => { void refresh(); openRun(id); }} />
         )}
         {section === "Data Hub" && <DataHub mode={mode} tick={tick} onDatasets={refresh} />}
+        {section === "APEX" && <ApexPanel />}
         {section === "Backtest Lab" && (
           <div className="space-y-5">
             <BacktestLauncher

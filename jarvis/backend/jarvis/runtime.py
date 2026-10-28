@@ -20,6 +20,8 @@ from jarvis.ai.keys import ApiKeyStore
 from jarvis.ai.plan import ClaudeCli, Runner
 from jarvis.ai.router import ApiFactory, RoleSpec, RoutedChatModel, SmartRouter, Verifier
 from jarvis.ai.store import AiStore
+from jarvis.apex.service import ApexService
+from jarvis.apex.store import ApexStore
 from jarvis.bots.mt5 import Mt5Paths
 from jarvis.bots.service import BotLabService, Tester
 from jarvis.bots.store import BotStore
@@ -71,6 +73,7 @@ from jarvis.storage.preferences import Preferences
 from jarvis.team.hq import HQSources, TeamHQ
 from jarvis.team.store import TeamStore
 from jarvis.team.workspace import TeamWorkspace
+from jarvis.tools.apex import register_apex_tools
 from jarvis.tools.bots import register_bot_tools
 from jarvis.tools.briefing import register_briefing_tools
 from jarvis.tools.executor import ToolExecutor
@@ -163,6 +166,7 @@ class Runtime:
         )
         register_briefing_tools(self.tools, lambda: self.briefing)
         register_training_tools(self.tools, lambda: self.training)
+        register_apex_tools(self.tools, lambda: self.apex)
         register_bot_tools(self.tools, lambda: self.bots)
         register_quantlab_tools(self.tools, lambda: self.quantlab, lambda: self.research)
         register_ultron_tools(self.tools, lambda: self.ultron)
@@ -410,6 +414,7 @@ class Runtime:
                 ai=self._hq_ai,
                 jarvis_planning=self.ultron.planning_missions,
                 team_tasks=lambda since: self.team_store.hq_tasks(since),
+                apex_tasks=lambda since: self.apex.hq_tasks(since),
             )
         )
         # ULTRON QuantLab: team workspaces on the same engine, vault and registry as Solo.
@@ -428,6 +433,15 @@ class Runtime:
         self.feedback = FeedbackService(self.db, self.bus)
         self.evals = BehaviorEvals(
             self.db, RuleBasedRouter(), self.bus, PROJECT_ROOT / "config" / "evals.yaml"
+        )
+        # JARVIS APEX: structure, zones, scenarios, candidates — research only, no order path.
+        self.apex = ApexService(
+            settings=settings,
+            market=self.market,
+            vault=self.vault,
+            hub=self.hub,
+            store=ApexStore(self.db),
+            bus=self.bus,
         )
 
         self.training = TrainingService(
@@ -682,6 +696,7 @@ class Runtime:
         await self.vault.start()  # offline switch, derived cache
         await self.acquisitions.start()  # resumes interrupted purchases, never resubmits
         await self.team.start()  # marks interrupted in-process team checks, never fakes them
+        await self.apex.start()  # marks interrupted track records as failed
         await self.sources.start()
         await self.quant_missions.start()
         await self.ultron.start()
@@ -715,6 +730,7 @@ class Runtime:
         await self.sources.stop()
         await self.acquisitions.stop()
         await self.team.stop()
+        await self.apex.stop()
         await self.research.stop()
         await self.hub.stop()
         await self.quantlab.stop()

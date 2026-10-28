@@ -240,6 +240,29 @@ def from_team(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+_AP = {"RUNNING": "working", "COMPLETED": "complete", "FAILED": "failed"}
+
+
+def from_apex(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """APEX work: CIPHER's walk-forward track records, SENTINEL's re-checks of analyses."""
+    return [
+        _work(
+            source="apex",
+            agent=r["agent"],
+            state=_AP[r["state"]],
+            room="quantlab",
+            mission_id=r["id"],
+            mission_title=f"APEX · {r['market']}",
+            task_id=r["id"],
+            title=r["title"],
+            finished_at=r.get("finished_at"),
+            detail=r.get("error"),
+        )
+        for r in rows
+        if r["state"] in _AP
+    ]
+
+
 def from_desktop(agent: dict[str, Any] | None) -> list[dict[str, Any]]:
     """OPERATOR's live state from JARVIS's desktop agent registry (in memory, real)."""
     if not agent or agent.get("status") not in ("active", "waiting"):
@@ -322,6 +345,7 @@ class HQSources:
     ai: Callable[[], tuple[bool, str, str]]  # (ready, route, reason)
     jarvis_planning: Callable[[], list[str]]
     team_tasks: Callable[[str], Awaitable[list[dict[str, Any]]]] | None = None
+    apex_tasks: Callable[[str], Awaitable[list[dict[str, Any]]]] | None = None
 
 
 class TeamHQ:
@@ -334,10 +358,12 @@ class TeamHQ:
         ultron_rows = await self._src.ultron_tasks(since)
         research_rows = await self._src.research_tasks(since)
         team_rows = await self._src.team_tasks(since) if self._src.team_tasks else []
+        apex_rows = await self._src.apex_tasks(since) if self._src.apex_tasks else []
         work = (
             from_ultron(ultron_rows)
             + from_research(research_rows)
             + from_team(team_rows)
+            + from_apex(apex_rows)
             + from_desktop(self._src.desktop_operator())
         )
         ai_ready, route, ai_reason = self._src.ai()

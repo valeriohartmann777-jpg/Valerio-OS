@@ -1,4 +1,9 @@
 import type {
+  ApexAnalysis,
+  ApexAudit,
+  ApexEvaluation,
+  ApexJournal,
+  ApexMarket,
   EvalOverview,
   FeedbackOverview,
   HqSnapshot,
@@ -406,6 +411,18 @@ export const api = {
   blOptions: (workspace?: string) =>
     request<BlOptions>(`/quantlab/backtest/options${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ""}`),
   teamHq: () => request<HqSnapshot>("/team/hq"),
+  // JARVIS APEX — research only; nothing here places an order.
+  apexMarkets: () => request<ApexMarket[]>("/apex/markets"),
+  apexAnalyze: (market: string, options: { refresh?: boolean; asOf?: number } = {}) =>
+    post<ApexAnalysis>("/apex/analyze", { market, refresh: options.refresh ?? false, as_of: options.asOf ?? null }),
+  apexJournal: (market?: string) => request<ApexJournal>(`/apex/journal${market ? `?market=${encodeURIComponent(market)}` : ""}`),
+  apexResolve: (market?: string) =>
+    post<{ checked: number; updated: number }>(`/apex/journal/resolve${market ? `?market=${encodeURIComponent(market)}` : ""}`),
+  apexEvaluate: (market: string, days?: number) => post<ApexEvaluation>("/apex/evaluations", { market, days: days ?? null }),
+  apexEvaluations: (market?: string) =>
+    request<ApexEvaluation[]>(`/apex/evaluations${market ? `?market=${encodeURIComponent(market)}` : ""}`),
+  apexEvaluation: (id: string) => request<ApexEvaluation>(`/apex/evaluations/${encodeURIComponent(id)}`),
+  apexAudit: (analysisId: string) => post<ApexAudit>(`/apex/analyses/${encodeURIComponent(analysisId)}/audit`),
   feedback: () => request<FeedbackOverview>("/feedback"),
   evals: () => request<EvalOverview>("/training/evals"),
   runEvals: () => post<EvalOverview>("/training/evals/run"),

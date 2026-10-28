@@ -114,6 +114,7 @@ async def test_open_ended_request_goes_to_the_fast_model(harness: HarnessFactory
         "level_odds",
         "bot_report",
         "quantlab_report",
+        "apex_analysis",
         "remember",
         "forget",
         "ultron_start_mission",

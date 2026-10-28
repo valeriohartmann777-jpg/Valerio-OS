@@ -1246,6 +1246,93 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # 20 — JARVIS APEX: analyses, an immutable candidate journal, outcomes, track records.
+    [
+        """
+        CREATE TABLE apex_analyses (
+            id          TEXT PRIMARY KEY,
+            market      TEXT NOT NULL,
+            as_of       INTEGER NOT NULL,
+            created_at  TEXT NOT NULL,
+            source      TEXT NOT NULL,
+            synthetic   INTEGER NOT NULL,
+            data_sha256 TEXT NOT NULL,
+            payload     TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_apex_analyses_market ON apex_analyses(market, as_of)",
+        """
+        CREATE TABLE apex_candidates (
+            id           TEXT PRIMARY KEY,
+            analysis_id  TEXT NOT NULL REFERENCES apex_analyses(id),
+            market       TEXT NOT NULL,
+            template     TEXT NOT NULL,
+            direction    TEXT NOT NULL,
+            created_at   INTEGER NOT NULL,
+            valid_until  INTEGER NOT NULL,
+            entry        REAL NOT NULL,
+            stop         REAL NOT NULL,
+            target       REAL NOT NULL,
+            synthetic    INTEGER NOT NULL,
+            payload      TEXT NOT NULL,
+            recorded_at  TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER apex_candidates_no_update BEFORE UPDATE ON apex_candidates
+        BEGIN SELECT RAISE(ABORT, 'APEX candidates are immutable'); END
+        """,
+        """
+        CREATE TRIGGER apex_candidates_no_delete BEFORE DELETE ON apex_candidates
+        BEGIN SELECT RAISE(ABORT, 'APEX candidates are immutable'); END
+        """,
+        "CREATE INDEX idx_apex_candidates_market ON apex_candidates(market, created_at)",
+        """
+        CREATE TABLE apex_outcomes (
+            candidate_id TEXT PRIMARY KEY REFERENCES apex_candidates(id),
+            state        TEXT NOT NULL,
+            final        INTEGER NOT NULL,
+            r            REAL,
+            filled_at    INTEGER,
+            exit_at      INTEGER,
+            payload      TEXT NOT NULL,
+            checked_at   TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER apex_outcomes_final BEFORE UPDATE ON apex_outcomes
+        WHEN OLD.final = 1
+        BEGIN SELECT RAISE(ABORT, 'a final APEX outcome is never changed'); END
+        """,
+        """
+        CREATE TABLE apex_evaluations (
+            id          TEXT PRIMARY KEY,
+            market      TEXT NOT NULL,
+            template    TEXT NOT NULL,
+            start       TEXT NOT NULL,
+            "end"       TEXT NOT NULL,
+            state       TEXT NOT NULL,
+            progress    REAL NOT NULL,
+            synthetic   INTEGER NOT NULL,
+            result      TEXT,
+            error       TEXT,
+            created_at  TEXT NOT NULL,
+            finished_at TEXT
+        )
+        """,
+        """
+        CREATE TABLE apex_audits (
+            id          TEXT PRIMARY KEY,
+            analysis_id TEXT NOT NULL REFERENCES apex_analyses(id),
+            market      TEXT NOT NULL,
+            state       TEXT NOT NULL,
+            passed      INTEGER,
+            result      TEXT,
+            created_at  TEXT NOT NULL,
+            finished_at TEXT
+        )
+        """,
+    ],
 ]
 
 

@@ -219,6 +219,42 @@ class TrainingSettings(BaseModel):
     sessions: dict[str, TrainingSessionSettings] = Field(default_factory=dict)
 
 
+class ApexMarketSettings(BaseModel):
+    label: str
+    tick: float  # smallest price step
+    point_value: float  # USD per 1.0 of price per unit below
+    unit: str  # "contract" or "lot (100 oz)"
+    cost_points: float  # round-trip costs (commission, spread, slippage) in price points
+    min_stop_points: float
+    # Where the minute data comes from, in order of preference:
+    #   vault:<ROOT>   QuantLab Data Vault futures bars (Databento / imports)
+    #   dukascopy:<NAME>  the learning cache (config/learning.yaml instruments)
+    sources: list[str] = Field(default_factory=list)
+    levels: str  # briefing.yaml instrument whose level rules apply (NQ or XAUUSD)
+    session: str  # training.yaml session window used for base rates and the track record
+
+
+class ApexSettings(BaseModel):
+    provider: Literal["local", "fixture"] = "local"
+    history_days: int = 120  # minute data for base rates and the track record
+    level_days: int = 21  # minute data for zones (as the morning briefing)
+    swing_bars: int = 3  # bars on each side that confirm a swing
+    structure_minutes: list[int] = Field(default_factory=lambda: [15, 60])
+    zone_width_atr: float = 0.25  # half-width of a zone, in ATR(14) of 15-minute bars
+    zones_each_side: int = 4
+    reach_atr: float = 3.0  # a zone is "in reach" within this many ATRs
+    stop_buffer_atr: float = 0.15
+    min_rr: float = 1.5
+    max_stop_atr: float = 2.5
+    valid_minutes: int = 240  # a limit entry not filled by then expires
+    max_hold_minutes: int = 480  # an open candidate is closed at the market after this
+    stale_minutes: int = 30  # trading minutes without bars before data counts as stale
+    min_samples: int = 30  # below this, a rate is shown as "insufficient data"
+    eval_step_minutes: int = 60  # decision points inside the session window
+    oos_share: float = 0.3  # last part of an evaluation reported as out-of-sample
+    markets: dict[str, ApexMarketSettings] = Field(default_factory=dict)
+
+
 class Mt5LocationSettings(BaseModel):
     """Found automatically on a Mac; set only if JARVIS can't find MetaTrader."""
 
@@ -417,6 +453,7 @@ class Settings(BaseModel):
     ultron: UltronSettings = Field(default_factory=UltronSettings)
     quantlab: QuantLabSettings = Field(default_factory=QuantLabSettings)
     ai: AiSettings = Field(default_factory=AiSettings)
+    apex: ApexSettings = Field(default_factory=ApexSettings)
 
     @property
     def env_file(self) -> Path:
@@ -483,6 +520,7 @@ def load_settings(
     data["bots"] = _read_yaml(config_dir / "bots.yaml")
     data["ultron"] = _read_yaml(config_dir / "ultron.yaml")
     data["ai"] = _read_yaml(config_dir / "ai.yaml")
+    data["apex"] = _read_yaml(config_dir / "apex.yaml")
 
     _apply_env(data, env)
     platform = catalog_platform(data.get("runtime", {}).get("system_backend", "auto"))
@@ -551,6 +589,8 @@ def _apply_env(data: dict[str, Any], env: dict[str, str]) -> None:
         quantlab["keystore"] = value
     if value := env.get("JARVIS_QUANTLAB_ARCHITECT_SCRIPT", "").strip():  # tests, E2E
         quantlab["architect_script"] = value
+    if value := env.get("JARVIS_APEX_PROVIDER", "").strip():  # tests, E2E
+        data.setdefault("apex", {})["provider"] = value
     ai = data.setdefault("ai", {})
     if value := env.get("JARVIS_AI_KEYSTORE", "").strip():  # tests, E2E
         ai["keystore"] = value

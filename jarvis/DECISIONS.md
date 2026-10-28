@@ -160,6 +160,39 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-033 — JARVIS APEX: counted rates and rule-based candidates on top of the existing level stack
+
+- **Decision:** APEX (`backend/jarvis/apex/`) analyses XAUUSD and NQ/MNQ at a moment `as_of`
+  from bars that had closed by then: quality gate → market structure (confirmed swings,
+  HH/HL/LH/LL, trend, BOS/CHoCH) → zones (the briefing's objective key levels with width and
+  confluence) → scenarios whose probabilities are **counted rates** from the existing touch
+  dataset (only touches decided before `as_of`, Wilson interval, n, days; "insufficient" below
+  30) → **rule-based** entry/stop/target candidates (`zone_reaction`). Candidates go into an
+  immutable journal and are judged on later bars with conservative rules; the same rules are
+  walked forward through history for a track record with an out-of-sample part.
+- **Reason:** The owner's APEX request: objective structure and zones, probabilistic
+  scenarios, verifiable entry/SL/TP candidates — without invented results or accuracies and
+  without real-money trading. Reusing `briefing/levels.py` and `training/dataset.py` keeps one
+  definition of a level and of a touch across briefing, model and APEX.
+- **Alternatives considered:**
+  - A model-predicted probability per candidate. Not in APEX-1: the trained S/R model shows a
+    number only where it beat its baseline on unseen months; APEX-3 will show it next to the
+    counted rate, never instead of it.
+  - LLM-written trade ideas. Rejected for candidates: not reproducible; ULTRON agents may audit
+    and explain, the rules decide.
+  - Resolving candidates optimistically (target first in an ambiguous minute). Rejected.
+  - Mixing contracts across a roll for levels. Rejected; levels use the current contract only.
+- **Consequences:**
+  - Migration 20 (`apex_analyses`, `apex_candidates` with no-update/no-delete triggers,
+    `apex_outcomes` whose final state can't change, `apex_evaluations`).
+  - QuantLab gets an **APEX** section; `config/apex.yaml`; events `apex.analysis`,
+    `apex.outcome`, `apex.evaluation`.
+  - Spot gold (Dukascopy bid) is labelled as such; the Dukascopy NQ series is labelled a CFD
+    proxy; generated test data is labelled SYNTHETIC everywhere and never mixed with real data.
+  - The binding "APEX developer package" named by the owner was not received; this decision
+    follows the written request and is reviewed when it arrives.
+- **Date:** 2026-10-28
+
 ## D-032 — JARVIS 2.0: five tabs, a robot HQ projected from real work, Solo/Team workspaces on one engine
 
 - **Decision:**

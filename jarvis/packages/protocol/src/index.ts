@@ -8,3 +8,4 @@ export * from "./quantlab-ideas";
 export * from "./ai";
 export * from "./quantlab-vault";
 export * from "./team";
+export * from "./apex";

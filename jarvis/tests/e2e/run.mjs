@@ -117,6 +117,8 @@ const app = await electron.launch({
     JARVIS_QUANTLAB_PROVIDER: "fixture",
     JARVIS_QUANTLAB_KEYSTORE: "memory",
     JARVIS_QUANTLAB_ARCHITECT_SCRIPT: path.join(root, "tests", "e2e", "quantlab_architect_script.json"),
+    // APEX: generated test data (labelled SYNTHETIC in the UI) — no market data in CI.
+    JARVIS_APEX_PROVIDER: "fixture",
   },
 });
 
@@ -915,6 +917,64 @@ try {
     await page.getByTestId("ai-plan-disable").click();
     await page.getByTestId("ai-plan-enable").waitFor();
     fakeClaudeConfig({ mode: "ok" });
+    await page.getByTestId("tab-home").click();
+  });
+
+  await step("APEX: XAUUSD and MNQ analysed on labelled test data — zones, counted scenarios, rule-based candidates, an immutable journal and a track record", async () => {
+    await page.getByTestId("tab-quantlab").click();
+    await page.getByTestId("ql-nav-apex").click();
+    await page.getByTestId("apex-panel").waitFor();
+    await page.getByTestId("apex-market-XAUUSD").click();
+    await page.getByTestId("apex-analyze").click();
+    await page.getByTestId("apex-synthetic").waitFor({ timeout: 60_000 });
+    await page.getByTestId("apex-chart").waitFor();
+    assert.ok((await page.getByTestId("apex-zone").count()) >= 4, "zones above and below the price");
+    assert.equal(await page.getByTestId("apex-scenario").count(), 4, "hold/break for S1 and R1");
+    const shown = await page.getByTestId("apex-candidate").count();
+    assert.ok(shown + (await page.getByTestId("apex-rejected").count()) >= 1, "a candidate or the reason why not");
+    const journal = await fetch(`${backendUrl}/apex/journal?market=XAUUSD`).then((r) => r.json());
+    assert.equal(journal.candidates.length, shown, "every candidate shown is journaled");
+    assert.ok(journal.candidates.every((c) => c.synthetic === true), "test-data candidates are marked");
+    if (shown) {
+      await page.getByTestId("apex-candidate").first().click();
+      await page.getByTestId("apex-chart-candidate").waitFor();
+    }
+    await page.getByTestId("apex-chart").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("14a-apex-xauusd-chart");
+    await page.getByTestId("apex-candidate").or(page.getByTestId("apex-rejected")).first().scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("14a-apex-xauusd-candidates");
+
+    // SENTINEL recomputes the stored analysis from the data on disk now and must match it.
+    await page.getByTestId("apex-audit").click();
+    await page.locator('[data-testid="apex-audit-result"][data-passed="yes"]').waitFor({ timeout: 60_000 });
+    assert.equal(await page.locator('[data-testid="apex-audit-check"][data-passed="yes"]').count(), 3);
+    const hq = await fetch(`${backendUrl}/team/hq`).then((r) => r.json());
+    const sentinel = hq.robots.find((r) => r.id === "sentinel");
+    assert.ok(sentinel.work.some((w) => w.source === "apex"), "SENTINEL's re-check is in the HQ");
+
+    // MNQ: the same index as NQ at $2 per point.
+    await page.getByTestId("apex-market-MNQ").click();
+    await page.getByTestId("apex-analyze").click();
+    await page.getByTestId("apex-synthetic").waitFor({ timeout: 60_000 });
+    const mnq = await fetch(`${backendUrl}/apex/analyses?market=MNQ`).then((r) => r.json());
+    const latest = await fetch(`${backendUrl}/apex/analyses/${mnq[0].id}`).then((r) => r.json());
+    assert.equal(latest.spec.point_value, 2);
+    for (const c of latest.candidates) assert.equal(c.risk_usd, Math.round(c.risk_points * 2 * 100) / 100);
+
+    // The rule's track record: walk-forward on the last 20 days, judged by later bars.
+    await page.getByTestId("apex-days").fill("20");
+    await page.getByTestId("apex-evaluate").click();
+    await page.getByTestId("apex-verdict").waitFor({ timeout: 180_000 });
+    assert.ok((await page.getByTestId("apex-track-row").count()) === 3, "all, in-sample, out-of-sample");
+    await page.getByTestId("apex-track").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("14b-apex-track-record");
+    // There is no order path anywhere in APEX.
+    const routes = await fetch(`${backendUrl}/openapi.json`).then((r) => r.json());
+    const apexPaths = Object.keys(routes.paths).filter((p) => p.startsWith("/apex"));
+    assert.ok(apexPaths.length >= 6 && apexPaths.every((p) => !/order|trade|broker|execute/i.test(p)), apexPaths.join(","));
     await page.getByTestId("tab-home").click();
   });
 

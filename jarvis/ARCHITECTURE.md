@@ -819,6 +819,29 @@ api/team_routes.py                 /team/hq, /team/quantlab/*, /feedback, /train
   on `ultron.*`, `quantlab.mission*`, `agent.*`, `team.*`.
 - Detail: `docs/JARVIS_2_IA_UX.md`, `docs/JARVIS_2_DESIGN_SYSTEM.md`, `docs/JARVIS_2_STATUS.md`.
 
+## 13m. JARVIS APEX (`backend/jarvis/apex/`, D-033)
+
+```
+apex/data.py        Series (bars + source, label, synthetic, proxy, contract breaks), quality
+                    gate, trading calendar, front-contract selection, labelled test data
+apex/structure.py   confirmed swings, HH/HL/LH/LL, trend, BOS / CHoCH
+apex/zones.py       key levels (briefing/levels.py) → zones with width, reasons, tests
+apex/scenarios.py   counted hold/break rates from training/dataset.py (decided before as_of)
+apex/candidates.py  zone_reaction: entry / stop / targets, rejections with reasons
+apex/engine.py      analyze(series, ctx, cfg, as_of) — pure; candidates_at (shared with the
+                    track record)
+apex/resolve.py     conservative forward resolution on one-minute bars
+apex/evaluate.py    walk-forward track record, IS/OOS, verdicts
+apex/store.py       apex_* tables (migration 20; immutable journal)
+apex/service.py     sources (vault → dukascopy, fixture), analyses, journal, background
+                    track records
+api/apex_routes.py  /apex/markets, /apex/analyze, /apex/analyses, /apex/journal(/resolve),
+                    /apex/evaluations
+```
+
+UI: `apps/desktop/src/components/quantlab/apex/` (QuantLab → APEX). Method and every
+definition: `docs/apex/APEX_METHOD.md`.
+
 ## 14. Extension points (designed, not built)
 
 | Concern          | Boundary                                                         |
