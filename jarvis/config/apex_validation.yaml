@@ -1,0 +1,39 @@
+# JARVIS APEX — pre-registered validation criteria (docs/APEX_VALIDATION_PROTOCOL.md).
+#
+# Registered 2026-10-28, BEFORE any holdout of any APEX strategy was evaluated (no real market
+# data had been analysed yet). Changing a number here is a new protocol version: bump
+# `protocol_version`; earlier verdicts keep the version they were judged with.
+protocol_version: "1.0.0"
+
+split:
+  warmup_days: 21          # first days only feed zones / base rates, no decisions
+  holdout_share: 0.20      # the last 20 % of the available days at the first run — then frozen
+  folds: 4                 # chronological walk-forward folds over the development window
+  embargo_minutes: 480     # = max hold: decisions this close to a fold end are dropped
+
+evidence:
+  min_dev_trades: 60       # filled trades over all development folds
+  min_holdout_trades: 30
+  min_trade_days: 20       # distinct days with a filled trade (effective sample size)
+  bootstrap_resamples: 2000
+  baseline_runs: 200       # random-direction / random-time baseline repetitions
+  alpha: 0.05              # before the multiple-testing correction (divided by the trial count)
+
+pass:                       # ALL must hold on the development folds before the holdout is opened
+  dev_mean_r_ci_low_above: 0.0     # day-block bootstrap 95 % CI of mean R (net) above 0
+  beats_baseline: true             # baseline p-value < alpha / trials of this strategy family
+  cost_stress_factor: 1.5          # mean R still > 0 with 1.5x costs
+  neighbours_positive_share: 0.66  # share of one-step parameter neighbours with mean R > 0
+  folds_positive_share: 0.75       # share of folds with mean R > 0
+holdout:                    # opened once per strategy version and data source
+  mean_r_above: 0.0
+  ci_low_above: 0.0
+
+forward:                    # paper journal (real data, not replays)
+  min_trades: 30
+  ci_low_above: 0.0
+
+neighbours:                 # one parameter at a time, the others at their registered values
+  min_rr: [1.25, 1.75]
+  reach_atr: [2.0, 4.0]
+  stop_buffer_atr: [0.10, 0.20]

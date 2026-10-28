@@ -247,6 +247,7 @@ class ApexSettings(BaseModel):
     min_rr: float = 1.5
     max_stop_atr: float = 2.5
     valid_minutes: int = 240  # a limit entry not filled by then expires
+    trigger_valid_minutes: int = 15  # a stop entry after a 5-minute trigger expires sooner
     max_hold_minutes: int = 480  # an open candidate is closed at the market after this
     stale_minutes: int = 30  # trading minutes without bars before data counts as stale
     min_samples: int = 30  # below this, a rate is shown as "insufficient data"

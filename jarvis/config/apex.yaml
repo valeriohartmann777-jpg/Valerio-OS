@@ -17,6 +17,7 @@ stop_buffer_atr: 0.15    # stop beyond the far edge of the zone
 min_rr: 1.5              # reward to risk to the first target, after costs
 max_stop_atr: 2.5
 valid_minutes: 240       # a limit entry not filled by then expires
+trigger_valid_minutes: 15  # a stop entry after a 5-minute trigger bar expires after this
 max_hold_minutes: 480    # a filled candidate still open then is closed at the market
 stale_minutes: 30        # trading minutes without bars → data is stale, no candidates
 min_samples: 30          # fewer decided cases → "insufficient data" instead of a rate
