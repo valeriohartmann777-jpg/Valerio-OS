@@ -517,6 +517,22 @@ _Last updated: 2026-10-28_
   → gate → structure → zones → candidates → chart → data status → repair, incl. the owner's
   case rebuilt), `chartView.test.ts` (7); E2E APEX step rewritten.
 
+### APEX recovery & validation (D-035) — `docs/APEX_*.md`
+- P0 backend reachability: `/health/live`, `/health/ready`, `/system/capabilities`; supervisor
+  with captured, redacted output and log file, cause classification (missing package, port in
+  use with its owner, database, permission, crash), dependency sync before start, no endless
+  restarts, IPC restart/repair; header "Backend online" only with readiness; BackendBanner.
+- P1 data fitness view (coverage, gaps by reason, spikes, quote side, contract, execution);
+  NQ/MNQ on the CFD proxy → `DATA_UNAVAILABLE` for plans and backtests.
+- P2 engine `apex-1.2.0`: execution model, stop entries, `zone_rejection_5m` 1.0.0 (5-minute
+  trigger), typed immutable signals (migration 21, reversible), `GET /apex/signals`.
+- P3 validation protocol 1.1.0: frozen holdout, embargoed folds, bootstrap, baseline, trial
+  register, cost stress, neighbours → `validation_state`.
+- P4 APEX UI: status strip App / Data / Signal, Analyst panel, job with cancel/retry, tabs
+  Signal journal, Backtest, Validation, Data fitness.
+- P5 opt-in paper forward log; CIPHER validations in the HQ.
+- Evidence: `docs/APEX_TEST_EVIDENCE.md`; status: `docs/APEX_IMPLEMENTATION_STATUS.md`.
+
 ## IN PROGRESS
 - —
 
@@ -527,10 +543,10 @@ _Last updated: 2026-10-28_
 0. Learning on the MacBook: first Dukascopy download, first rounds
 0. Trained model on the MacBook: first real verdict (Training Hub → Trained model)
 0. JARVIS 2.0 on the MacBook: owner acceptance run in `docs/JARVIS_2_RELEASE_PLAN.md`
-0. APEX on the MacBook: QuantLab → APEX → XAUUSD → Data → **Repair data** (asks again for every
-   day the cache is missing), then Analyse now and Run track record (120 days) — the first APEX
-   results on real data. If Repair fails, APEX → Data names the reason (connection, refusal,
-   API change).
+0. APEX on the MacBook: update JARVIS, open it — if the backend can't start, the window now
+   names the cause (Repair / Restart). Then QuantLab → APEX → XAUUSD → Data fitness → Repair,
+   Start analysis, Validation → Run validation (both strategies), switch the paper forward log
+   on — the first APEX evidence on real data (`docs/APEX_IMPLEMENTATION_STATUS.md` §next).
 0. Bot Lab on the MacBook: setup check, test terminal login, first backtest of the gold EA
 0. QuantLab on the MacBook: connect Databento (Keychain), quote one month of NQ.v.0 1-minute bars,
    approve, build the dataset, run the opening-range template once — first real data

@@ -1,5 +1,10 @@
 # JARVIS APEX — method
 
+> Engine `apex-1.2.0` (2026-10-28) adds the execution model, the 5-minute trigger strategy, the
+> signal contract, the validation protocol and the forward log — specified in
+> `docs/APEX_SIGNAL_SPEC.md`, `docs/APEX_VALIDATION_PROTOCOL.md`, `docs/APEX_DATA_FITNESS.md` and
+> `docs/APEX_ARCHITECTURE.md`. Where they differ from this file, they win.
+
 Every number APEX shows is defined here. Engine version `apex-1.1.0` (quality gate repaired,
 D-034; `backend/jarvis/apex/`). Settings: `config/apex.yaml`.
 

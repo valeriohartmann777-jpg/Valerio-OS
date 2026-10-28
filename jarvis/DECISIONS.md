@@ -160,6 +160,31 @@ Format: Decision · Reason · Alternatives considered · Consequences · Date
   *Brain: Offline*. Models are swappable in `config/models.yaml`.
 - **Date:** 2026-10-03
 
+## D-035 — APEX recovery: diagnosed backend start, signal contract, pre-registered validation
+
+- **Decision:** (1) The Electron supervisor captures and classifies the backend's own output,
+  installs changed Python packages before starting, stops after five quick crashes and shows
+  the cause in the window; "Backend online" requires `/health/ready`. (2) Every APEX decision
+  becomes an immutable, contract-checked `Signal` (NO_TRADE / WAITING_FOR_TRIGGER / CANDIDATE /
+  PAPER_VALIDATED / BLOCKED); a second strategy `zone_rejection_5m` separates SETUP, TRIGGER and
+  ORDER_PLAN. (3) Fills follow the order's price side (bid-only gold: ask modelled, labelled
+  `execution_assumption_limited`); a CFD proxy never gets a plan for NQ/MNQ. (4) A strategy's
+  `validation_state` comes only from a pre-registered protocol (`config/apex_validation.yaml`):
+  embargoed folds, day-block bootstrap, random baseline with Bonferroni over an append-only
+  trial register, cost stress, neighbours, and a frozen holdout opened once per version;
+  forward evidence only from the opt-in live paper log.
+- **Reason:** The owner's backend was "not reachable" with no visible cause; APEX produced
+  candidates whose credibility nothing measured. The binding recovery brief asks for real,
+  reproducible evidence and forbids loosening checks or inventing probabilities.
+- **Alternatives:** Restarting forever (hides the cause); a per-candidate probability from the
+  zone rates (not calibrated per trade); choosing parameters on the backtest (overfits);
+  optimizing on the holdout (destroys it).
+- **Consequences:** On generated data every verdict stays RESEARCH_ONLY; on real data most
+  strategies will likely be RESEARCH_ONLY or REJECTED at first — that is the intended honesty.
+  Migration 21 (reversible) adds the tables. Protocol 1.0.0 was corrected to 1.1.0 (embargo =
+  full label horizon) before any run. No order path exists.
+- **Date:** 2026-10-28
+
 ## D-034 — APEX data repair: no silent "fetched" days, loud outages, one trading screen
 
 - **Decision:**
