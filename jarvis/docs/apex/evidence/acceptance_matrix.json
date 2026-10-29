@@ -1,0 +1,1010 @@
+{
+  "generated_at": "2026-10-29T02:52:35.592982+00:00",
+  "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187",
+  "branch": "claude/jarvis-foundation-mxnsz4",
+  "e2e_log": "../docs/apex/evidence/e2e_run.log",
+  "e2e_failed": false,
+  "counts": {
+    "TESTED_SYNTHETIC": 46,
+    "TESTED_REAL": 0,
+    "TESTED_MAC_RUNTIME": 0,
+    "BLOCKED": 5,
+    "FAILED": 0,
+    "NOT_IMPLEMENTED": 0
+  },
+  "rows": [
+    {
+      "test_id": "1",
+      "title": "Installed Mac build matches the repo commit; one backend",
+      "command": "cd backend && .venv/bin/pytest tests/test_health_ready.py::test_live_ready_and_capabilities_answer_from_real_checks",
+      "actual_result": [
+        "pytest test_live_ready_and_capabilities_answer_from_real_checks: passed",
+        "vitest electron/backend.test.ts: passed",
+        "e2e 'an outdated backend from an earlier run is replaced': passed",
+        "e2e 'app launches, backend starts': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "docs/apex/evidence/vitest_acceptance.json",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "BLOCKED",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "BLOCKED",
+      "blockers": [
+        "BLOCKED: MAC ACCESS \u2014 the owner's Mac is not reachable from this session"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "2",
+      "title": "Unreachable backend \u2192 failed readiness, actionable error",
+      "command": "cd backend && .venv/bin/pytest tests/test_health_ready.py::test_ready_reports_a_failing_component_by_name",
+      "actual_result": [
+        "pytest test_ready_reports_a_failing_component_by_name: passed",
+        "vitest src/lib/backend.test.ts: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "docs/apex/evidence/vitest_acceptance.json"
+      ],
+      "data_type": "synthetic",
+      "status": "BLOCKED",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "BLOCKED",
+      "blockers": [
+        "BLOCKED: MAC ACCESS \u2014 the owner's Mac is not reachable from this session"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "3",
+      "title": "Repair / restart without duplicates or data loss",
+      "command": "npm test / npm run test:e2e",
+      "actual_result": [
+        "vitest electron/backend.test.ts: passed",
+        "e2e 'an outdated backend from an earlier run is replaced': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "docs/apex/evidence/vitest_acceptance.json",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "BLOCKED",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "BLOCKED",
+      "blockers": [
+        "BLOCKED: MAC ACCESS \u2014 the owner's Mac is not reachable from this session"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "4",
+      "title": "Identical history-backed rerun: local cache, zero paid calls",
+      "command": "cd backend && .venv/bin/pytest tests/test_quantlab_vault.py::test_17_a_hundred_reruns_cost_nothing tests/test_quantlab_vault.py::test_01_cached_backtest_runs_with_the_network_blocked",
+      "actual_result": [
+        "pytest test_17_a_hundred_reruns_cost_nothing: passed",
+        "pytest test_01_cached_backtest_runs_with_the_network_blocked: passed",
+        "e2e 'Data Vault buys MNQ once': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "5",
+      "title": "Billable acquisition quoted, approved, recorded",
+      "command": "cd backend && .venv/bin/pytest tests/test_quantlab_vault.py::test_08_quote_is_free_and_purchase_needs_exact_approval tests/test_quantlab_vault.py::test_09_duplicates_never_charge_twice",
+      "actual_result": [
+        "pytest test_08_quote_is_free_and_purchase_needs_exact_approval: passed",
+        "pytest test_09_duplicates_never_charge_twice: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "6",
+      "title": "Bid-only XAUUSD never ready for spread / fill / absorption",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_zonemap.py::test_bid_only_spot_never_claims_spread_volume_delta_or_absorption tests/test_apex_signals.py::test_bid_only_gold_is_labelled_limited_with_a_measured_or_estimated_spread tests/test_apex_setups.py::test_buy_side_prices_carry_the_spread_on_bid_only_data",
+      "actual_result": [
+        "pytest test_bid_only_spot_never_claims_spread_volume_delta_or_absorption: passed",
+        "pytest test_bid_only_gold_is_labelled_limited_with_a_measured_or_estimated_spread: passed",
+        "pytest test_buy_side_prices_carry_the_spread_on_bid_only_data: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "BLOCKED",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [
+        "BLOCKED: REAL DATA \u2014 no licensed or downloaded XAUUSD / NQ / MNQ data is reachable here (market-data hosts refused by the network; nothing imported into the Data Vault)"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "7",
+      "title": "NQ / MNQ refuse a CFD proxy; 0.25 tick, $20 / $2 per point",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_fitness.py::test_a_cfd_proxy_is_labelled_data_unavailable_for_futures tests/test_apex_signals.py::test_a_cfd_proxy_never_gets_an_order_plan_for_nq tests/test_quantlab_vault.py::test_13_ledger_nq_vs_mnq tests/test_apex_setups.py::test_nq_and_mnq_dollar_risk_differ_by_ten_on_the_same_ten_point_stop",
+      "actual_result": [
+        "pytest test_a_cfd_proxy_is_labelled_data_unavailable_for_futures: passed",
+        "pytest test_a_cfd_proxy_never_gets_an_order_plan_for_nq: passed",
+        "pytest test_13_ledger_nq_vs_mnq: passed",
+        "pytest test_nq_and_mnq_dollar_risk_differ_by_ten_on_the_same_ten_point_stop: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "BLOCKED",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [
+        "BLOCKED: REAL DATA \u2014 no licensed or downloaded XAUUSD / NQ / MNQ data is reachable here (market-data hosts refused by the network; nothing imported into the Data Vault)"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "8",
+      "title": "Bar timestamps and session calendar: no right-edge look-ahead, no 100 % gaps, DST",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex.py::test_an_unfinished_higher_timeframe_bar_is_not_used tests/test_apex_data_repair.py::test_old_data_is_stale_and_not_reported_as_100_percent_gaps tests/test_quantlab_vault.py::test_04_sessions_dst_early_close_and_missing_bars tests/test_apex_fitness.py::test_the_weekend_and_daily_break_are_never_missing",
+      "actual_result": [
+        "pytest test_an_unfinished_higher_timeframe_bar_is_not_used: passed",
+        "pytest test_old_data_is_stale_and_not_reported_as_100_percent_gaps: passed",
+        "pytest test_04_sessions_dst_early_close_and_missing_bars: passed",
+        "pytest test_the_weekend_and_daily_break_are_never_missing: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "9",
+      "title": "Spikes / missing data degrade evidence, never fake candles",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_data_repair.py::test_a_wick_far_beyond_its_neighbours_is_a_spike tests/test_apex.py::test_the_quality_gate_blocks_bad_data_and_stale_data_gets_no_candidates tests/test_quantlab_vault.py::test_18_corruption_is_detected_and_repaired_from_the_original",
+      "actual_result": [
+        "pytest test_a_wick_far_beyond_its_neighbours_is_a_spike: passed",
+        "pytest test_the_quality_gate_blocks_bad_data_and_stale_data_gets_no_candidates: passed",
+        "pytest test_18_corruption_is_detected_and_repaired_from_the_original: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "10",
+      "title": "Swing pivot confirmed only after its right-side bars closed",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_zonemap.py::test_a_swing_low_exists_only_once_its_right_hand_bars_have_closed tests/test_apex.py::test_a_swing_exists_only_after_its_confirming_bars_closed",
+      "actual_result": [
+        "pytest test_a_swing_low_exists_only_once_its_right_hand_bars_have_closed: passed",
+        "pytest test_a_swing_exists_only_after_its_confirming_bars_closed: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "11",
+      "title": "Top-four zones at T use nothing after T; snapshots immutable",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_zonemap.py::test_the_zone_map_at_a_moment_ignores_every_later_bar tests/test_apex_zonemap.py::test_zone_snapshots_are_stored_once_and_never_changed tests/test_apex_setups.py::test_cached_zone_maps_equal_fresh_ones_within_a_fifteen_minute_bar",
+      "actual_result": [
+        "pytest test_the_zone_map_at_a_moment_ignores_every_later_bar: passed",
+        "pytest test_zone_snapshots_are_stored_once_and_never_changed: passed",
+        "pytest test_cached_zone_maps_equal_fresh_ones_within_a_fifteen_minute_bar: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "12",
+      "title": "Repeated rejections counted once per episode",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_zonemap.py::test_one_visit_is_one_episode_however_many_bars_it_lasts tests/test_apex_context.py::test_interaction_counts_are_one_per_episode",
+      "actual_result": [
+        "pytest test_one_visit_is_one_episode_however_many_bars_it_lasts: passed",
+        "pytest test_interaction_counts_are_one_per_episode: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "13",
+      "title": "Support \u2194 resistance flip only after acceptance and retest",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_zonemap.py::test_a_zone_flips_only_after_acceptance_and_a_rejected_retest",
+      "actual_result": [
+        "pytest test_a_zone_flips_only_after_acceptance_and_a_rejected_retest: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "14",
+      "title": "Identical paths with different futures \u2192 identical as-of zones / signals",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex.py::test_an_analysis_never_sees_bars_after_its_moment tests/test_apex_signals.py::test_both_strategies_decide_without_look_ahead tests/test_apex_context.py::test_path_shares_are_one_partition_and_ignore_later_bars",
+      "actual_result": [
+        "pytest test_an_analysis_never_sees_bars_after_its_moment: passed",
+        "pytest test_both_strategies_decide_without_look_ahead: passed",
+        "pytest test_path_shares_are_one_partition_and_ignore_later_bars: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "15",
+      "title": "Rejection / rotation and breakout / continuation both tested; no auto-short",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_a_confirmed_rejection_makes_a_research_plan_with_its_trigger tests/test_apex_setups.py::test_a_confirmed_breakout_is_a_continuation_case_never_an_automatic_short",
+      "actual_result": [
+        "pytest test_a_confirmed_rejection_makes_a_research_plan_with_its_trigger: passed",
+        "pytest test_a_confirmed_breakout_is_a_continuation_case_never_an_automatic_short: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "16",
+      "title": "Scenario shares sum to 1 only as a partition; ambiguity explicit",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_context.py::test_first_touch_keeps_same_minute_touches_ambiguous tests/test_apex_context.py::test_path_shares_are_one_partition_and_ignore_later_bars",
+      "actual_result": [
+        "pytest test_first_touch_keeps_same_minute_touches_ambiguous: passed",
+        "pytest test_path_shares_are_one_partition_and_ignore_later_bars: passed",
+        "vitest src/components/quantlab/apex/apexView.test.ts: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "docs/apex/evidence/vitest_acceptance.json"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "17",
+      "title": "OHLC-only feed never passes POC / profile / order flow / absorption / options",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_orderflow.py::test_bid_ask_candles_show_unavailable_never_buyers_or_absorption tests/test_apex_orderflow.py::test_futures_ohlcv_has_a_vwap_but_still_no_delta_or_precise_poc tests/test_apex_zonemap.py::test_futures_bars_give_a_bar_vwap_but_never_a_precise_poc_or_delta",
+      "actual_result": [
+        "pytest test_bid_ask_candles_show_unavailable_never_buyers_or_absorption: passed",
+        "pytest test_futures_ohlcv_has_a_vwap_but_still_no_delta_or_precise_poc: passed",
+        "pytest test_futures_bars_give_a_bar_vwap_but_never_a_precise_poc_or_delta: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "18",
+      "title": "VWAP reset in the exchange time zone; spot proxy relabelled",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_orderflow.py::test_the_futures_session_resets_at_five_pm_chicago tests/test_apex_orderflow.py::test_spot_resets_at_five_pm_new_york_and_rth_at_nine_thirty tests/test_apex_orderflow.py::test_the_vwap_uses_only_closed_bars_since_the_reset tests/test_apex_orderflow.py::test_a_spot_quote_vwap_is_a_proxy_and_generated_data_has_none",
+      "actual_result": [
+        "pytest test_the_futures_session_resets_at_five_pm_chicago: passed",
+        "pytest test_spot_resets_at_five_pm_new_york_and_rth_at_nine_thirty: passed",
+        "pytest test_the_vwap_uses_only_closed_bars_since_the_reset: passed",
+        "pytest test_a_spot_quote_vwap_is_a_proxy_and_generated_data_has_none: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "BLOCKED",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [
+        "BLOCKED: REAL DATA \u2014 no licensed or downloaded XAUUSD / NQ / MNQ data is reachable here (market-data hosts refused by the network; nothing imported into the Data Vault)"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "19",
+      "title": "Delta and absorption tested on trade / quote / depth fixtures",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_orderflow.py::test_trades_are_signed_by_flag_quote_rule_and_tick_rule_with_confidence tests/test_apex_orderflow.py::test_delta_and_cvd_count_only_closed_bars_before_the_moment tests/test_apex_orderflow.py::test_bars_never_give_delta_and_absorption_is_not_measurable",
+      "actual_result": [
+        "pytest test_trades_are_signed_by_flag_quote_rule_and_tick_rule_with_confidence: passed",
+        "pytest test_delta_and_cvd_count_only_closed_bars_before_the_moment: passed",
+        "pytest test_bars_never_give_delta_and_absorption_is_not_measurable: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "20",
+      "title": "An 08:30 New York release can't change an 08:29 prediction (DST)",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_context.py::test_a_release_at_0830_cannot_reach_an_0829_analysis tests/test_apex_context.py::test_calendar_times_are_dst_correct_and_refused_rows_say_why tests/test_apex_context.py::test_importing_a_calendar_changes_context_not_the_analysis",
+      "actual_result": [
+        "pytest test_a_release_at_0830_cannot_reach_an_0829_analysis: passed",
+        "pytest test_calendar_times_are_dst_correct_and_refused_rows_say_why: passed",
+        "pytest test_importing_a_calendar_changes_context_not_the_analysis: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "21",
+      "title": "Missing related-market feed is visible, never corroborates",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_context.py::test_missing_calendar_and_related_markets_are_unavailable_never_support",
+      "actual_result": [
+        "pytest test_missing_calendar_and_related_markets_are_unavailable_never_support: passed",
+        "e2e 'Market Context': not passed in this log"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "22",
+      "title": "A touched zone without a trigger is WATCH, never BUY / SELL NOW",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_a_touch_without_confirmation_is_watch_never_an_entry tests/test_apex_signals.py::test_without_a_confirmed_trigger_it_waits_and_says_what_is_missing",
+      "actual_result": [
+        "pytest test_a_touch_without_confirmation_is_watch_never_an_entry: passed",
+        "pytest test_without_a_confirmed_trigger_it_waits_and_says_what_is_missing: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "23",
+      "title": "Side-specific entry / exit, tick size, fees, SL / TP, net expected R",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_buy_side_prices_carry_the_spread_on_bid_only_data tests/test_apex_setups.py::test_net_expected_r_uses_stressed_costs tests/test_apex_signals.py::test_on_bid_data_buys_pay_the_spread_and_short_stops_trigger_on_the_ask tests/test_apex_signal.py::test_a_complete_long_plan_is_accepted_and_serialises",
+      "actual_result": [
+        "pytest test_buy_side_prices_carry_the_spread_on_bid_only_data: passed",
+        "pytest test_net_expected_r_uses_stressed_costs: passed",
+        "pytest test_on_bid_data_buys_pay_the_spread_and_short_stops_trigger_on_the_ask: passed",
+        "pytest test_a_complete_long_plan_is_accepted_and_serialises: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "24",
+      "title": "SL and TP in one bar \u2192 conservative, never an automatic win",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_stop_and_target_in_the_same_minute_after_the_fill_count_as_a_loss tests/test_quantlab_vault.py::test_14_stop_and_target_in_one_bar_is_resolved_conservatively tests/test_apex.py::test_resolution_rules_are_conservative",
+      "actual_result": [
+        "pytest test_stop_and_target_in_the_same_minute_after_the_fill_count_as_a_loss: passed",
+        "pytest test_14_stop_and_target_in_one_bar_is_resolved_conservatively: passed",
+        "pytest test_resolution_rules_are_conservative: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "25",
+      "title": "Only a calibrated P(TP before SL) \u2265 0.70 passes; 80 % can't be faked",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_only_a_validated_calibrated_tp_before_sl_probability_passes tests/test_apex_setups.py::test_the_signal_contract_refuses_a_faked_qualified_signal tests/test_apex_setups.py::test_an_uncalibrated_eighty_percent_shows_probability_not_validated",
+      "actual_result": [
+        "pytest test_only_a_validated_calibrated_tp_before_sl_probability_passes: passed",
+        "pytest test_the_signal_contract_refuses_a_faked_qualified_signal: passed",
+        "pytest test_an_uncalibrated_eighty_percent_shows_probability_not_validated: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "26",
+      "title": "< 70 %, thin sample, negative stressed EV, stale data or news \u2192 no trade",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_every_missing_condition_keeps_the_plan_research_only tests/test_apex_setups.py::test_negative_stressed_expected_value_fails_even_above_seventy_percent",
+      "actual_result": [
+        "pytest test_every_missing_condition_keeps_the_plan_research_only: passed",
+        "pytest test_negative_stressed_expected_value_fails_even_above_seventy_percent: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "27",
+      "title": "At most four alerts a day; duplicates suppressed; zero is fine",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_the_fifth_distinct_alert_of_a_day_and_repeats_are_refused tests/test_apex_setups.py::test_the_budget_holds_across_analyses_and_alerts_are_immutable tests/test_apex_setups.py::test_the_alerts_endpoint_answers_with_zero_alerts",
+      "actual_result": [
+        "pytest test_the_fifth_distinct_alert_of_a_day_and_repeats_are_refused: passed",
+        "pytest test_the_budget_holds_across_analyses_and_alerts_are_immutable: passed",
+        "pytest test_the_alerts_endpoint_answers_with_zero_alerts: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "28",
+      "title": "A changed strategy / zone / probability is a new record",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_a_changed_probability_or_zone_set_is_a_new_signal_id tests/test_apex_signal.py::test_signals_are_immutable tests/test_apex_signals.py::test_each_analysis_records_its_signals_once_and_never_changes_them",
+      "actual_result": [
+        "pytest test_a_changed_probability_or_zone_set_is_a_new_signal_id: passed",
+        "pytest test_signals_are_immutable: passed",
+        "pytest test_each_analysis_records_its_signals_once_and_never_changes_them: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "29",
+      "title": "Tiny samples and uncalibrated fixtures fail; random-walk controls expose overfitting",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_probability.py::test_a_tiny_sample_gives_no_model_and_no_number tests/test_apex_probability.py::test_a_random_walk_negative_control_is_never_validated tests/test_apex_validation.py::test_the_random_baseline_only_beats_chance_when_choice_matters",
+      "actual_result": [
+        "pytest test_a_tiny_sample_gives_no_model_and_no_number: passed",
+        "pytest test_a_random_walk_negative_control_is_never_validated: passed",
+        "pytest test_the_random_baseline_only_beats_chance_when_choice_matters: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "30",
+      "title": "Holdout and trial register keep every variant; one-time holdout",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_validation.py::test_a_holdout_is_opened_once_per_strategy_version tests/test_apex_validation.py::test_a_validation_run_registers_its_trials_and_freezes_the_holdout tests/test_apex_probability.py::test_validating_a_setup_stores_its_head_and_registers_the_trial",
+      "actual_result": [
+        "pytest test_a_holdout_is_opened_once_per_strategy_version: passed",
+        "pytest test_a_validation_run_registers_its_trials_and_freezes_the_holdout: passed",
+        "pytest test_validating_a_setup_stores_its_head_and_registers_the_trial: passed",
+        "e2e 'one-time holdout lock': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "31",
+      "title": "Forward outcome only after the market event; prediction unchanged",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_forward.py::test_forward_evidence_counts_each_live_plan_once tests/test_apex.py::test_replayed_candidates_are_resolved_on_later_bars tests/test_apex_signal.py::test_signals_are_immutable",
+      "actual_result": [
+        "pytest test_forward_evidence_counts_each_live_plan_once: passed",
+        "pytest test_replayed_candidates_are_resolved_on_later_bars: passed",
+        "pytest test_signals_are_immutable: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "BLOCKED",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [
+        "BLOCKED: REAL DATA \u2014 no licensed or downloaded XAUUSD / NQ / MNQ data is reachable here (market-data hosts refused by the network; nothing imported into the Data Vault)"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "32",
+      "title": "Backend schema and TS protocol aligned; unit / integration / E2E green",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_protocol_sync.py::test_every_signal_field_is_declared_in_typescript tests/test_apex_protocol_sync.py::test_gate_checks_states_and_strategies_match",
+      "actual_result": [
+        "pytest test_every_signal_field_is_declared_in_typescript: passed",
+        "pytest test_gate_checks_states_and_strategies_match: passed",
+        "vitest src/components/quantlab/apex/apexView.test.ts: passed",
+        "vitest src/components/quantlab/apex/analyst.test.ts: passed",
+        "e2e 'APEX: the workstation': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "docs/apex/evidence/vitest_acceptance.json",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "33",
+      "title": "Chart and panels show data age and source on a real dataset",
+      "command": "npm test / npm run test:e2e",
+      "actual_result": [
+        "vitest src/components/quantlab/apex/apexView.test.ts: passed",
+        "e2e 'APEX: the workstation': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "docs/apex/evidence/vitest_acceptance.json",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "BLOCKED",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [
+        "BLOCKED: REAL DATA \u2014 no licensed or downloaded XAUUSD / NQ / MNQ data is reachable here (market-data hosts refused by the network; nothing imported into the Data Vault)"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "34",
+      "title": "Solo and ULTRON QuantLab: identical deterministic results, no leaks",
+      "command": "npm test / npm run test:e2e",
+      "actual_result": [
+        "e2e 'ULTRON QuantLab: a Solo strategy is shared on purpose': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "35",
+      "title": "SENTINEL vetoes promotion; agents can't self-authorize",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_governance.py::test_no_agent_can_approve_pay_or_read_secrets tests/test_apex_governance.py::test_some_actions_are_locked_for_everyone_the_owner_too tests/test_apex_governance.py::test_a_head_without_strategy_evidence_is_vetoed_and_cannot_be_approved tests/test_apex_governance.py::test_only_the_owner_approves_a_cleared_head_and_only_then_it_counts tests/test_apex_governance.py::test_a_validated_head_is_proposed_by_cipher_and_reviewed_by_sentinel",
+      "actual_result": [
+        "pytest test_no_agent_can_approve_pay_or_read_secrets: passed",
+        "pytest test_some_actions_are_locked_for_everyone_the_owner_too: passed",
+        "pytest test_a_head_without_strategy_evidence_is_vetoed_and_cannot_be_approved: passed",
+        "pytest test_only_the_owner_approves_a_cleared_head_and_only_then_it_counts: passed",
+        "pytest test_a_validated_head_is_proposed_by_cipher_and_reviewed_by_sentinel: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "36",
+      "title": "VERIFIED only on accessible real data; otherwise UNTESTED / BLOCKED",
+      "command": "npm test / npm run test:e2e",
+      "actual_result": [
+        "every row of this matrix reports synthetic passes as TESTED_SYNTHETIC and anything needing real data or the Mac as BLOCKED \u2014 no VERIFIED"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "A",
+      "title": "Mac broken-backend reproduction",
+      "command": "cd backend && .venv/bin/pytest tests/test_health_ready.py::test_ready_reports_a_failing_component_by_name",
+      "actual_result": [
+        "pytest test_ready_reports_a_failing_component_by_name: passed",
+        "vitest electron/backend.test.ts: passed",
+        "e2e 'an outdated backend from an earlier run is replaced': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "docs/apex/evidence/vitest_acceptance.json",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "BLOCKED",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "BLOCKED",
+      "blockers": [
+        "BLOCKED: MAC ACCESS \u2014 the owner's Mac is not reachable from this session"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "B",
+      "title": "Historical-source replay offline, paid counter stays zero",
+      "command": "cd backend && .venv/bin/pytest tests/test_quantlab_vault.py::test_01_cached_backtest_runs_with_the_network_blocked tests/test_quantlab_vault.py::test_offline_mode_blocks_every_market_data_request",
+      "actual_result": [
+        "pytest test_01_cached_backtest_runs_with_the_network_blocked: passed",
+        "pytest test_offline_mode_blocks_every_market_data_request: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "BLOCKED",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [
+        "BLOCKED: REAL DATA \u2014 no licensed or downloaded XAUUSD / NQ / MNQ data is reachable here (market-data hosts refused by the network; nothing imported into the Data Vault)"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "C",
+      "title": "Causal pivot: not confirmed one bar early",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_zonemap.py::test_a_swing_low_exists_only_once_its_right_hand_bars_have_closed",
+      "actual_result": [
+        "pytest test_a_swing_low_exists_only_once_its_right_hand_bars_have_closed: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "D",
+      "title": "Zone ranking: 4 of 6/7; 2 shown with a note; tomorrow can't change yesterday",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_zonemap.py::test_four_per_side_at_most_and_fewer_when_the_evidence_is_thin tests/test_apex_zonemap.py::test_the_zone_map_at_a_moment_ignores_every_later_bar",
+      "actual_result": [
+        "pytest test_four_per_side_at_most_and_fewer_when_the_evidence_is_thin: passed",
+        "pytest test_the_zone_map_at_a_moment_ignores_every_later_bar: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "E",
+      "title": "Touch = WATCH; rejection + trigger = candidate; breakout = continuation",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_a_touch_without_confirmation_is_watch_never_an_entry tests/test_apex_setups.py::test_a_confirmed_rejection_makes_a_research_plan_with_its_trigger tests/test_apex_setups.py::test_a_confirmed_breakout_is_a_continuation_case_never_an_automatic_short",
+      "actual_result": [
+        "pytest test_a_touch_without_confirmation_is_watch_never_an_entry: passed",
+        "pytest test_a_confirmed_rejection_makes_a_research_plan_with_its_trigger: passed",
+        "pytest test_a_confirmed_breakout_is_a_continuation_case_never_an_automatic_short: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "F",
+      "title": "Bid/ask OHLC can't claim delta or absorption",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_orderflow.py::test_bid_ask_candles_show_unavailable_never_buyers_or_absorption",
+      "actual_result": [
+        "pytest test_bid_ask_candles_show_unavailable_never_buyers_or_absorption: passed",
+        "e2e 'APEX: the workstation': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "G",
+      "title": "News causality with DST",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_context.py::test_a_release_at_0830_cannot_reach_an_0829_analysis",
+      "actual_result": [
+        "pytest test_a_release_at_0830_cannot_reach_an_0829_analysis: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "H",
+      "title": "P(UP_FIRST) = 0.8 or quality 95 never passes the trade gate",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_a_path_share_or_a_quality_score_never_passes_the_probability_gate",
+      "actual_result": [
+        "pytest test_a_path_share_or_a_quality_score_never_passes_the_probability_gate: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "I",
+      "title": "Uncalibrated 0.8 shows PROBABILITY NOT VALIDATED; no 80 % from 3 trades",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_an_uncalibrated_eighty_percent_shows_probability_not_validated tests/test_apex_probability.py::test_a_tiny_sample_gives_no_model_and_no_number",
+      "actual_result": [
+        "pytest test_an_uncalibrated_eighty_percent_shows_probability_not_validated: passed",
+        "pytest test_a_tiny_sample_gives_no_model_and_no_number: passed",
+        "e2e 'APEX: the workstation': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "J",
+      "title": "One 1-minute bar through SL and TP is conservative",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_stop_and_target_in_the_same_minute_after_the_fill_count_as_a_loss",
+      "actual_result": [
+        "pytest test_stop_and_target_in_the_same_minute_after_the_fill_count_as_a_loss: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "K",
+      "title": "NQ 10 points = $200, MNQ = $20",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_nq_and_mnq_dollar_risk_differ_by_ten_on_the_same_ten_point_stop",
+      "actual_result": [
+        "pytest test_nq_and_mnq_dollar_risk_differ_by_ten_on_the_same_ten_point_stop: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "L",
+      "title": "Alert cap: 0, 1 or 4 accepted; the fifth and duplicates refused",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_setups.py::test_the_fifth_distinct_alert_of_a_day_and_repeats_are_refused",
+      "actual_result": [
+        "pytest test_the_fifth_distinct_alert_of_a_day_and_repeats_are_refused: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "M",
+      "title": "Trial register and one-time holdout; SENTINEL veto",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_validation.py::test_a_holdout_is_opened_once_per_strategy_version tests/test_apex_governance.py::test_sentinel_vetoes_every_unproven_head tests/test_apex_governance.py::test_a_validated_head_is_proposed_by_cipher_and_reviewed_by_sentinel",
+      "actual_result": [
+        "pytest test_a_holdout_is_opened_once_per_strategy_version: passed",
+        "pytest test_sentinel_vetoes_every_unproven_head: passed",
+        "pytest test_a_validated_head_is_proposed_by_cipher_and_reviewed_by_sentinel: passed",
+        "e2e 'one-time holdout lock': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "N",
+      "title": "Forward record immutability",
+      "command": "cd backend && .venv/bin/pytest tests/test_apex_signal.py::test_signals_are_immutable tests/test_apex_setups.py::test_a_changed_probability_or_zone_set_is_a_new_signal_id",
+      "actual_result": [
+        "pytest test_signals_are_immutable: passed",
+        "pytest test_a_changed_probability_or_zone_set_is_a_new_signal_id: passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml"
+      ],
+      "data_type": "synthetic",
+      "status": "TESTED_SYNTHETIC",
+      "real_data_status": "BLOCKED",
+      "mac_runtime_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "blockers": [
+        "BLOCKED: REAL DATA \u2014 no licensed or downloaded XAUUSD / NQ / MNQ data is reachable here (market-data hosts refused by the network; nothing imported into the Data Vault)"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    },
+    {
+      "test_id": "O",
+      "title": "UX: 4/4 zones when they exist, buy / sell boxes, no-trade reasons, source age",
+      "command": "npm test / npm run test:e2e",
+      "actual_result": [
+        "vitest src/components/quantlab/apex/apexView.test.ts: passed",
+        "e2e 'APEX: the workstation': passed",
+        "e2e 'QuantLab: broken data refused': passed"
+      ],
+      "evidence_path": [
+        "docs/apex/evidence/pytest_acceptance.xml",
+        "docs/apex/evidence/vitest_acceptance.json",
+        "../docs/apex/evidence/e2e_run.log"
+      ],
+      "data_type": "synthetic",
+      "status": "BLOCKED",
+      "real_data_status": "NOT_REQUIRED_FOR_THIS_CLAIM",
+      "mac_runtime_status": "BLOCKED",
+      "blockers": [
+        "BLOCKED: MAC ACCESS \u2014 the owner's Mac is not reachable from this session"
+      ],
+      "commit_sha": "415b2fe53e9aeccf709417cd90084a4aa4be7187"
+    }
+  ]
+}
