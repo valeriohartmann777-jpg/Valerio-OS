@@ -95,14 +95,14 @@ def scenarios(
     """Hold / break scenarios for the nearest support and resistance."""
     out: list[dict[str, Any]] = []
     by_id = {z["id"]: z for z in zones}
-    for first, second, side in (("S1", "S2", "support"), ("R1", "R2", "resistance")):
+    for first, second, side in (("KS1", "KS2", "support"), ("KR1", "KR2", "resistance")):
         zone = by_id.get(first)
         if zone is None:
             continue
         held = zone_rate(base, zone["groups"], side, min_samples)
         reference = side_rate(base, side, min_samples)
         beyond = by_id.get(second)
-        opposite = by_id.get("R1" if side == "support" else "S1")
+        opposite = by_id.get("KR1" if side == "support" else "KS1")
         span = f"{zone['low']:g}-{zone['high']:g}"
         toward = (
             f"toward {opposite['id']} ({opposite['low']:g}-{opposite['high']:g})"

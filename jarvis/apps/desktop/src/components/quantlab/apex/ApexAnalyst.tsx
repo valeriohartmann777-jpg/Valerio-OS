@@ -94,8 +94,10 @@ export function AnalystPanel({
           <Section title="Setup" testId="apex-analyst-setup">
             {decision.setups.length ? (
               decision.setups.map((s) => (
-                <span key={s.zone} className="block text-fg">
-                  {s.direction} at {s.zone} · {s.distance_atr} ATR away
+                <span key={`${s.direction}-${s.zone}`} className="block text-fg" data-stage={s.stage}>
+                  {s.stage
+                    ? `${s.direction}: ${s.stage.replace(/_/g, " ").toLowerCase()} — ${s.reasons?.[0] ?? ""}`
+                    : `${s.direction} at ${s.zone} · ${s.distance_atr} ATR away`}
                 </span>
               ))
             ) : (
@@ -103,7 +105,7 @@ export function AnalystPanel({
             )}
             <span className="block text-[12px] text-fg-faint">Rule: {meta?.entry} (version {decision.version}).</span>
           </Section>
-          {strategy === "zone_rejection_5m" && (
+          {strategy !== "zone_reaction" && (
             <Section title="Trigger" testId="apex-analyst-trigger" state={decision.trigger ? "confirmed" : "waiting"}>
               {decision.trigger ? (
                 <span className="text-fg">
@@ -111,7 +113,7 @@ export function AnalystPanel({
                 </span>
               ) : (
                 <span className="text-fg-muted">
-                  {decision.status === "WAITING_FOR_TRIGGER" ? "Waiting for a confirmed 5-minute rejection — nothing to order yet." : "None."}
+                  {decision.status === "WAITING_FOR_TRIGGER" ? "Waiting for the setup's confirmed 5-minute trigger — nothing to order yet." : "None."}
                 </span>
               )}
             </Section>
@@ -158,7 +160,8 @@ export function AnalystPanel({
               </>
             )}
             <span className="block text-[12px] text-fg-faint">
-              No probability is shown: APEX has no calibrated per-signal model, only counted zone rates (see Scenarios).{" "}
+              A probability appears only from a validated, calibrated P(TP before SL) head of this setup version — otherwise PROBABILITY NOT
+              VALIDATED. Zone scores and counted rates are never that probability.{" "}
               <button type="button" onClick={onValidation} className="font-semibold text-quant hover:underline" data-testid="apex-analyst-validate">
                 Validation
               </button>

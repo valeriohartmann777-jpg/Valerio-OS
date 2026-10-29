@@ -155,7 +155,7 @@ def test_zones_have_width_reasons_and_nearest_first_ids() -> None:
     supports = [z for z in zones if z["side"] == "support"]
     resistances = [z for z in zones if z["side"] == "resistance"]
     assert supports and resistances
-    assert [z["id"] for z in supports] == [f"S{k}" for k in range(1, len(supports) + 1)]
+    assert [z["id"] for z in supports] == [f"KS{k}" for k in range(1, len(supports) + 1)]
     assert all(a["high"] >= b["high"] for a, b in pairwise(supports))
     for z in zones:
         assert z["high"] - z["low"] >= 2 * 0.01 - 1e-9 and z["reasons"]

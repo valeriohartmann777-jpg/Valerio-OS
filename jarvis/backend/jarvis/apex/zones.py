@@ -139,10 +139,12 @@ def build_zones(
     resistances = sorted((z for z in merged if z.side == "resistance"), key=lambda z: z.low)[
         :each_side
     ]
+    # KS / KR: key-level zones of the zone_reaction and 5-minute rules — S1-S4 / R1-R4 are the
+    # ranked zones of the causal zone map (zonemap.py), and one name never means two zones.
     for k, zone in enumerate(supports, 1):
-        zone.id = f"S{k}"
+        zone.id = f"KS{k}"
     for k, zone in enumerate(resistances, 1):
-        zone.id = f"R{k}"
+        zone.id = f"KR{k}"
     return resistances[::-1] + supports  # top to bottom
 
 

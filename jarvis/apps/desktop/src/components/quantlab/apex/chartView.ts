@@ -86,10 +86,14 @@ export function timeLabels(times: number[], start: number, end: number, max = 6)
 
 export const TIMEFRAMES = [
   { minutes: 1, label: "1m", name: "1 minute" },
+  { minutes: 2, label: "2m", name: "2 minutes" },
+  { minutes: 3, label: "3m", name: "3 minutes" },
   { minutes: 5, label: "5m", name: "5 minutes" },
+  { minutes: 10, label: "10m", name: "10 minutes" },
   { minutes: 15, label: "15m", name: "15 minutes" },
   { minutes: 60, label: "1h", name: "1 hour" },
   { minutes: 240, label: "4h", name: "4 hours" },
+  { minutes: 1440, label: "D1", name: "New York trading days" },
 ] as const;
 
 /** The structure APEX computed that fits a chart timeframe best (15-minute or 1-hour swings). */

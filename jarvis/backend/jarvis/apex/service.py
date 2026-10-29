@@ -34,7 +34,7 @@ from jarvis.apex import eligibility
 from jarvis.apex.alerts import admit, alert_record
 from jarvis.apex.audit import compare, outcome_check
 from jarvis.apex.capability import mode_of
-from jarvis.apex.context import market_context
+from jarvis.apex.context import daily_bars, market_context
 from jarvis.apex.data import (
     SYNTHETIC_LABEL,
     Series,
@@ -48,6 +48,7 @@ from jarvis.apex.engine import ENGINE_VERSION, STRATEGIES, MarketContext, analyz
 from jarvis.apex.evaluate import Cancelled, summarize, track_record
 from jarvis.apex.execution import Execution, execution_for, fill_model
 from jarvis.apex.fitness import fitness
+from jarvis.apex.governance import authorize, sentinel_review, state_of
 from jarvis.apex.macro import parse_calendar
 from jarvis.apex.narrative import narrate
 from jarvis.apex.probability import model_id, predict
@@ -576,11 +577,88 @@ class ApexService:
         model = await self.store.probability_model(
             market, setup, STRATEGIES[setup], source_id, synthetic
         )
-        return predict(model, plan)
+        out = predict(model, plan)
+        if model is not None:
+            state = state_of(await self.store.promotion_events(str(model["id"])))
+            out["promotion"] = state
+            out["promoted"] = state == "APPROVED"
+            if out["validated"] and not out["promoted"]:
+                out["label"] = "VALIDATED — NOT PROMOTED (SENTINEL review and owner approval)"
+        return out
 
     async def probability_models(self, market: str | None = None) -> list[dict[str, Any]]:
         rows = await self.store.probability_models(self._ctx(market).name if market else None)
-        return [{k: v for k, v in r.items() if k != "params"} for r in rows]
+        out = []
+        for r in rows:
+            events = await self.store.promotion_events(str(r["id"]))
+            out.append({**{k: v for k, v in r.items() if k != "params"},
+                        "promotion": state_of(events), "promotion_events": events})  # fmt: skip
+        return out
+
+    # Promotion: anyone proposes, SENTINEL reviews (veto), only the owner approves ------------
+
+    async def propose_promotion(self, model_id: str, actor: str) -> dict[str, Any]:
+        authorize(actor, "propose_promotion")
+        model = await self.store.probability_model_by_id(model_id)
+        if model is None:
+            raise ApexError("NOT_FOUND", "No such probability head.", status=404)
+        if state_of(await self.store.promotion_events(model_id)) == "APPROVED":
+            raise ApexError("ALREADY_APPROVED", "This head is already promoted.", status=409)
+        states, _ = await self._validation_states(str(model["market"]), bool(model["synthetic"]))
+        audits = await self.store.audits(str(model["market"]), limit=1)
+        review = sentinel_review(
+            model,
+            protocol_version=self._settings.apex_validation.protocol_version,
+            strategy_state=states.get(str(model["setup"])),
+            audit_failed=bool(audits) and audits[0]["passed"] is False,
+        )
+        await self._promotion_event(model, "PROPOSED", actor, {})
+        state = "VETOED" if review["vetoed"] else "REVIEWED"
+        await self._promotion_event(model, state, "sentinel", {"review": review})
+        await self._bus.emit(
+            EventType.APEX_VALIDATION,
+            message=f"SENTINEL {'vetoed' if review['vetoed'] else 'cleared'} the promotion of "
+            f"{model['setup']} {model['version']} on {model['market']}",
+            payload={"model_id": model_id, "state": state},
+        )
+        return {"model_id": model_id, "state": state, "review": review}
+
+    async def approve_promotion(
+        self, model_id: str, actor: str, *, confirm: bool
+    ) -> dict[str, Any]:
+        authorize(actor, "approve_promotion")
+        if not confirm:
+            raise ApexError("CONFIRM", "Approving a promotion needs an explicit confirmation.")
+        model = await self.store.probability_model_by_id(model_id)
+        if model is None:
+            raise ApexError("NOT_FOUND", "No such probability head.", status=404)
+        state = state_of(await self.store.promotion_events(model_id))
+        if state != "REVIEWED":
+            raise ApexError(
+                "NOT_REVIEWED" if state != "VETOED" else "VETOED",
+                "SENTINEL vetoed this head — it can't be approved."
+                if state == "VETOED" else "Propose it first: SENTINEL reviews before approval.",
+                status=409,
+            )  # fmt: skip
+        await self._promotion_event(model, "APPROVED", actor, {"confirmed": True})
+        return {"model_id": model_id, "state": "APPROVED"}
+
+    async def revoke_promotion(self, model_id: str, actor: str, reason: str) -> dict[str, Any]:
+        authorize(actor, "revoke_promotion")
+        model = await self.store.probability_model_by_id(model_id)
+        if model is None:
+            raise ApexError("NOT_FOUND", "No such probability head.", status=404)
+        await self._promotion_event(model, "REVOKED", actor, {"reason": reason})
+        return {"model_id": model_id, "state": "REVOKED"}
+
+    async def _promotion_event(
+        self, model: dict[str, Any], state: str, actor: str, extra: dict[str, Any]
+    ) -> None:
+        await self.store.add_promotion_event({
+            "id": "apr-" + secrets.token_hex(8), "model_id": model["id"],
+            "market": model["market"], "setup": model["setup"], "version": model["version"],
+            "state": state, "actor": actor, "at": self._now(), **extra,
+        })  # fmt: skip
 
     async def alerts(self, market: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         return await self.store.alerts(self._ctx(market).name if market else None, limit=limit)
@@ -734,8 +812,13 @@ class ApexService:
         # one bar more than shown, so a first bucket cut in half falls off
         span = min(len(known.bars), (limit + 1) * minutes)
         tail = known.bars.between(int(known.bars.t[-span]), as_of + 1) if span else known.bars
-        bars = await asyncio.to_thread(resample, tail, minutes) if minutes > 1 and span else tail
-        forming = bool(len(bars)) and int(bars.t[-1]) + 60 * minutes > as_of
+        if minutes == 1440:  # trading days from 18:00 New York, not UTC midnights
+            bars = await asyncio.to_thread(daily_bars, tail, as_of + 60) if span else tail
+        elif minutes > 1 and span:
+            bars = await asyncio.to_thread(resample, tail, minutes)
+        else:
+            bars = tail
+        forming = minutes != 1440 and bool(len(bars)) and int(bars.t[-1]) + 60 * minutes > as_of
         cut = slice(max(0, len(bars) - limit), len(bars))
         rows = [
             [int(t), float(o), float(h), float(lo), float(c), float(v)]
@@ -1606,7 +1689,7 @@ def _brief(evaluation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-CHART_MINUTES = (1, 5, 15, 60, 240)
+CHART_MINUTES = (1, 2, 3, 5, 10, 15, 60, 240, 1440)  # 1440 = New York trading days
 # Day states in the cache that mean "a trading day without candles".
 SUSPICIOUS = ("empty", "missing", "pending", "stored_empty", "not_fetched")
 

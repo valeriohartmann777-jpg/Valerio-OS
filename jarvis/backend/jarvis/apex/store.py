@@ -290,6 +290,12 @@ class ApexStore:
         )
         return None if row is None else dict(_loads(row["payload"]))
 
+    async def probability_model_by_id(self, model_id: str) -> dict[str, Any] | None:
+        row = await self._db.fetch_one(
+            "SELECT payload FROM apex_probability_models WHERE id = ?", (model_id,)
+        )
+        return None if row is None else dict(_loads(row["payload"]))
+
     async def probability_models(
         self, market: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:
@@ -299,6 +305,33 @@ class ApexStore:
             f"SELECT payload FROM apex_probability_models{where} "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?",
             args,
+        )
+        return [_loads(r["payload"]) for r in rows]
+
+    # promotions -------------------------------------------------------------------------------
+
+    async def add_promotion_event(self, event: dict[str, Any]) -> None:
+        """Append one promotion event (immutable; the state is the last event)."""
+        await self._db.execute(
+            "INSERT INTO apex_promotions (id, model_id, market, setup, version, state, actor, "
+            "payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                event["id"],
+                event["model_id"],
+                event["market"],
+                event["setup"],
+                event["version"],
+                event["state"],
+                event["actor"],
+                json.dumps(event),
+                utcnow().isoformat(),
+            ),
+        )
+
+    async def promotion_events(self, model_id: str) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            "SELECT payload FROM apex_promotions WHERE model_id = ? ORDER BY created_at, rowid",
+            (model_id,),
         )
         return [_loads(r["payload"]) for r in rows]
 

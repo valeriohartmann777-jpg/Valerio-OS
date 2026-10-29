@@ -8,6 +8,7 @@ import type {
   ApexJournal,
   ApexMarket,
   ApexMarketName,
+  ApexProbabilityModel,
   ApexRate,
   ApexScenario,
   ApexStrategyName,
@@ -22,20 +23,24 @@ import { useJarvis } from "../../../store/store";
 import { Icon } from "../../ui/icons";
 import { Button, cx } from "../../ui/primitives";
 import { EmptyState, LoadingState, Panel, StatusPill, type PillTone } from "../../ui/shell";
-import { AnalystPanel, StatusStrip } from "./ApexAnalyst";
+import { AnalystPanel } from "./ApexAnalyst";
 import { ApexChart } from "./ApexChart";
+import { CheckpointStrip, DecisionPanel, MarketContextTab, ModeLine, TradeReplay, UltronResearch, ZoneDrawer } from "./ApexDesk";
 import { ApexData, CauseList, SpreadText } from "./ApexData";
 import { FitnessView, SignalJournal } from "./ApexSignals";
 import { ApexValidationPanel } from "./ApexValidation";
-import { STRATEGIES, signalsOf, statusChips } from "./analyst";
+import { STRATEGIES } from "./analyst";
+import { checkpoints, pathLines, zoneBands } from "./apexView";
 import { structureKey, TIMEFRAMES } from "./chartView";
 
 /**
- * JARVIS APEX — one screen for the trade: symbol, timeframe, a large chart with the zones,
- * market structure, long / short / no-trade scenarios with their counted rates, rule-based
- * entry / stop / target candidates, the data status and JARVIS's written reading. Journal,
- * track record, data and SENTINEL's re-check live in their own sub-areas.
- * Research only: nothing here places an order.
+ * JARVIS APEX — a chart-first trading workstation: symbol, timeframe, the eight independent
+ * checkpoints, the mode / source / age line, a large chart with the four strongest supports and
+ * resistances (S1-S4 / R1-R4), the buy and sell zone and the path scenario's barriers, and the
+ * decision panel (LONG / SHORT only when the eligibility gate qualified a plan; otherwise WAIT
+ * or NO TRADE with the reasons). Below it the bottom tabs: Signal Journal, Data Fitness,
+ * Validation, Trade Replay, ULTRON Research, Market Context.
+ * Research and paper only: nothing here places an order.
  */
 
 const MARKETS: ApexMarketName[] = ["XAUUSD", "NQ", "MNQ"];
@@ -50,14 +55,14 @@ const STATE_TONE: Record<string, PillTone> = {
   open: "info",
 };
 
-type Area = "analysis" | "journal" | "track" | "validation" | "data" | "sentinel";
+type Area = "journal" | "data" | "validation" | "replay" | "ultron" | "context";
 const AREAS: { id: Area; label: string }[] = [
-  { id: "analysis", label: "Chart & analysis" },
-  { id: "journal", label: "Signal journal" },
-  { id: "track", label: "Backtest" },
+  { id: "journal", label: "Signal Journal" },
+  { id: "data", label: "Data Fitness" },
   { id: "validation", label: "Validation" },
-  { id: "data", label: "Data fitness" },
-  { id: "sentinel", label: "SENTINEL check" },
+  { id: "replay", label: "Trade Replay" },
+  { id: "ultron", label: "ULTRON Research" },
+  { id: "context", label: "Market Context" },
 ];
 
 function saved<T extends string | number>(key: string, allowed: readonly T[], fallback: T): T {
@@ -87,7 +92,7 @@ export function ApexPanel() {
   const [minutes, setMinutesState] = useState<ApexTimeframe>(() =>
     saved<ApexTimeframe>("apex.timeframe", TIMEFRAMES.map((t) => t.minutes), 15),
   );
-  const [area, setAreaState] = useState<Area>(() => saved("apex.area", AREAS.map((a) => a.id), "analysis"));
+  const [area, setAreaState] = useState<Area>(() => saved("apex.area", AREAS.map((a) => a.id), "journal"));
   const [strategy, setStrategyState] = useState<ApexStrategyName>(() =>
     saved<ApexStrategyName>("apex.strategy", STRATEGIES.map((s) => s.id), "zone_rejection_5m"),
   );
@@ -103,6 +108,9 @@ export function ApexPanel() {
   const [journal, setJournal] = useState<ApexJournal | null>(null);
   const [evaluations, setEvaluations] = useState<ApexEvaluation[]>([]);
   const [status, setStatus] = useState<ApexDataStatus | null>(null);
+  const [forwardPassed, setForwardPassed] = useState<boolean | null>(null);
+  const [models, setModels] = useState<ApexProbabilityModel[]>([]);
+  const [zoneId, setZoneId] = useState<string | null>(null);
 
   const analysis = analyses[market] ?? null;
   const setArea = (next: Area) => {
@@ -112,6 +120,7 @@ export function ApexPanel() {
   const setMarket = (next: ApexMarketName) => {
     setMarketState(next);
     setSelected(null);
+    setZoneId(null);
     setError(null);
     setStatus(null);
     remember("apex.market", next);
@@ -130,6 +139,10 @@ export function ApexPanel() {
     setMarkets(m);
     setJournal(j);
     setEvaluations(e);
+    const [f, p] = await Promise.all([api.apexForward(market).catch(() => null), api.apexProbability(market).catch(() => [])]);
+    const evidence = Object.values(f?.evidence?.[market] ?? {});
+    setForwardPassed(evidence.some((x) => x && x.passed && !x.synthetic));
+    setModels(p);
   }, [market]);
   const loadStatus = useCallback(async () => setStatus(await api.apexData(market)), [market]);
 
@@ -210,11 +223,11 @@ export function ApexPanel() {
     setStarted(Date.now());
     setElapsed(0);
     setError(null);
-    setArea("analysis"); // where the job shows — never forced back later if the owner moved on
     try {
       const out = await api.apexAnalyze(market, { refresh: refresh && !fixture, signal: controller.signal });
       setAnalyses((a) => ({ ...a, [market]: out }));
       setSelected(out.candidates[0]?.id ?? null);
+      setZoneId(null);
       await Promise.all([loadSide(), loadStatus()]);
     } catch (err) {
       setError(
@@ -250,8 +263,7 @@ export function ApexPanel() {
 
   const candidate = useMemo(() => analysis?.candidates.find((c) => c.id === selected) ?? null, [analysis, selected]);
   const app = headerState(connection, useReadiness(), useSupervisor());
-  const leadSignal = analysis ? (signalsOf(analysis, strategy).find((x) => x.entry != null) ?? signalsOf(analysis, strategy)[0] ?? null) : null;
-  const chips = statusChips(app, analysis, leadSignal);
+  const checks = checkpoints(app, analysis, { forwardPassed, models });
   const brief = info?.track_record;
   const calibration = brief && analysis && brief.synthetic === analysis.data.synthetic ? (brief.calibration?.code ?? null) : null;
 
@@ -295,25 +307,8 @@ export function ApexPanel() {
         </span>
       </div>
 
-      <StatusStrip chips={chips} />
-
-      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-hairline-strong bg-surface/80 p-1" aria-label="APEX">
-        {AREAS.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => setArea(a.id)}
-            aria-current={area === a.id ? "page" : undefined}
-            className={cx(
-              "min-h-9 flex-1 rounded-lg px-3 text-[13px] font-semibold whitespace-nowrap transition-colors",
-              area === a.id ? "bg-surface-2 text-fg shadow-[inset_0_-3px_0_var(--area)]" : "text-fg-muted hover:bg-white/5 hover:text-fg",
-            )}
-            data-testid={`apex-tab-${a.id}`}
-          >
-            {a.label}
-          </button>
-        ))}
-      </nav>
+      <CheckpointStrip items={checks} />
+      {analysis && <ModeLine analysis={analysis} />}
 
       {error && (
         <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-[13px]" role="alert" data-testid="apex-error">
@@ -332,55 +327,91 @@ export function ApexPanel() {
         </div>
       )}
 
-      {area === "analysis" &&
-        (analysis ? (
-          <AnalysisView
-            analysis={analysis}
-            chart={chart}
-            minutes={minutes}
-            candidate={candidate}
-            onSelect={setSelected}
-            decimals={decimals}
-            calibration={calibration}
-            status={status}
-            onRepair={() => void repair()}
-            repairing={repairing}
-            onData={() => setArea("data")}
-            strategy={strategy}
-            onStrategy={setStrategy}
-            onValidation={() => setArea("validation")}
-          />
-        ) : (
-          !error && (
-            <EmptyState icon="target" title={`No ${market} analysis yet`}>
-              Press “Start analysis”. It reads the local data (and fetches the missing free days first).
-            </EmptyState>
-          )
+      {analysis ? (
+        <AnalysisView
+          analysis={analysis}
+          chart={chart}
+          minutes={minutes}
+          candidate={candidate}
+          onSelect={setSelected}
+          decimals={decimals}
+          calibration={calibration}
+          status={status}
+          onRepair={() => void repair()}
+          repairing={repairing}
+          onData={() => setArea("data")}
+          strategy={strategy}
+          onStrategy={setStrategy}
+          onValidation={() => setArea("validation")}
+          zoneId={zoneId}
+          onZone={setZoneId}
+        />
+      ) : (
+        !error && (
+          <EmptyState icon="target" title={`No ${market} analysis yet`}>
+            Press “Start analysis”. It reads the local data (and fetches the missing free days first).
+          </EmptyState>
+        )
+      )}
+
+      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-hairline-strong bg-surface/80 p-1" aria-label="APEX details">
+        {AREAS.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => setArea(a.id)}
+            aria-current={area === a.id ? "page" : undefined}
+            className={cx(
+              "min-h-9 flex-1 rounded-lg px-3 text-[13px] font-semibold whitespace-nowrap transition-colors",
+              area === a.id ? "bg-surface-2 text-fg shadow-[inset_0_-3px_0_var(--area)]" : "text-fg-muted hover:bg-white/5 hover:text-fg",
+            )}
+            data-testid={`apex-tab-${a.id}`}
+          >
+            {a.label}
+          </button>
         ))}
+      </nav>
+
       {area === "journal" && (
         <div className="flex flex-col gap-4">
           <SignalJournal market={market} decimals={decimals} refreshKey={analysis?.id} />
           <Journal journal={journal} market={market} onResolved={() => void loadSide()} decimals={decimals} />
         </div>
       )}
-      {area === "track" && (
-        <TrackRecord evaluations={evaluations} market={market} onStarted={() => void loadSide()} strategy={strategy} onStrategy={setStrategy} />
-      )}
-      {area === "validation" && <ApexValidationPanel market={market} strategy={strategy} onStrategy={setStrategy} />}
       {area === "data" && (
         <div className="flex flex-col gap-4">
           <FitnessView market={market} refreshKey={`${analysis?.id ?? ""}|${status?.checked_at ?? ""}`} />
           <ApexData market={market} status={status} onRepair={() => void repair()} onAnalyse={() => void run()} />
         </div>
       )}
-      {area === "sentinel" &&
-        (analysis ? (
-          <SentinelCheck analysis={analysis} />
-        ) : (
-          <EmptyState icon="check" title="Nothing to re-check yet">
-            Make an analysis first; SENTINEL then recomputes it from the data on disk.
-          </EmptyState>
-        ))}
+      {area === "validation" && (
+        <div className="flex flex-col gap-4">
+          <ApexValidationPanel market={market} strategy={strategy} onStrategy={setStrategy} />
+          <TrackRecord evaluations={evaluations} market={market} onStarted={() => void loadSide()} strategy={strategy} onStrategy={setStrategy} />
+        </div>
+      )}
+      {area === "replay" && (
+        <TradeReplay
+          market={market}
+          onOpen={(a) => {
+            setAnalyses((all) => ({ ...all, [market]: a }));
+            setSelected(a.candidates[0]?.id ?? null);
+            setZoneId(null);
+          }}
+        />
+      )}
+      {area === "ultron" && (
+        <UltronResearch market={market}>
+          {analysis ? (
+            <SentinelCheck analysis={analysis} />
+          ) : (
+            <EmptyState icon="check" title="Nothing to re-check yet">
+              Make an analysis first; SENTINEL then recomputes it from the data on disk.
+            </EmptyState>
+          )}
+        </UltronResearch>
+      )}
+      {area === "context" && <MarketContextTab market={market} analysis={analysis} />}
     </div>
   );
 }
@@ -526,6 +557,8 @@ function AnalysisView({
   strategy,
   onStrategy,
   onValidation,
+  zoneId,
+  onZone,
 }: {
   analysis: ApexAnalysis;
   chart: ApexChartData | null;
@@ -541,6 +574,8 @@ function AnalysisView({
   strategy: ApexStrategyName;
   onStrategy: (s: ApexStrategyName) => void;
   onValidation: () => void;
+  zoneId: string | null;
+  onZone: (id: string | null) => void;
 }) {
   const fmt = (p: number) => p.toFixed(decimals);
   const frame = TIMEFRAMES.find((t) => t.minutes === minutes)?.name ?? `${minutes} minutes`;
@@ -552,7 +587,7 @@ function AnalysisView({
       <Panel padded>
         <DataBanner analysis={analysis} status={status} onRepair={onRepair} repairing={repairing} onData={onData} />
       </Panel>
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,2.3fr)_minmax(360px,1fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2.2fr)_minmax(360px,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <Panel
             title={`${analysis.market} · ${analysis.price != null ? fmt(analysis.price) : "—"} · ${frame}`}
@@ -574,7 +609,9 @@ function AnalysisView({
                 bars={bars}
                 minutes={minutes}
                 forming={chart?.minutes === minutes ? chart.forming : false}
-                zones={analysis.zones}
+                zones={zoneBands(analysis)}
+                paths={pathLines(analysis)}
+                onZone={(id) => onZone(id)}
                 structure={structure}
                 candidate={candidate}
                 price={analysis.price ?? null}
@@ -585,9 +622,11 @@ function AnalysisView({
             )}
             <Legend />
           </Panel>
+          {zoneId && <ZoneDrawer analysis={analysis} zoneId={zoneId} decimals={decimals} onClose={() => onZone(null)} />}
           {!analysis.blocked && <ZonesTable analysis={analysis} decimals={decimals} calibrated={calibration === "CALIBRATED"} />}
         </div>
         <div className="flex min-w-0 flex-col gap-4">
+          <DecisionPanel analysis={analysis} decimals={decimals} onZone={(id) => onZone(id)} onCandidate={onSelect} />
           <AnalystPanel
             analysis={analysis}
             strategy={strategy}
@@ -621,11 +660,12 @@ function Legend() {
   return (
     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-fg-faint">
       <span className="flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-4 rounded-sm bg-[rgb(66_215_182/0.3)]" /> support zone
+        <span className="inline-block h-2.5 w-4 rounded-sm bg-[rgb(66_215_182/0.3)]" /> support S1–S4
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-4 rounded-sm bg-[rgb(255_116_125/0.3)]" /> resistance zone
+        <span className="inline-block h-2.5 w-4 rounded-sm bg-[rgb(255_116_125/0.3)]" /> resistance R1–R4 (thick outline: buy / sell zone; click a label for why)
       </span>
+      {item("#b9a3ff", "path scenario barriers — hypotheses, not future prices", true)}
       {item("#ffe16b", "entry · BOS/CHoCH")}
       {item("#ff747d", "stop")}
       {item("#4cdfac", "target")}
@@ -687,8 +727,8 @@ function ScenarioBoard({ analysis, calibration }: { analysis: ApexAnalysis; cali
       }
     >
       <div className="flex flex-col gap-3">
-        <ScenarioGroup title="Long" tone="text-quant" items={pick("S1-hold", "R1-break")} calibrated={calibrated} />
-        <ScenarioGroup title="Short" tone="text-danger" items={pick("R1-hold", "S1-break")} calibrated={calibrated} />
+        <ScenarioGroup title="Long" tone="text-quant" items={pick("KS1-hold", "KR1-break")} calibrated={calibrated} />
+        <ScenarioGroup title="Short" tone="text-danger" items={pick("KR1-hold", "KS1-break")} calibrated={calibrated} />
         <div className="rounded-xl border border-hairline-strong bg-surface-2/40 p-3 text-[13px]" data-testid="apex-no-trade" data-active={noTrade ? "yes" : "no"}>
           <b className="text-fg">No trade</b>
           {noTrade ? (
@@ -738,7 +778,7 @@ function ScenarioGroup({ title, tone, items, calibrated }: { title: string; tone
 function ZonesTable({ analysis, decimals, calibrated }: { analysis: ApexAnalysis; decimals: number; calibrated: boolean }) {
   const fmt = (p: number) => p.toFixed(decimals);
   return (
-    <Panel title="Support & resistance zones" aside={<span className="text-[12px] text-fg-muted">held on touch = counted before this moment</span>}>
+    <Panel title="Key levels KS / KR (zone_reaction and 5-min rules)" aside={<span className="text-[12px] text-fg-muted">held on touch = counted before this moment</span>}>
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>

@@ -1,4 +1,5 @@
 import type {
+  ApexAlert,
   ApexAnalysis,
   ApexAudit,
   ApexChartData,
@@ -8,6 +9,8 @@ import type {
   ApexForward,
   ApexJournal,
   ApexMarket,
+  ApexMarketContext,
+  ApexProbabilityModel,
   ApexRepair,
   ApexSignal,
   ApexStrategyName,
@@ -460,6 +463,16 @@ export const api = {
   apexChart: (analysisId: string, minutes: number, limit = 600) =>
     request<ApexChartData>(`/apex/analyses/${encodeURIComponent(analysisId)}/chart?minutes=${minutes}&limit=${limit}`),
   apexData: (market: string) => request<ApexDataStatus>(`/apex/data/${encodeURIComponent(market)}`),
+  apexAlerts: (market: string) => request<ApexAlert[]>(`/apex/alerts?market=${encodeURIComponent(market)}`),
+  apexContext: (market: string, asOf?: number) =>
+    request<ApexMarketContext>(`/apex/context?market=${encodeURIComponent(market)}${asOf ? `&as_of=${asOf}` : ""}`),
+  apexMacroImport: (csv: string, source: string) =>
+    post<{ parsed: number; added: number; refused: { line: number; reason: string }[] }>("/apex/macro/import", { csv, source }),
+  apexProbability: (market: string) => request<ApexProbabilityModel[]>(`/apex/probability?market=${encodeURIComponent(market)}`),
+  apexPropose: (modelId: string) =>
+    post<{ model_id: string; state: string }>("/apex/promotions", { model_id: modelId, actor: "owner" }),
+  apexApprove: (modelId: string) =>
+    post<{ model_id: string; state: string }>(`/apex/promotions/${encodeURIComponent(modelId)}/approve`, { confirm: true }),
   apexRepair: (market: string) => post<ApexRepair>(`/apex/data/${encodeURIComponent(market)}/repair`),
   feedback: () => request<FeedbackOverview>("/feedback"),
   evals: () => request<EvalOverview>("/training/evals"),

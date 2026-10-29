@@ -266,7 +266,7 @@ def test_stop_and_target_in_the_same_minute_after_the_fill_count_as_a_loss() -> 
 
 GOOD_P = {"event_definition": setups.EVENT, "value": 0.74, "validated": True, "calibrated": True,
           "effective_sample_size": 60, "uncertainty_lower": 0.64, "uncertainty_upper": 0.83,
-          "label": None, "model_id": "pm-test"}  # fmt: skip
+          "label": None, "model_id": "pm-test", "promoted": True}  # fmt: skip
 
 
 def gate(plan: dict[str, Any], **change: Any) -> dict[str, Any]:

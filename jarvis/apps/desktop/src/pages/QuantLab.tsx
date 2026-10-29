@@ -48,6 +48,16 @@ const SECTIONS: { id: Section; modes: Mode[] }[] = [
 ];
 const MODES: Mode[] = ["Simple", "Research", "Institutional"];
 
+/** The five first-level areas; every section lives in exactly one, nothing is removed. */
+const GROUPS: { id: string; sections: Section[] }[] = [
+  { id: "APEX", sections: ["APEX"] },
+  { id: "Backtest Lab", sections: ["Backtest Lab", "Trade Explorer", "Experiments", "Risk & Execution", "Reports", "Equity lab (R1)", "MT5 Bots"] },
+  { id: "Strategy Studio", sections: ["Strategy Studio", "Idea Inbox"] },
+  { id: "Data Vault", sections: ["Data Vault", "Data Hub"] },
+  { id: "Research & Validation", sections: ["Research Room", "Validation", "Overview"] },
+];
+const groupOf = (section: Section) => GROUPS.find((g) => g.sections.includes(section)) ?? GROUPS[0]!;
+
 function savedMode(): Mode {
   try {
     const value = localStorage.getItem("quantlab.mode");
@@ -193,26 +203,56 @@ export function QuantLab() {
           </Button>
         </div>
 
-        <nav className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-hairline-strong bg-surface/80 p-1" aria-label="QuantLab">
-          {SECTIONS.filter((s) => s.modes.includes(mode) || s.id === section).map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => {
-                setSection(s.id);
-                if (s.id === "Idea Inbox") setSourceId(null);
-              }}
-              className={cx(
-                "min-h-10 flex-1 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold transition-colors",
-                section === s.id ? "bg-surface-2 text-fg shadow-[inset_0_-3px_0_var(--area)]" : "text-fg-muted hover:bg-white/5 hover:text-fg",
-              )}
-              aria-current={section === s.id ? "page" : undefined}
-              data-testid={`ql-nav-${slug(s.id)}`}
-            >
-              {s.id}
-            </button>
-          ))}
+        <nav className="mb-2 grid grid-cols-2 gap-1 rounded-xl border border-hairline-strong bg-surface/80 p-1 sm:grid-cols-5" aria-label="QuantLab">
+          {GROUPS.map((g) => {
+            const visible = g.sections.filter((id) => SECTIONS.find((x) => x.id === id)?.modes.includes(mode) || id === section);
+            const active = groupOf(section).id === g.id;
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => {
+                  const target = visible[0] ?? g.sections[0]!;
+                  setSection(target);
+                  if (target === "Idea Inbox") setSourceId(null);
+                }}
+                className={cx(
+                  "min-h-11 rounded-lg px-3 text-[14px] font-semibold whitespace-nowrap transition-colors",
+                  active ? "bg-surface-2 text-fg shadow-[inset_0_-3px_0_var(--area)]" : "text-fg-muted hover:bg-white/5 hover:text-fg",
+                )}
+                aria-current={active ? "true" : undefined}
+                data-testid={`ql-group-${slug(g.id)}`}
+              >
+                {g.id}
+              </button>
+            );
+          })}
         </nav>
+        {groupOf(section).sections.length > 1 && (
+          <nav className="mb-6 flex flex-wrap gap-1" aria-label={`${groupOf(section).id} sections`}>
+            {groupOf(section)
+              .sections.filter((id) => SECTIONS.find((x) => x.id === id)?.modes.includes(mode) || id === section)
+              .map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setSection(id);
+                    if (id === "Idea Inbox") setSourceId(null);
+                  }}
+                  className={cx(
+                    "min-h-8 rounded-full border px-3 text-[12px] font-semibold whitespace-nowrap",
+                    section === id ? "border-quant/60 bg-quant/15 text-fg" : "border-hairline-strong text-fg-muted hover:text-fg",
+                  )}
+                  aria-current={section === id ? "page" : undefined}
+                  data-testid={`ql-nav-${slug(id)}`}
+                >
+                  {id}
+                </button>
+              ))}
+          </nav>
+        )}
+        {groupOf(section).sections.length === 1 && <div className="mb-4" />}
         {error && <p className="mb-4 text-[13px] text-ql-danger">{error}</p>}
         {stopped && <p className="mb-4 text-[13px] text-fg-muted" role="status">{stopped}</p>}
 

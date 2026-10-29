@@ -463,6 +463,7 @@ def unvalidated() -> dict[str, Any]:
         "uncertainty_upper": None,
         "label": "PROBABILITY NOT VALIDATED",
         "model_id": None,
+        "promoted": False,
     }
 
 

@@ -211,6 +211,8 @@ class Signal(BaseModel):
             raise ValueError("PROBABILITY NOT VALIDATED — a signal can't qualify without it")
         if tsp.get("event_definition") != "TP_before_SL_after_fill_within_horizon":
             raise ValueError("only P(TP before SL) qualifies a trade")
+        if not tsp.get("promoted"):
+            raise ValueError("only a head SENTINEL reviewed and the owner promoted qualifies")
         if float(value) < 0.70:
             raise ValueError("P(TP before SL) below 0.70 never qualifies")
         if self.net_expected_r is None or self.net_expected_r <= 0:

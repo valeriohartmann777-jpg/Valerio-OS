@@ -162,6 +162,9 @@ export interface ApexTradeProbability {
   uncertainty_upper: number | null;
   label: string | null;
   model_id: string | null;
+  /** Only a head SENTINEL cleared and the owner approved can qualify a plan. */
+  promoted?: boolean;
+  promotion?: ApexPromotionState;
 }
 
 export type ApexGateCheckName =
@@ -304,6 +307,7 @@ export interface ApexAnalysis {
     proxy: string | null;
     sha256: string;
     provenance: Record<string, unknown>;
+    last_bar?: number | null;
     update?: ApexUpdate | null;
     spread?: ApexSpread | null;
   };
@@ -331,6 +335,242 @@ export interface ApexAnalysis {
   validation_ids?: Partial<Record<ApexStrategyName, string>>;
   /** [time, open, high, low, close] of the last 15-minute bars. */
   chart: [number, number, number, number, number][];
+  /** APEX Ultimate (engine 1.3+): what the source can measure, and the evidence per factor. */
+  capability?: ApexCapability;
+  factors?: ApexFactorRow[];
+  mode?: ApexMode;
+  zone_map?: ApexZoneMap;
+  zone_snapshot_id?: string;
+  bias?: ApexBias;
+  paths?: ApexPaths;
+  interactions?: ApexInteractions;
+  path_cards?: ApexPathCard[];
+  context?: ApexMarketContext;
+  auction?: ApexAuction;
+  alerts?: ApexAlert[];
+}
+
+export type ApexEvidence = "CONFIRMED" | "CONTRADICTED" | "UNAVAILABLE" | "PROXY" | "STALE" | "NOT_APPLICABLE";
+export type ApexMode = "LIVE" | "DELAYED" | "HISTORICAL" | "REPLAY" | "SYNTHETIC";
+
+export interface ApexCapability {
+  source_id: string;
+  provider: string;
+  dataset: string;
+  market_type: "spot_quote" | "futures" | "generated" | string;
+  schema: string;
+  venue: string;
+  has_bid: boolean;
+  has_ask: boolean;
+  has_actual_traded_volume: boolean;
+  has_aggressor_side: boolean;
+  has_depth: boolean;
+  has_options_oi: boolean;
+  live_entitlement: boolean;
+  tick_size: number;
+  point_value: number;
+  licence_state: string;
+  reasons: string[];
+}
+
+export interface ApexFactorRow {
+  factor: string;
+  label: string;
+  family: string;
+  status: ApexEvidence;
+  detail: string;
+  source_id: string;
+}
+
+export interface ApexZoneEvidence {
+  factor: string;
+  status: ApexEvidence;
+  known_at_utc: string | null;
+  points?: number;
+  /** A sentence, or (score_components) the points of each capped family. */
+  detail?: string | Record<string, number>;
+  source_id?: string;
+}
+
+/** One zone of the causal zone map (backend apex/zonemap.py). The score is never a probability. */
+export interface ApexMapZone {
+  zone_id: string;
+  market: ApexMarketName;
+  side: "SUPPORT" | "RESISTANCE";
+  role_at_confirmation: "support" | "resistance" | string;
+  bounds: { low: number; high: number };
+  formation_time_utc: string | null;
+  confirmed_time_utc: string | null;
+  confirmed_at?: number | null;
+  state: "CANDIDATE" | "CONFIRMED" | "ACTIVE" | "TESTED" | "WEAKENING" | "BROKEN" | "FLIPPED" | "EXPIRED";
+  quality_score: number;
+  rank: number | null;
+  distance_atr: number;
+  inside: boolean;
+  timeframe_of_origin: string;
+  kinds: string[];
+  labels: string[];
+  source_ids: string[];
+  evidence: ApexZoneEvidence[];
+  counterevidence: string[];
+  episodes: { kind: string; start: string | null; end: string | null; reaction_atr?: number }[];
+  touches: number;
+  rejections: number;
+  last_tested_at: string | null;
+  broken_at: string | null;
+  flipped_at: string | null;
+  transitions: { state: string; at: string | null; reason: string }[];
+  version: string;
+  invalidation_reason: string | null;
+  score_components?: Record<string, number>;
+}
+
+export interface ApexWatchZone {
+  zone_id: string;
+  rank: number;
+  bounds: { low: number; high: number };
+  distance_atr: number;
+  state: "WATCH" | "FAR";
+  quality_score: number;
+}
+
+export interface ApexZoneMap {
+  version: string;
+  market: ApexMarketName;
+  as_of: number;
+  as_of_utc: string;
+  zones_as_of_utc?: string | null;
+  price: number | null;
+  atr15: number;
+  support: ApexMapZone[];
+  resistance: ApexMapZone[];
+  others: ApexMapZone[];
+  buy_zone: ApexWatchZone | null;
+  sell_zone: ApexWatchZone | null;
+  notes: string[];
+  min_score: number;
+  score_is_probability: false;
+}
+
+export interface ApexBias {
+  version: string;
+  state: "BULLISH" | "BEARISH" | "CONFLICTED" | "NEUTRAL";
+  timeframes: Record<string, { trend: string; bars: number }>;
+  reasons: string[];
+  invalidation: string | null;
+  updated_at: number | null;
+  is_signal: false;
+}
+
+export type ApexPathOutcome = "UPPER_FIRST" | "LOWER_FIRST" | "NEITHER" | "AMBIGUOUS";
+
+export interface ApexPaths {
+  version: string;
+  available: boolean;
+  event_definition?: string;
+  as_of: number;
+  price?: number;
+  horizon_minutes: number;
+  barriers?: { upper: number; lower: number; upper_source: string; lower_source: string; upper_zone?: string | null; lower_zone?: string | null };
+  counts?: Record<ApexPathOutcome, number>;
+  samples?: number;
+  effective_samples?: number;
+  shares?: Record<ApexPathOutcome, number>;
+  intervals?: Record<ApexPathOutcome, [number, number]>;
+  status: "NOT_VALIDATED" | "INSUFFICIENT_DATA" | string;
+  calibrated: false;
+  most_frequent?: ApexPathOutcome | null;
+  note: string;
+  reason?: string;
+}
+
+export interface ApexInteractions {
+  definition: string;
+  counts: Record<string, number>;
+  samples: number;
+  shares: Record<string, number> | null;
+  fakeouts_after_breaks: number;
+  status: string;
+  conditional: string[];
+}
+
+export interface ApexPathCard {
+  zone_id: string;
+  side: "support" | "resistance";
+  bounds: { low: number; high: number };
+  state: string;
+  paths: { id: string; text: string; share: number | null }[];
+}
+
+export interface ApexMacroEvent {
+  event: string;
+  category: string;
+  importance: "high" | "medium" | "low";
+  scheduled_utc: number;
+  source: string;
+  actual: string | null;
+  minutes_away: number;
+}
+
+export interface ApexMarketContext {
+  as_of: number;
+  macro: { status: ApexEvidence; reason: string };
+  events: ApexMacroEvent[];
+  blackout: { before_minutes: number; after_minutes: number; active: boolean };
+  related_markets: { market: string; status: ApexEvidence; reason: string }[];
+  unscheduled_risk: string;
+}
+
+export interface ApexVwap {
+  status: ApexEvidence;
+  anchor: "session" | "rth";
+  value: number | null;
+  timezone: string;
+  basis?: string;
+  reason?: string;
+  reset_utc?: number;
+  bands?: { sd: number; upper_1: number; lower_1: number; upper_2: number; lower_2: number };
+}
+
+export interface ApexAuction {
+  version: string;
+  vwap: ApexVwap;
+  vwap_rth: ApexVwap;
+  delta: { status: ApexEvidence; label?: string; reason?: string };
+  absorption: { status: ApexEvidence; label: string; reason: string };
+}
+
+/** A fitted P(TP before SL) head and its grading (backend apex/probability.py). */
+export interface ApexProbabilityModel {
+  id: string;
+  market: ApexMarketName;
+  setup: ApexZoneSetupName;
+  version: string;
+  protocol_version: string;
+  source_id: string;
+  synthetic: boolean;
+  validated: boolean;
+  validation_id: string;
+  counts: Record<string, number>;
+  fill_rate: number | null;
+  metrics?: Record<string, number | null>;
+  criteria?: { code: string; required: string; measured: string; passed: boolean }[];
+  verdict: { code: "VALIDATED" | "NOT_VALIDATED" | "INSUFFICIENT_DATA"; text: string };
+  /** Governance: NONE → PROPOSED → REVIEWED | VETOED (SENTINEL) → APPROVED (owner) → REVOKED. */
+  promotion?: ApexPromotionState;
+  promotion_events?: ApexPromotionEvent[];
+}
+
+export type ApexPromotionState = "NONE" | "PROPOSED" | "REVIEWED" | "VETOED" | "APPROVED" | "REVOKED";
+
+export interface ApexPromotionEvent {
+  id: string;
+  model_id: string;
+  state: ApexPromotionState;
+  actor: string;
+  at: number;
+  review?: { vetoed: boolean; checks: { check: string; passed: boolean; reason: string }[] };
+  reason?: string;
 }
 
 export type ApexStrategyName = "zone_reaction" | "zone_rejection_5m" | ApexZoneSetupName;
@@ -645,7 +885,7 @@ export interface ApexChartData {
   bars: [number, number, number, number, number, number][];
 }
 
-export type ApexTimeframe = 1 | 5 | 15 | 60 | 240;
+export type ApexTimeframe = 1 | 2 | 3 | 5 | 10 | 15 | 60 | 240 | 1440;
 
 export interface ApexCause {
   code: string;

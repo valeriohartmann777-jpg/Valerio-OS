@@ -1530,11 +1530,37 @@ MIGRATIONS: list[list[str]] = [
         """,
         "CREATE INDEX idx_apex_probability_models ON apex_probability_models(market, setup)",
     ],
+    # 25 — APEX promotion events (immutable): propose → SENTINEL review / veto → owner approval.
+    [
+        """
+        CREATE TABLE apex_promotions (
+            id         TEXT PRIMARY KEY,
+            model_id   TEXT NOT NULL REFERENCES apex_probability_models(id),
+            market     TEXT NOT NULL,
+            setup      TEXT NOT NULL,
+            version    TEXT NOT NULL,
+            state      TEXT NOT NULL,
+            actor      TEXT NOT NULL,
+            payload    TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TRIGGER apex_promotions_no_update BEFORE UPDATE ON apex_promotions
+        BEGIN SELECT RAISE(ABORT, 'APEX promotion events are immutable'); END
+        """,
+        """
+        CREATE TRIGGER apex_promotions_no_delete BEFORE DELETE ON apex_promotions
+        BEGIN SELECT RAISE(ABORT, 'APEX promotion events are immutable'); END
+        """,
+        "CREATE INDEX idx_apex_promotions ON apex_promotions(model_id)",
+    ],
 ]
 
 # Reverse of a migration (``Database.rollback_to``): new tables only, never existing data.
 # The database is copied to backups/ before every migration as well.
 DOWNGRADES: dict[int, list[str]] = {
+    25: ["DROP TABLE apex_promotions"],
     24: ["DROP TABLE apex_probability_models"],
     23: ["DROP TABLE apex_alerts"],
     22: ["DROP TABLE apex_macro_events", "DROP TABLE apex_zone_snapshots"],

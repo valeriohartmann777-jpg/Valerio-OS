@@ -25,6 +25,24 @@ import { fileURLToPath } from "node:url";
 
 import { _electron as electron, chromium } from "playwright-core";
 
+// QuantLab: five first-level areas; every section sits in one of them (second row).
+const QL_GROUP = {
+  apex: "apex",
+  "backtest-lab": "backtest-lab", "trade-explorer": "backtest-lab", experiments: "backtest-lab",
+  "risk-execution": "backtest-lab", reports: "backtest-lab", "equity-lab-r1": "backtest-lab", "mt5-bots": "backtest-lab",
+  "strategy-studio": "strategy-studio", "idea-inbox": "strategy-studio",
+  "data-vault": "data-vault", "data-hub": "data-vault",
+  "research-room": "research-validation", validation: "research-validation", overview: "research-validation",
+};
+async function qlNav(page, section) {
+  const group = QL_GROUP[section];
+  if (!group) throw new Error(`unknown QuantLab section ${section}`);
+  const pill = page.getByTestId(`ql-nav-${section}`);
+  if (section === "apex") return page.getByTestId("ql-group-apex").click();
+  if (!(await pill.isVisible().catch(() => false))) await page.getByTestId(`ql-group-${group}`).click();
+  await pill.click();
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Every JARVIS started here inherits this: no morning briefing or model training
 // fetching real market data.
@@ -311,7 +329,7 @@ try {
 
   await step("Bot Lab: MetaTrader found, test terminal set up, an EA imported, backtested, copied", async () => {
     await page.getByTestId("tab-quantlab").click(); // JARVIS 2.0: Bots is a QuantLab section
-    await page.getByTestId("ql-nav-mt5-bots").click();
+    await qlNav(page, "mt5-bots");
     await page.getByTestId("bots-page").waitFor();
     await page.getByTestId("bot-check-app").filter({ hasText: "✓" }).waitFor();
     await page.getByTestId("bot-check-data").filter({ hasText: "1 EA(s)" }).waitFor();
@@ -339,12 +357,12 @@ try {
     await page.getByTestId("tab-quantlab").click();
     await page.getByTestId("ql-nav-mt5-bots").and(page.locator('[aria-current="page"]')).waitFor(); // remembered section
     await page.getByTestId("ql-solo-banner").waitFor(); // the private Solo workspace says so
-    await page.getByTestId("ql-nav-backtest-lab").click();
+    await qlNav(page, "backtest-lab");
     await page.getByTestId("bl-launcher").waitFor();
-    await page.getByTestId("ql-nav-overview").click();
+    await qlNav(page, "overview");
     await page.getByTestId("qr-getting-started").waitFor(); // no number before a real run
     await page.getByTestId("ql-mode-research").click();
-    await page.getByTestId("ql-nav-equity-lab-r1").click();
+    await qlNav(page, "equity-lab-r1");
     await page.getByTestId("ql-empty").waitFor(); // the R1 lab, unchanged
     await page.getByTestId("ql-section-datasets").click();
     await page.getByTestId("ql-fixture-invalid_ohlc_duplicate.csv").click();
@@ -391,7 +409,7 @@ try {
     const lab = () => page.getByTestId("quantlab-page");
     const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
     await page.getByTestId("tab-quantlab").click();
-    await page.getByTestId("ql-nav-data-hub").click();
+    await qlNav(page, "data-hub");
     await page.getByTestId("qh-fixture-banner").waitFor(); // the fixture is never mistaken for Databento
     await page.getByTestId("qh-key").fill("db-REVOKED00000000000000000000");
     await page.getByTestId("qh-connect").click();
@@ -421,7 +439,7 @@ try {
     await page.waitForTimeout(300);
     await shot("11m-quantlab-dataset");
 
-    await page.getByTestId("ql-nav-strategy-studio").click();
+    await qlNav(page, "strategy-studio");
     await page.getByTestId("qr-idea").fill("Trade the breakout of NQ's first 15 minutes, stop at the other side of the range, 2R target, flat before the close.");
     await page.getByTestId("qr-draft").click();
     await page.getByTestId("qr-draft-notes").getByText("Scripted test model").waitFor();
@@ -442,7 +460,7 @@ try {
     await page.waitForTimeout(400);
     await shot("11o-quantlab-backtest");
 
-    await page.getByTestId("ql-nav-validation").click();
+    await qlNav(page, "validation");
     await page.getByTestId("qr-verdict-main").filter({ hasText: "Insufficient evidence" }).waitFor(); // synthetic: capped
     await page.locator('[data-testid="qr-test"][data-id="LEAKAGE"][data-status="PASSED"]').waitFor();
     await page.locator('[data-testid="qr-test"][data-id="HOLDOUT"][data-status="NOT_RUN"]').waitFor(); // sealed
@@ -452,26 +470,26 @@ try {
     await page.waitForTimeout(300);
     await shot("11p-quantlab-validation");
 
-    await page.getByTestId("ql-nav-trade-explorer").click();
+    await qlNav(page, "trade-explorer");
     await page.getByTestId("qr-trade-row").first().click();
     await page.getByTestId("qr-trade-story").waitFor();
     await page.getByTestId("qr-trade-chart").waitFor();
     await page.waitForTimeout(300);
     await shot("11q-quantlab-trade");
 
-    await page.getByTestId("ql-nav-reports").click();
+    await qlNav(page, "reports");
     await page.getByTestId("qr-report").getByText("SYNTHETIC FIXTURE DATA").first().waitFor();
     await page.getByTestId("qr-reproduce").click();
     await page.getByTestId("qr-repro").filter({ hasText: "Identical" }).waitFor({ timeout: 60_000 });
 
-    await page.getByTestId("ql-nav-experiments").click();
+    await qlNav(page, "experiments");
     const variants = Number(await page.getByTestId("qr-variants").innerText());
     assert.ok(variants >= 6, `every grid point counts as a variant (got ${variants})`);
     await page.getByTestId("ql-mode-institutional").click();
-    await page.getByTestId("ql-nav-risk-execution").click();
+    await qlNav(page, "risk-execution");
     await page.getByTestId("qr-audit").getByText("PASS").first().waitFor();
     assert.equal(await page.getByTestId("qr-audit").getByText("FAIL").count(), 0, "ledger audit passes");
-    await page.getByTestId("ql-nav-overview").click();
+    await qlNav(page, "overview");
     await page.getByTestId("qr-recent").waitFor();
     await page.waitForTimeout(300);
     await shot("11r-quantlab-overview");
@@ -484,7 +502,7 @@ try {
     const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
     const vault = () => fetch(`${backendUrl}/quantlab/data/vault`).then((r) => r.json());
     await page.getByTestId("tab-quantlab").click();
-    await page.getByTestId("ql-nav-data-vault").click();
+    await qlNav(page, "data-vault");
     await page.getByTestId("qv-vault").waitFor();
     await page.getByTestId("qv-series-row").filter({ hasText: "NQ.v.0" }).waitFor(); // the earlier download
     await page.getByTestId("qv-backup-warning").waitFor(); // the only copy is on this disk
@@ -512,7 +530,7 @@ try {
     await shot("11t-data-vault");
     const before = (await vault()).provider_requests;
 
-    await page.getByTestId("ql-nav-backtest-lab").click();
+    await qlNav(page, "backtest-lab");
     await page.getByTestId("bl-strategy").filter({ hasText: "opening range" }).first().click();
     await page.getByTestId("bl-market-NQ").click();
     await page.getByTestId("bl-tf-5m").click();
@@ -538,7 +556,7 @@ try {
     assert.equal(await page.getByTestId("bl-run").isDisabled(), true);
     assert.equal((await vault()).provider_requests, before, "a local backtest made a provider request");
 
-    await page.getByTestId("ql-nav-data-vault").click();
+    await qlNav(page, "data-vault");
     await page.getByTestId("qv-offline-toggle").click(); // back online for the later steps
     await page.getByTestId("qv-offline-state").filter({ hasText: "Online" }).waitFor();
     await page.getByTestId("tab-home").click();
@@ -548,7 +566,7 @@ try {
     const lab = () => page.getByTestId("quantlab-page");
     const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
     await page.getByTestId("tab-quantlab").click();
-    await page.getByTestId("ql-nav-idea-inbox").click();
+    await qlNav(page, "idea-inbox");
     await page.getByTestId("idea-inbox").waitFor();
     await page.getByTestId("idea-empty").waitFor();
     await page.waitForTimeout(250);
@@ -596,7 +614,7 @@ try {
   await step("QuantLab Idea-to-Edge: text → answers → paid-data approval → backtest → SENTINEL audit → verdict → dossier", async () => {
     const lab = () => page.getByTestId("quantlab-page");
     const top = () => lab().evaluate((el) => el.scrollTo(0, 0));
-    await page.getByTestId("ql-nav-idea-inbox").click();
+    await qlNav(page, "idea-inbox");
     await page.getByTestId("idea-text").fill(
       "NQ futures, New York open.\n\nWait for a liquidity sweep of the 15 minute opening range high.\n\n" +
         "When price reclaims the level, enter short. Stop one tick above the sweep wick, target 2R.\n\n" +
@@ -659,7 +677,7 @@ try {
     await page.getByTestId("qm-holdout").scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await shot("12i-evolution-holdout");
-    await page.getByTestId("ql-nav-idea-inbox").click();
+    await qlNav(page, "idea-inbox");
     await page.getByTestId("tab-home").click();
   });
 
@@ -921,18 +939,46 @@ try {
     await page.getByTestId("tab-home").click();
   });
 
-  await step("APEX: one trading screen — chart in five timeframes, zones, structure, long/short/no-trade, candidates, data status, JARVIS; journal, SENTINEL and track record in their sub-areas", async () => {
+  await step("APEX: the workstation — eight checkpoints, chart in nine timeframes with ranked zones and path barriers, the decision panel, zone evidence, JARVIS; journal, data, validation, replay, ULTRON and context below", async () => {
     await page.getByTestId("tab-quantlab").click();
-    await page.getByTestId("ql-nav-apex").click();
+    await qlNav(page, "apex");
     await page.getByTestId("apex-panel").waitFor();
+    assert.equal(await page.locator('[data-testid^="ql-group-"]').count(), 5, "QuantLab has five first-level areas");
     await page.getByTestId("apex-market-XAUUSD").click();
-    await page.getByTestId("apex-tab-analysis").click();
     await page.getByTestId("apex-analyze").click();
     await page.getByTestId("apex-synthetic").waitFor({ timeout: 60_000 });
     assert.equal(await page.getByTestId("apex-data-chip").getAttribute("data-tone"), "warning", "test data is never shown as plain OK");
+    // Eight independent checkpoints — an online app never makes a signal; test data is never fit.
+    assert.equal(await page.locator('[data-testid^="apex-checkpoint-"]').count(), 8);
+    assert.equal(await page.getByTestId("apex-checkpoint-APPLICATION_READY").getAttribute("data-passed"), "yes");
+    assert.equal(await page.getByTestId("apex-checkpoint-DATA_FITNESS").getAttribute("data-passed"), "no", "test data is never fit for a signal");
+    for (const key of ["PROBABILITY_CALIBRATED", "PAPER_FORWARD", "SIGNAL_ELIGIBLE"]) {
+      assert.equal(await page.getByTestId(`apex-checkpoint-${key}`).getAttribute("data-passed"), "no", `${key} is not claimed`);
+    }
+    assert.match(await page.getByTestId("apex-mode").innerText(), /SYNTHETIC/);
+    // The decision: never LONG/SHORT without a qualified plan; the gate says why.
+    const verdict = await page.getByTestId("apex-verdict-card").getAttribute("data-verdict");
+    assert.ok(["WAIT", "NO TRADE"].includes(verdict), `no qualified signal on test data (${verdict})`);
+    await page.getByTestId("apex-setups").waitFor();
+    assert.equal(await page.getByTestId("apex-setup").count(), 3, "sweep / rejection / breakout");
+    if (await page.getByTestId("apex-decision-plan").count()) {
+      assert.equal(await page.getByTestId("apex-decision-plan").getAttribute("data-eligible"), "no");
+      assert.match(await page.getByTestId("apex-decision-probability").innerText(), /PROBABILITY NOT VALIDATED/);
+      assert.ok((await page.locator('[data-testid="apex-gate-check"][data-passed="no"]').count()) >= 1);
+    }
     await page.locator('[data-testid="apex-chart"][data-minutes="15"]').waitFor();
     assert.ok((await page.getByTestId("apex-zone").count()) >= 4, "zones above and below the price");
     assert.ok((await page.getByTestId("apex-chart-zone").count()) >= 1, "zones drawn on the chart");
+    const labels = await page.getByTestId("apex-zone-label").allInnerTexts();
+    assert.ok(labels.every((l) => /^[SR][1-4]/.test(l)) && labels.length <= 8, `ranked S1-S4 / R1-R4 only: ${labels}`);
+    await page.getByTestId("apex-zone-label").first().click();
+    await page.getByTestId("apex-zone-drawer").waitFor();
+    assert.ok((await page.getByTestId("apex-zone-factor").count()) >= 3, "evidence per factor");
+    assert.ok((await page.locator('[data-testid="apex-zone-factor"][data-status="UNAVAILABLE"]').count()) >= 1, "missing order flow is UNAVAILABLE");
+    await page.getByTestId("apex-zone-drawer").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot("14a0-apex-zone-evidence");
+    await page.getByTestId("apex-zone-close").click();
     assert.equal(await page.getByTestId("apex-scenario").count(), 4, "hold/break for S1 and R1 (long and short cases)");
     await page.getByTestId("apex-no-trade").waitFor();
     await page.getByTestId("apex-trend-60").waitFor();
@@ -958,7 +1004,7 @@ try {
     await page.getByTestId("apex-panel").scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await shot("14a-apex-xauusd-chart");
-    for (const minutes of [1, 5, 60, 240]) {
+    for (const minutes of [1, 2, 3, 5, 10, 60, 240, 1440]) {
       await page.getByTestId(`apex-tf-${minutes}`).click();
       await page.locator(`[data-testid="apex-chart"][data-minutes="${minutes}"]`).waitFor();
     }
@@ -977,10 +1023,10 @@ try {
     assert.match(await page.getByTestId("command-input").inputValue(), /APEX analysis for XAUUSD/);
     await page.getByTestId("command-input").press("Escape"); // nothing is sent without Enter
 
-    // Three states, kept apart: the app is online, the data is test data, the signal is not validated.
-    assert.equal(await page.getByTestId("apex-status-app").getAttribute("data-tone"), "success");
-    assert.equal(await page.getByTestId("apex-status-data").getAttribute("data-tone"), "warning", "test data is never plain ready");
-    assert.notEqual(await page.getByTestId("apex-status-signal").getAttribute("data-tone"), "success", "an unvalidated signal is never green");
+    // Kept apart: the app is online, the data is test data, no signal is eligible.
+    assert.equal(await page.getByTestId("apex-checkpoint-APPLICATION_READY").getAttribute("data-tone"), "success");
+    assert.equal(await page.getByTestId("apex-checkpoint-DATA_FITNESS").getAttribute("data-tone"), "warning", "test data is never plain ready");
+    assert.notEqual(await page.getByTestId("apex-checkpoint-SIGNAL_ELIGIBLE").getAttribute("data-tone"), "success", "no signal is ever green here");
     // The Analyst Panel, per strategy: data, structure, setup, trigger, plan, R:R after costs, evidence, why (not).
     await page.getByTestId("apex-strategy-zone_rejection_5m").click();
     for (const id of ["apex-analyst-data", "apex-analyst-setup", "apex-analyst-trigger", "apex-analyst-plan", "apex-analyst-rr", "apex-analyst-evidence", "apex-analyst-why-not"]) {
@@ -994,7 +1040,8 @@ try {
     await page.getByTestId("apex-strategy-zone_reaction").click();
     await page.locator('[data-testid="apex-analyst-sections"][data-strategy="zone_reaction"]').waitFor();
     const signals = await fetch(`${backendUrl}/apex/signals?market=XAUUSD`).then((r) => r.json());
-    assert.deepEqual([...new Set(signals.map((x) => x.strategy_id))].sort(), ["zone_reaction", "zone_rejection_5m"]);
+    assert.deepEqual([...new Set(signals.map((x) => x.strategy_id))].sort(), ["breakout_retest", "rejection_rotation", "sweep_reclaim", "zone_reaction", "zone_rejection_5m"]);
+    assert.ok(signals.every((x) => x.eligible === false && x.user_executable === false), "nothing qualified, nothing executable");
     assert.ok(signals.every((x) => (x.entry == null) === !["CANDIDATE", "PAPER_VALIDATED"].includes(x.status)), "only candidates carry an order plan");
     assert.ok(signals.every((x) => x.status !== "PAPER_VALIDATED" && x.probability_estimate == null), "nothing validated, no invented probability");
 
@@ -1025,17 +1072,36 @@ try {
     await shot("14d-apex-data");
 
     // SENTINEL recomputes the stored analysis from the data on disk now and must match it.
-    await page.getByTestId("apex-tab-sentinel").click();
+    await page.getByTestId("apex-tab-ultron").click();
+    await page.getByTestId("apex-ultron").waitFor();
     await page.getByTestId("apex-audit").click();
     await page.locator('[data-testid="apex-audit-result"][data-passed="yes"]').waitFor({ timeout: 60_000 });
     assert.equal(await page.locator('[data-testid="apex-audit-check"][data-passed="yes"]').count(), 3);
     const hq = await fetch(`${backendUrl}/team/hq`).then((r) => r.json());
     const sentinel = hq.robots.find((r) => r.id === "sentinel");
     assert.ok(sentinel.work.some((w) => w.source === "apex"), "SENTINEL's re-check is in the HQ");
+    await page.locator('[data-testid="apex-heads-empty"], [data-testid="apex-head"]').first().waitFor();
+
+    // Market Context: no calendar → UNAVAILABLE (never a pass); a pasted CSV is placed in time.
+    await page.getByTestId("apex-tab-context").click();
+    await page.getByTestId("apex-context").waitFor();
+    assert.equal(await page.getByTestId("apex-macro-status").innerText(), "UNAVAILABLE");
+    assert.ok((await page.getByTestId("apex-related").innerText()).includes("UNAVAILABLE"), "related markets never corroborate");
+    await page.getByTestId("apex-macro-csv").fill(
+      "event,scheduled,timezone,importance,category\nUS CPI m/m,2030-03-12 08:30,America/New_York,high,inflation\nBroken row,,America/New_York,high,",
+    );
+    await page.getByTestId("apex-macro-import").click();
+    await page.getByTestId("apex-macro-note").filter({ hasText: /1 new of 1 event\(s\); refused: line 3/ }).waitFor();
+    await page.waitForTimeout(300);
+    await shot("14d2-apex-market-context");
+
+    // Trade Replay: stored analyses reopen exactly as they were.
+    await page.getByTestId("apex-tab-replay").click();
+    await page.getByTestId("apex-replay").waitFor();
+    assert.ok((await page.getByTestId("apex-replay-row").count()) >= 1, "every analysis is stored");
 
     // MNQ: the same index as NQ at $2 per point.
     await page.getByTestId("apex-market-MNQ").click();
-    await page.getByTestId("apex-tab-analysis").click();
     await page.getByTestId("apex-analyze").click();
     await page.getByTestId("apex-synthetic").waitFor({ timeout: 60_000 });
     const mnq = await fetch(`${backendUrl}/apex/analyses?market=MNQ`).then((r) => r.json());
@@ -1052,7 +1118,7 @@ try {
     assert.ok((await page.getByTestId("apex-signal-row").count()) >= 2, "one signal per strategy decision");
 
     // The rule's track record: walk-forward on the last 20 days, judged by later bars.
-    await page.getByTestId("apex-tab-track").click();
+    await page.getByTestId("apex-tab-validation").click();
     await page.getByTestId("apex-track-strategy-zone_reaction").click();
     await page.getByTestId("apex-days").fill("20");
     await page.getByTestId("apex-evaluate").click();
@@ -1091,12 +1157,11 @@ try {
     const round = page.getByTestId("apex-forward-last");
     await round.waitFor();
     assert.ok(["ok", "outside_session"].includes(await round.getAttribute("data-state")), await round.innerText());
-    assert.equal(await page.getByTestId("apex-forward-evidence").count(), 2);
+    assert.equal(await page.getByTestId("apex-forward-evidence").count(), 5, "one forward record per strategy");
     await page.getByTestId("apex-forward-toggle").click();
     await page.locator('[data-testid="apex-forward"][data-enabled="yes"]').waitFor();
     await page.getByTestId("apex-forward-toggle").click();
     await page.locator('[data-testid="apex-forward"][data-enabled="no"]').waitFor();
-    await page.getByTestId("apex-tab-analysis").click();
     // There is no order path anywhere in APEX.
     const routes = await fetch(`${backendUrl}/openapi.json`).then((r) => r.json());
     const apexPaths = Object.keys(routes.paths).filter((p) => p.startsWith("/apex"));
@@ -1160,7 +1225,7 @@ try {
       await inside("command-input");
       await inside("command-send");
       await page.getByTestId("tab-quantlab").click();
-      await page.getByTestId("ql-nav-backtest-lab").click();
+      await qlNav(page, "backtest-lab");
       await page.getByTestId("bl-run").scrollIntoViewIfNeeded();
       await inside("bl-run");
       await page.getByTestId("tab-ultron").click();

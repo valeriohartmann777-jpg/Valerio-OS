@@ -46,8 +46,8 @@ def narrate(analysis: dict[str, Any], calibration: str | None = None) -> dict[st
     update = data.get("update") or {}
     source = "SYNTHETIC test data" if data["synthetic"] else data["label"]
     question = (
-        f"Explain the current APEX analysis for {market}: structure, the zones S1 and R1, the "
-        "scenarios and whether there is a trade candidate — name the data source and the "
+        f"Explain the current APEX analysis for {market}: structure, the key levels KS1 and KR1, "
+        "the scenarios and whether there is a trade candidate — name the data source and the "
         "counted rates."
     )
     caveats = []
@@ -95,7 +95,7 @@ def narrate(analysis: dict[str, Any], calibration: str | None = None) -> dict[st
             )
         points.append(line)
     zones = {z["id"]: z for z in analysis.get("zones", [])}
-    for zid, side, where in (("S1", "Support", "below"), ("R1", "Resistance", "above")):
+    for zid, side, where in (("KS1", "Key support", "below"), ("KR1", "Key resistance", "above")):
         z = zones.get(zid)
         if not z:
             continue
@@ -114,8 +114,8 @@ def narrate(analysis: dict[str, Any], calibration: str | None = None) -> dict[st
                 parts.append(f"{s['statement'].rstrip('.')} — {_rate(s['rate'])}")
         return "; ".join(parts)
 
-    long_case = case("S1-hold", "R1-break")
-    short_case = case("R1-hold", "S1-break")
+    long_case = case("KS1-hold", "KR1-break")
+    short_case = case("KR1-hold", "KS1-break")
     if long_case:
         points.append(f"Long case: {long_case}.")
     if short_case:

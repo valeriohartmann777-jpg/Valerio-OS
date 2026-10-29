@@ -9,7 +9,10 @@ import type { PillTone } from "../../ui/shell";
  */
 
 export const STRATEGIES: { id: ApexStrategyName; label: string; entry: string }[] = [
-  { id: "zone_rejection_5m", label: "5-min rejection", entry: "stop entry after a confirmed 5-minute trigger" },
+  { id: "sweep_reclaim", label: "Sweep", entry: "stop entry after a sweep of a ranked zone and its reclaim (5-minute)" },
+  { id: "rejection_rotation", label: "Rejection", entry: "stop entry after a confirmed 5-minute rejection of a ranked zone" },
+  { id: "breakout_retest", label: "Breakout", entry: "stop entry after an accepted break and a held retest (5-minute)" },
+  { id: "zone_rejection_5m", label: "5-min (1.0)", entry: "stop entry after a confirmed 5-minute trigger" },
   { id: "zone_reaction", label: "Zone reaction", entry: "limit order resting at the zone" },
 ];
 

@@ -16,7 +16,8 @@ missing. Failing plans stay visible as ``RESEARCH_ONLY`` (a plan exists, not qua
 6. ``EXECUTION_FEASIBLE`` — entry, stop and targets on the tick grid, side-correct geometry,
    dollar risk computed with the instrument's point value.
 7. ``PROBABILITY`` — a validated **and** calibrated P(TP before SL) of at least
-   ``MIN_PROBABILITY`` for this setup, market and version. A zone quality score, a path share
+   ``MIN_PROBABILITY`` for this setup, market and version, from a head SENTINEL reviewed and
+   the owner promoted (``governance.py``). A zone quality score, a path share
    (P(upper first)) or an LLM's conviction is never that probability.
 8. ``UNCERTAINTY_SAMPLE`` — effective sample at least ``MIN_EFFECTIVE`` and the lower bound
    of its interval at least ``MIN_LOWER`` (pre-registered).
@@ -141,6 +142,10 @@ def gate(
     elif probability.get("event_definition") != "TP_before_SL_after_fill_within_horizon":
         check("PROBABILITY", False, "the probability is not P(TP before SL) — a path or zone "
                                     "rate never qualifies a trade")  # fmt: skip
+    elif not probability.get("promoted"):
+        check("PROBABILITY", False, f"P(TP before SL) {float(p):.2f} from a validated head that "
+                                    "is not promoted — SENTINEL review and owner approval "
+                                    "first")  # fmt: skip
     else:
         check("PROBABILITY", float(p) >= MIN_PROBABILITY,
               f"P(TP before SL) {float(p):.2f} (minimum {MIN_PROBABILITY:.2f})")  # fmt: skip

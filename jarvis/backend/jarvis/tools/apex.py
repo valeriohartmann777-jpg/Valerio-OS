@@ -83,11 +83,20 @@ def brief(out: dict[str, Any]) -> str:
     trend = out.get("structure", {}).get("60", {}).get("trend")
     if trend:
         parts.append(f"1h trend {trend}")
-    for zid in ("S1", "R1"):
+    mapped = out.get("zone_map") or {}
+    for side, key in (("S", "support"), ("R", "resistance")):
+        top = (mapped.get(key) or [None])[0]
+        if top:  # the ranked zone map: score is evidence strength, never a probability
+            b = top["bounds"]
+            parts.append(f"{side}1 {b['low']:.2f}-{b['high']:.2f} {top['state']} "
+                         f"(score {top['quality_score']:g})")  # fmt: skip
+    for zid in ("KS1", "KR1"):
         z = zones.get(zid)
-        if z:
+        if z and not mapped:
             parts.append(f"{zid} {z['low']}-{z['high']}: {_rate(z.get('rate'))}")
     parts.append(f"{len(out['candidates'])} candidate(s)")
+    qualified = [s for s in out.get("signals") or [] if s.get("eligible")]
+    parts.append(f"{len(qualified)} qualified paper signal(s)" if qualified else "no signal")
     if out["quality"].get("stale"):
         parts.append("data stale: no candidates")
     return " · ".join(parts) + failed

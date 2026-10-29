@@ -302,7 +302,7 @@ def predict(model: dict[str, Any] | None, plan: dict[str, Any]) -> dict[str, Any
     out: dict[str, Any] = {
         "event_definition": EVENT, "value": None, "validated": False, "calibrated": False,
         "effective_sample_size": 0, "uncertainty_lower": None, "uncertainty_upper": None,
-        "label": "PROBABILITY NOT VALIDATED", "model_id": None,
+        "label": "PROBABILITY NOT VALIDATED", "model_id": None, "promoted": False,
     }  # fmt: skip
     x = features(plan)
     if model is None or x is None or "params" not in model:

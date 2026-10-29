@@ -111,7 +111,7 @@ async def test_from_download_to_chart_on_the_real_code_path(
     story = out["narrative"]  # JARVIS's reading: only the analysis' own numbers
     assert story["headline"].startswith("XAUUSD ") and "trend" in story["headline"]
     assert any(p.startswith("Data: ") and "updated now" in p for p in story["points"])
-    assert any(p.startswith(("Support S1", "Resistance R1")) for p in story["points"])
+    assert any(p.startswith(("Key support KS1", "Key resistance KR1")) for p in story["points"])
     assert any("not probabilities" in c for c in story["caveats"])  # no track record yet
 
     # the chart in every timeframe, only bars known at the moment, the same data

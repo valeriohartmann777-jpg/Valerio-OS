@@ -488,8 +488,12 @@ def _score(
                          "points": round(points, 1), "detail": detail})  # fmt: skip
 
     structure = min(35, sum(STRUCTURE_POINTS.get(k, 0) for k in kinds))
-    ev("price_structure", Evidence.CONFIRMED, structure,
-       ", ".join(sorted(m.label for m in z.members if m.kind != "profile")) or "—")  # fmt: skip
+    counted: dict[str, int] = {}
+    for m in z.members:
+        if m.kind != "profile":
+            counted[m.label] = counted.get(m.label, 0) + 1
+    members = ", ".join(f"{k} x{n}" if n > 1 else k for k, n in sorted(counted.items()))
+    ev("price_structure", Evidence.CONFIRMED, structure, members or "—")
     rejections = [e for e in z.episodes if e["kind"] in ("rejection", "flip_retest")]
     sweeps = [e for e in z.episodes if e["kind"] == "sweep_reclaim"]
     reactions = [e["reaction_atr"] for e in rejections + sweeps if "reaction_atr" in e]

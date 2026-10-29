@@ -1,14 +1,17 @@
-import type { ApexCandidate, ApexStructure, ApexZone } from "@jarvis/protocol";
+import type { ApexCandidate, ApexStructure } from "@jarvis/protocol";
 import { type KeyboardEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Icon } from "../../ui/icons";
+import type { PathLine, ZoneBand } from "./apexView";
 import { barAt, type ChartView, clampView, initialView, niceTicks, panView, timeLabels, zoomView } from "./chartView";
 
 /**
- * The APEX candlestick chart: the analysis' bars at the chosen timeframe with its zones as
- * bands, the confirmed swings (HH/HL/LH/LL), breaks of structure and one candidate's entry,
- * stop and targets. Scroll to zoom, drag to pan, arrows / + / − / 0 on the keyboard. Plain SVG
- * — every number here is also in the tables next to it.
+ * The APEX candlestick chart: the analysis' bars at the chosen timeframe with the ranked zones
+ * (S1-S4 / R1-R4) as bands — the current buy and sell zone outlined — the path scenario's two
+ * barriers as dashed hypotheses (never future candles), the confirmed swings (HH/HL/LH/LL),
+ * breaks of structure and one candidate's entry, stop and targets. A zone label opens why the
+ * zone is there. Scroll to zoom, drag to pan, arrows / + / − / 0 on the keyboard. Plain SVG —
+ * every number here is also in the panels next to it.
  */
 
 type Bar = [number, number, number, number, number, number];
@@ -26,6 +29,8 @@ export function ApexChart({
   minutes,
   forming,
   zones,
+  paths = [],
+  onZone,
   structure,
   candidate,
   price,
@@ -35,7 +40,9 @@ export function ApexChart({
   bars: Bar[];
   minutes: number;
   forming: boolean;
-  zones: ApexZone[];
+  zones: ZoneBand[];
+  paths?: PathLine[];
+  onZone?: (id: string) => void;
   structure?: ApexStructure;
   candidate: ApexCandidate | null;
   price: number | null;
@@ -171,13 +178,16 @@ export function ApexChart({
   const zoneLabels = spread(
     visibleZones.map((z) => ({
       y: y((Math.min(z.high, hi) + Math.max(z.low, lo)) / 2),
-      text: z.id,
+      id: z.id,
+      text: z.label,
       color: z.side === "support" ? UP : DOWN,
+      emphasis: z.emphasis,
     })),
     TOP + 8,
     TOP + plotH - 8,
-    16,
+    18,
   );
+  const pathMarks = paths.filter((l) => l.price >= lo && l.price <= hi);
   const candidateLines = candidate
     ? [
         { price: candidate.entry.price, color: "#ffe16b", text: `Entry ${fmt(candidate.entry.price)}` },
@@ -249,8 +259,11 @@ export function ApexChart({
               height={Math.max(2, y2 - y1)}
               fill={support ? "rgb(66 215 182 / 0.13)" : "rgb(255 116 125 / 0.13)"}
               stroke={support ? "rgb(66 215 182 / 0.5)" : "rgb(255 116 125 / 0.5)"}
-              strokeWidth={1}
+              strokeWidth={z.emphasis ? 2.5 : 1}
+              strokeDasharray={z.state === "WEAKENING" ? "5 3" : undefined}
               data-testid="apex-chart-zone"
+              data-label={z.label}
+              data-emphasis={z.emphasis ?? "none"}
             />
           );
         })}
@@ -303,6 +316,19 @@ export function ApexChart({
           );
         })}
         {priceY != null && <line x1={0} x2={plotW} y1={priceY} y2={priceY} stroke={INK} strokeDasharray="4 4" strokeWidth={1} />}
+        {pathMarks.map((l) => {
+          const x0 = Math.max(0, xOf(view.end - 1));
+          const tone = l.kind === "upper" ? "#b9a3ff" : "#9d86f0";
+          return (
+            <g key={`path-${l.kind}`} data-testid="apex-chart-path" data-kind={l.kind}>
+              {priceY != null && <line x1={x0} x2={plotW} y1={priceY} y2={y(l.price)} stroke={tone} strokeDasharray="6 4" strokeWidth={1.4} />}
+              <line x1={x0} x2={plotW} y1={y(l.price)} y2={y(l.price)} stroke={tone} strokeDasharray="2 4" strokeWidth={1.2} />
+              <text x={Math.max(8, x0 - 6)} y={y(l.price) + (l.kind === "upper" ? -5 : 13)} textAnchor="end" fill={tone} className="text-[11px]">
+                {l.label}
+              </text>
+            </g>
+          );
+        })}
         {candidate && (
           <g data-testid="apex-chart-candidate">
             {candidateLines.map((l) => (
@@ -319,14 +345,7 @@ export function ApexChart({
             ))}
           </g>
         )}
-        {zoneLabels.map((l) => (
-          <g key={`r-${l.text}`}>
-            <rect x={plotW - 36} y={l.y - 8} width={30} height={16} rx={4} fill="rgb(10 21 48 / 0.85)" />
-            <text x={plotW - 21} y={l.y + 4} textAnchor="middle" fill={l.color} className="text-[11px] font-bold">
-              {l.text}
-            </text>
-          </g>
-        ))}
+
         {priceY != null && price != null && (
           <g data-testid="apex-chart-price">
             <rect x={plotW + 2} y={priceY - 10} width={RIGHT - 4} height={20} rx={4} fill="#becfe7" />
@@ -356,6 +375,28 @@ export function ApexChart({
           </g>
         )}
       </svg>
+      {zoneLabels.map((l) => (
+        <button
+          key={`r-${l.id}`}
+          type="button"
+          onClick={() => onZone?.(l.id)}
+          disabled={!onZone}
+          className="absolute rounded-md border px-1.5 text-[11px] leading-4 font-bold"
+          style={{
+            top: l.y - 9,
+            left: plotW - (l.emphasis ? 86 : 40),
+            color: l.color,
+            borderColor: l.emphasis ? l.color : "transparent",
+            background: "rgb(10 21 48 / 0.88)",
+          }}
+          title={onZone ? `Why ${l.text} — evidence, episodes, lifecycle` : l.text}
+          data-testid="apex-zone-label"
+          data-zone={l.id}
+        >
+          {l.text}
+          {l.emphasis ? ` · ${l.emphasis === "buy" ? "BUY ZONE" : "SELL ZONE"}` : ""}
+        </button>
+      ))}
     </div>
   );
 }

@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from jarvis.apex.governance import ACTORS, GovernanceError
 from jarvis.apex.service import ApexError
 from jarvis.runtime import Runtime
 
@@ -131,6 +132,57 @@ async def probability_models(rt: RuntimeDep, market: str | None = None) -> list[
     """Fitted P(TP before SL) heads with their grading (validated or not) — immutable."""
     try:
         return await rt.apex.probability_models(market)
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+class ProposeBody(BaseModel):
+    model_id: str = Field(min_length=4, max_length=40)
+    actor: str = Field("owner", min_length=2, max_length=20)
+
+
+class ApproveBody(BaseModel):
+    confirm: bool = False
+
+
+class RevokeBody(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+def _forbidden(exc: GovernanceError) -> HTTPException:
+    return HTTPException(status_code=403, detail={"code": exc.code, "message": exc.message})
+
+
+@router.post("/apex/promotions")
+async def propose_promotion(body: ProposeBody, rt: RuntimeDep) -> dict[str, Any]:
+    """Ask for a probability head to be promoted; SENTINEL reviews at once (and may veto)."""
+    if body.actor not in ACTORS:
+        raise HTTPException(status_code=422, detail={"code": "ACTOR", "message": "Unknown actor."})
+    try:
+        return await rt.apex.propose_promotion(body.model_id, body.actor)
+    except GovernanceError as exc:
+        raise _forbidden(exc) from None
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.post("/apex/promotions/{model_id}/approve")
+async def approve_promotion(model_id: str, body: ApproveBody, rt: RuntimeDep) -> dict[str, Any]:
+    """The owner approves a head SENTINEL cleared (this window is the owner's own)."""
+    try:
+        return await rt.apex.approve_promotion(model_id, "owner", confirm=body.confirm)
+    except GovernanceError as exc:
+        raise _forbidden(exc) from None
+    except ApexError as exc:
+        raise _error(exc) from None
+
+
+@router.post("/apex/promotions/{model_id}/revoke")
+async def revoke_promotion(model_id: str, body: RevokeBody, rt: RuntimeDep) -> dict[str, Any]:
+    try:
+        return await rt.apex.revoke_promotion(model_id, "owner", body.reason)
+    except GovernanceError as exc:
+        raise _forbidden(exc) from None
     except ApexError as exc:
         raise _error(exc) from None
 
