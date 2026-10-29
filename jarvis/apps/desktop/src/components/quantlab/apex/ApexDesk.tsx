@@ -187,7 +187,7 @@ export function DecisionPanel({
                   className="flex items-baseline gap-2 text-left disabled:opacity-60"
                   data-testid={label === "BUY ZONE" ? "apex-buy-zone" : "apex-sell-zone"}
                 >
-                  <b className={color}>{label}</b>
+                  <b className={cx("shrink-0 whitespace-nowrap", color)}>{label}</b>
                   {z ? (
                     <span className="font-mono text-fg">
                       {label === "BUY ZONE" ? "S" : "R"}

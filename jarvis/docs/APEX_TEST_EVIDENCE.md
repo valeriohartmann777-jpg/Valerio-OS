@@ -1,5 +1,7 @@
 # JARVIS APEX — test evidence (recovery & validation)
 
+> Earlier phase (P0–P5). APEX Ultimate evidence: `docs/apex/APEX_TEST_EVIDENCE.md`.
+
 What was run, on what, with which result — 2026-10-28, branch `claude/jarvis-foundation-mxnsz4`,
 in a Linux cloud container (Electron under xvfb, the real start path Electron →
 `BackendSupervisor` → `python -m jarvis`).

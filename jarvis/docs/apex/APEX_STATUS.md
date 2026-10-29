@@ -1,5 +1,9 @@
 # JARVIS APEX — status and evidence
 
+> **Superseded for APEX Ultimate (build kit 4.0):** the current status is
+> `docs/apex/APEX_RELEASE_STATUS.md`, the evidence `docs/apex/APEX_TEST_EVIDENCE.md`. This file
+> records the earlier prototype phase.
+
 Branch `claude/jarvis-foundation-mxnsz4`. Rollback point before APEX: `f6419d0`.
 
 > The binding "APEX developer package" named in the owner's request was **not received**.

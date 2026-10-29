@@ -323,7 +323,7 @@ export function ApexChart({
             <g key={`path-${l.kind}`} data-testid="apex-chart-path" data-kind={l.kind}>
               {priceY != null && <line x1={x0} x2={plotW} y1={priceY} y2={y(l.price)} stroke={tone} strokeDasharray="6 4" strokeWidth={1.4} />}
               <line x1={x0} x2={plotW} y1={y(l.price)} y2={y(l.price)} stroke={tone} strokeDasharray="2 4" strokeWidth={1.2} />
-              <text x={Math.max(8, x0 - 6)} y={y(l.price) + (l.kind === "upper" ? -5 : 13)} textAnchor="end" fill={tone} className="text-[11px]">
+              <text x={Math.max(8, Math.min(x0 - 6, plotW - 104))} y={y(l.price) + (l.kind === "upper" ? -5 : 13)} textAnchor="end" fill={tone} className="text-[11px]">
                 {l.label}
               </text>
             </g>

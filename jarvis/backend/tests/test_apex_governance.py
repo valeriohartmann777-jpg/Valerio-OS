@@ -168,3 +168,33 @@ def test_the_api_refuses_an_agent_approval_and_an_unknown_actor(tmp_path: Path) 
         assert missing.status_code == 404
         no = client.post("/apex/promotions/ptp-none/approve", json={"confirm": False})
         assert no.status_code in (404, 422)
+
+
+async def test_a_validated_head_is_proposed_by_cipher_and_reviewed_by_sentinel(
+    rt: Runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import jarvis.apex.service as service
+
+    def fake_develop(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        keep = ("validated", "verdict", "params", "bins", "counts")
+        head = {k: v for k, v in _head().items() if k in keep}
+        head.update(head_version="ptp-1.0.0", features=["break_even"], windows={})
+        return {
+            "variants": [{}], "neighbours": [], "stats": {"filled": 120, "mean_r": 0.1},
+            "passed": False, "enough": True,
+            "criteria": [{"code": "DEV_CI", "required": "", "measured": "", "passed": False}],
+            "probability_head": head,
+        }  # fmt: skip
+
+    monkeypatch.setattr(service, "develop", fake_develop)
+    started = await rt.apex.validate("NQ", "sweep_reclaim")
+    await rt.apex.wait_validation("NQ", timeout=120)
+    done = await rt.apex.validation(started["id"])
+    assert done["state"] == "COMPLETED", done.get("error")
+    (model,) = await rt.apex.probability_models("NQ")
+    actors = [(e["actor"], e["state"]) for e in model["promotion_events"]]
+    # Generated data and a setup that failed development: SENTINEL vetoes, nothing reaches the gate.
+    assert actors == [("cipher", "PROPOSED"), ("sentinel", "VETOED")]
+    vetoed = {c["check"] for c in model["promotion_events"][-1]["review"]["checks"]
+              if not c["passed"]}  # fmt: skip
+    assert {"REAL_DATA", "STRATEGY_HOLDOUT"} <= vetoed

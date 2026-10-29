@@ -215,7 +215,7 @@ export function decide(analysis: ApexAnalysis): Decision {
       }`,
       plan: null,
       failed: [],
-      reasons: building.flatMap((b) => b.s.reasons ?? []).slice(0, 4),
+      reasons: Array.from(new Set(building.flatMap((b) => b.s.reasons ?? []))).slice(0, 4),
     };
   }
   return {

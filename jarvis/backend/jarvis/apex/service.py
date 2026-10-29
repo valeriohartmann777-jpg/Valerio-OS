@@ -1506,6 +1506,7 @@ class ApexService:
                     )
                     held = {**held, "opened_by": validation_id}
             head = dev.get("probability_head")
+            validated_head: str | None = None
             if head is not None:
                 model = {
                     **head,
@@ -1521,6 +1522,8 @@ class ApexService:
                 model["id"] = model_id(model)
                 head["id"] = model["id"]
                 await self.store.add_probability_model(model)
+                if model["validated"]:
+                    validated_head = str(model["id"])
                 await self.store.add_trial(
                     {
                         "family": family,
@@ -1560,6 +1563,8 @@ class ApexService:
             await self.store.update_validation(
                 validation_id, state="COMPLETED", progress=1.0, result=result
             )
+            if validated_head:  # CIPHER proposes, SENTINEL reviews now; the owner decides
+                await self.propose_promotion(validated_head, "cipher")
             message = f"APEX validation {strategy} on {ctx.name}: {judged['validation_state']}"
         except Cancelled:
             await self.store.update_validation(validation_id, state="CANCELLED", error="Cancelled.")
