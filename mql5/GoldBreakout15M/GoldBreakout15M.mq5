@@ -175,7 +175,7 @@ void CloseAllPositions(string reason)
       if(t == 0) continue;
       if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
       if((ulong)PositionGetInteger(POSITION_MAGIC) != InpMagic) continue;
-      if(trade.PositionClose(t, InpDeviationPts))
+      if(trade.PositionClose(t, (ulong)InpDeviationPts))
          PrintFormat("GBO: Position %I64u geschlossen (%s)", t, reason);
       else
          PrintFormat("GBO: PositionClose %I64u fehlgeschlagen (%s): %d %s", t, reason, trade.ResultRetcode(), trade.ResultRetcodeDescription());
@@ -261,7 +261,7 @@ double CalcLots(bool isLong, double entry, double sl)
    lots = MathFloor(lots / step + 1e-9) * step;
    if(lots < vmin) return 0.0;
    if(lots > vmax) lots = MathFloor(vmax / step + 1e-9) * step;
-   int volDigits = (int)MathMax(0, MathCeil(-MathLog10(step)));
+   int volDigits = (int)MathMax(0.0, MathCeil(-MathLog10(step)));
    return NormalizeDouble(lots, volDigits);
   }
 
@@ -409,7 +409,7 @@ void OnNewDay(datetime now)
   }
 
 //--- Range auf dem Chart
-void DrawRange(double hi, double lo, bool final)
+void DrawRange(double hi, double lo, bool isFinal)
   {
    if(!InpDrawRange) return;
    string key = IntegerToString(g_dayKey);
@@ -429,7 +429,7 @@ void DrawRange(double hi, double lo, bool final)
    ObjectSetDouble(0, box, OBJPROP_PRICE, 0, hi);
    ObjectSetDouble(0, box, OBJPROP_PRICE, 1, lo);
 
-   if(!final) return;
+   if(!isFinal) return;
    string names[2] = {"hi_", "lo_"};
    double prices[2];
    prices[0] = hi; prices[1] = lo;
